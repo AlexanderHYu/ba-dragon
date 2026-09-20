@@ -100,6 +100,15 @@ export async function run(win: BrowserWindow): Promise<void> {
   const rec = out.rec as { ok?: boolean } | undefined
   const ok =
     !!dom?.rendered && !!dom?.hasBridge && !out.error && (!rep || (rep.players ?? 0) > 0) && (!rec || !!rec.ok)
-  console.log('SMOKE ' + JSON.stringify({ ok, ...out }))
+  const line = 'SMOKE ' + JSON.stringify({ ok, ...out })
+  console.log(line)
+  // 打包后的 exe 是 GUI 程序，标准输出拿不到，所以也写一份文件（验收打包产物用）
+  if (process.env.BA_SMOKE_OUT) {
+    try {
+      writeFileSync(process.env.BA_SMOKE_OUT, line, 'utf8')
+    } catch {
+      /* 写不了就算了 */
+    }
+  }
   app.exit(ok ? 0 : 1)
 }
