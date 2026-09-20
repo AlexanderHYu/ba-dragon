@@ -55,16 +55,18 @@
   border-color: var(--accent);
   color: var(--text);
 }
+/* 选中的标签：不填满色块，用描边 + 淡底 + 下划线，深浅两套主题都读得清 */
 .rp-tab.active {
-  background: var(--accent);
+  background: var(--rp-hit);
   border-color: var(--accent);
-  color: var(--bg);
+  color: var(--accent);
   font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .rp-tab.active:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 82%, var(--text));
-  border-color: color-mix(in srgb, var(--accent) 82%, var(--text));
-  color: var(--bg);
+  background: color-mix(in srgb, var(--accent) 26%, var(--card));
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* 卡片里的小工具条（单位页的分队筛选） */
@@ -153,13 +155,6 @@
   width: 22%;
   white-space: normal;
 }
-.rp .rp-wide th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--card);
-}
-
 .rp .rp-sort {
   cursor: pointer;
   user-select: none;
