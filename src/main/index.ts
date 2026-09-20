@@ -44,9 +44,9 @@ export interface Services {
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
 }
 
-// 只允许开一个：两个实例同时写本地库会打架，再点图标就把已开的窗口叫到前面
-const gotLock = app.requestSingleInstanceLock()
-if (!gotLock) app.quit()
+// 只允许开一个：两个实例同时写本地库会打架，再点图标就把已开的窗口叫到前面。
+// 冒烟测试不受这个限制，不然上一次跑剩下的进程会让后面的测试全部「起不来」。
+if (!process.env.BA_SMOKE && !app.requestSingleInstanceLock()) app.quit()
 
 let win: BrowserWindow | null = null
 let services: Services | null = null
@@ -118,16 +118,21 @@ function startServices(): Services {
   }
 
   const parser = new LogParser((type, data) => {
-    // 日志事件：先把状态推给界面，进对局/名单变化时自动开查
+    // 日志事件：先把状态推给界面
     send('session:state', session())
+    // 启动时会把当天的日志补读一遍，那些是历史对局：不能开录、不能覆盖卡组包、也别去查名单，
+    // 否则每次打开软件都会「开录 → 立刻结束 → 没有录到画面」，还白发一堆请求
+    // 结束事件不看历史判断：没在录的时候 stopForMatch 自己会返回，
+    // 但万一对局中途日志停写超过 2 分钟，这一停不能漏（漏了录像会被 watchdog 直接丢掉）
+    if (type === 'matchEnd') {
+      const m = data as { fid?: string | null; map?: string }
+      replays?.stopForMatch(m?.fid ?? null, m?.map || '')
+    }
+    if (watcher.isHistorical()) return
     if (type === 'matchStart') {
       decks.autoBackup() // 每局开始滚动备份一次卡组
       const m = data as { fid?: string | null; map?: string }
       replays?.startForMatch(m?.fid ?? null, m?.map || '')
-    }
-    if (type === 'matchEnd') {
-      const m = data as { fid?: string | null; map?: string }
-      replays?.stopForMatch(m?.fid ?? null, m?.map || '')
     }
     if (type === 'matchStart' || type === 'roster') scheduleQuery()
   })
@@ -136,7 +141,11 @@ function startServices(): Services {
     dir: () => String(config.get('logDir') || ''),
     pollMs: () => Number(config.get('pollMs')) || 1500,
     parser,
-    onState: () => send('session:state', session())
+    onState: () => send('session:state', session()),
+    // 补读完了：如果是在对局中途打开的软件，这时候才去查名单
+    onCatchUpDone: () => {
+      if (!watcher.isStale() && parser.snapshot().current?.players.length) scheduleQuery()
+    }
   })
 
   const decks = new DeckService(dataDir)
@@ -208,6 +217,10 @@ app.on('second-instance', () => {
     win.focus()
   }
 })
+
+// 主进程出了没接住的异常：打到日志里，别默默吞掉
+process.on('uncaughtException', (e) => console.error('[main] 未捕获异常', e))
+process.on('unhandledRejection', (e) => console.error('[main] 未处理的 rejection', e))
 
 app.whenReady().then(() => {
   services = startServices()

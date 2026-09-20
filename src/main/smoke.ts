@@ -71,6 +71,13 @@ export async function run(win: BrowserWindow): Promise<void> {
       )
     }
     out.archive = await win.webContents.executeJavaScript('window.BA.listArchive().then(l => l.length)')
+    // 启动补读历史日志时不能开录（不然每次打开软件都会弹「没有录到画面」）
+    await new Promise((r) => setTimeout(r, 4000))
+    out.replay = await win.webContents.executeJavaScript(
+      `Promise.all([window.BA.getReplayStatus(), window.BA.getReplayLogs()]).then(([st, logs]) => ({
+        active: st.active, error: st.error || null, logs: logs.slice(-4)
+      }))`
+    )
     // 搜一个人并打开他的档案（BA_SMOKE_SEARCH 给名字）：验证搜索→详情这条链路
     if (process.env.BA_SMOKE_SEARCH) {
       out.search = await win.webContents.executeJavaScript(

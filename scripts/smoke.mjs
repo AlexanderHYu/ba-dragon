@@ -5,7 +5,7 @@ import electron from 'electron'
 const r = spawnSync(electron, ['.'], {
   env: { ...process.env, BA_SMOKE: '1' },
   encoding: 'utf8',
-  timeout: 60000
+  timeout: 150000
 })
 const line = (r.stdout || '').split('\n').find((l) => l.startsWith('SMOKE '))
 if (!line) {

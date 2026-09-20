@@ -30,6 +30,8 @@ export interface DisplayChoice {
 export class ReplayService {
   readonly recorder: FfmpegRecorder
   private logs: string[] = []
+  /** 最近一次失败原因（界面上显示到下次开录为止） */
+  private lastError: string | null = null
 
   constructor(
     private config: Config,
@@ -38,7 +40,10 @@ export class ReplayService {
   ) {
     this.recorder = new FfmpegRecorder({
       onStatus: (s) => this.emit.status(s),
-      onError: (msg) => this.emit.status({ ...this.recorder.status(), error: msg }),
+      onError: (msg) => {
+        this.lastError = msg
+        this.emit.status({ ...this.recorder.status(), error: msg })
+      },
       onLog: (msg) => this.log(msg),
       onFinished: (r) => this.save(r)
     })
@@ -63,14 +68,16 @@ export class ReplayService {
     return d ? resolve(d) : join(app.getPath('userData'), 'replays')
   }
 
-  status(): RecorderStatus {
-    return this.recorder.status()
+  status(): RecorderStatus & { error?: string } {
+    return { ...this.recorder.status(), ...(this.lastError ? { error: this.lastError } : {}) }
   }
 
   /** 对局开始：设置里开了才录 */
   startForMatch(fid: string | null, map: string): void {
     if (!this.config.get('replayEnabled')) return
     if (this.recorder.status().active) return
+    this.lastError = null // 清掉上一次的报错
+    this.emit.status(this.recorder.status())
     void this.recorder
       .start({
         fid,
@@ -117,6 +124,7 @@ export class ReplayService {
   private save(r: FinishedResult): void {
     if (!r?.ok) {
       const err = ('error' in r && r.error) || '无录制数据'
+      this.lastError = err
       this.log('save fail: ' + err)
       this.notify('录像保存失败：' + err)
       this.emit.status({ ...this.recorder.status(), error: err })

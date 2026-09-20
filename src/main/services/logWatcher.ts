@@ -12,7 +12,12 @@ export interface WatcherState {
   file: string | null
   listening: boolean
   mtime: number | null
+  /** 日志超过 2 分钟没动静 = 游戏没在跑，读到的都是历史 */
+  stale: boolean
 }
+
+/** 日志文件多久没更新就算「不是实时的」 */
+const STALE_MS = 120 * 1000
 
 export class LogWatcher {
   private timer: NodeJS.Timeout | null = null
@@ -20,6 +25,9 @@ export class LogWatcher {
   private offset = 0
   private pending = ''
   private mtime: number | null = null
+  /** 刚接上一个文件，正在把已有内容补读一遍 */
+  private catchUp = false
+  private firstRead = true
 
   constructor(
     private opts: {
@@ -27,8 +35,23 @@ export class LogWatcher {
       pollMs: () => number
       parser: LogParser
       onState: (s: WatcherState) => void
+      /** 历史补读完了（这时候才知道是不是正在对局中途启动的） */
+      onCatchUpDone?: () => void
     }
   ) {}
+
+  /**
+   * 现在喂给解析器的是不是历史内容。
+   * 补读期间为 true；文件很久没动也算历史（游戏没在跑）。
+   * 开录像、覆盖卡组包、发查询请求之前都要看这个，不然每次启动都会把当天打过的局重放一遍。
+   */
+  isHistorical(): boolean {
+    return this.catchUp || this.isStale()
+  }
+
+  isStale(): boolean {
+    return this.mtime == null || Date.now() - this.mtime > STALE_MS
+  }
 
   start(): void {
     this.stop()
@@ -46,12 +69,13 @@ export class LogWatcher {
     this.currentFile = null
     this.offset = 0
     this.pending = ''
+    this.firstRead = true
     this.opts.parser.reset()
     this.start()
   }
 
   state(): WatcherState {
-    return { file: this.currentFile, listening: !!this.currentFile, mtime: this.mtime }
+    return { file: this.currentFile, listening: !!this.currentFile, mtime: this.mtime, stale: this.isStale() }
   }
 
   /** 目录下最新的日志文件：Gamelog__ 前缀优先，再按修改时间 */
@@ -100,6 +124,7 @@ export class LogWatcher {
       this.currentFile = newest.full
       this.offset = 0
       this.pending = ''
+      this.firstRead = true
       this.opts.parser.reset(true)
       this.opts.onState(this.state())
     }
@@ -114,6 +139,7 @@ export class LogWatcher {
       // 文件被截断/换了内容：从头再来
       this.offset = 0
       this.pending = ''
+      this.firstRead = true
       this.opts.parser.reset(true)
     }
     if (size === this.offset) return
@@ -132,6 +158,15 @@ export class LogWatcher {
     const text = this.pending + buf.toString('utf8')
     const lines = text.split('\n')
     this.pending = lines.pop() || '' // 最后一行可能只写了一半
-    if (lines.length) this.opts.parser.feed(lines)
+    if (lines.length) {
+      // 第一次读这个文件 = 把已经写下的内容补一遍，这些都是历史，不能触发开录/备份/查询
+      this.catchUp = this.firstRead
+      this.opts.parser.feed(lines)
+      this.catchUp = false
+    }
+    if (this.firstRead) {
+      this.firstRead = false
+      this.opts.onCatchUpDone?.()
+    }
   }
 }
