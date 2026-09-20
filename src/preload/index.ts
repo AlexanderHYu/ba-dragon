@@ -21,6 +21,13 @@ const api = {
   listArchive: () => invoke('archive:list'),
   getPrevMatch: () => invoke('match:prev'),
 
+  listDecks: () => invoke('deck:list'),
+  backupDecks: (name?: string) => invoke('deck:backup', name ? { name } : undefined),
+  restoreDecks: (name: string, overwrite?: boolean) => invoke('deck:restore', { name, overwrite }),
+  getBond: (pid: string) => invoke('tracker:bond', pid),
+  getBans: () => invoke('ban:get'),
+  checkBans: () => invoke('ban:check'),
+
   getVersion: () => invoke('app:version'),
   getUpdateInfo: () => invoke('update:get'),
   installUpdate: () => invoke('update:install'),

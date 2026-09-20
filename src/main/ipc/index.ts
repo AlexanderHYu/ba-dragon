@@ -79,8 +79,15 @@ export function registerIpc(s: Services): void {
       const mi = res?.matchInfo
       if (!mi?.Data || !Object.keys(mi.Data).length) return { error: 'notYet' }
       const review = analyzeMatch(mi, fid)
-      const report = buildMatchReport(mi, { fid, review, localIds: localIds?.length ? localIds : localPlayerIds(s), mapName })
+      const ids = localIds?.length ? localIds : localPlayerIds(s)
+      const report = buildMatchReport(mi, { fid, review, localIds: ids, mapName })
       saveMatch(s, fid, mi, report)
+      s.tracker.recordMatch(
+        fid,
+        report.players.map((p) => ({ id: p.id, name: p.name, team: p.team })),
+        report.winnerTeam,
+        ids
+      )
       return report
     } catch (e) {
       return { error: String((e as Error)?.message || e) }
@@ -139,6 +146,26 @@ export function registerIpc(s: Services): void {
   on('match:prev', () => {
     const last = s.parser.lastEnded || s.parser.archived[s.parser.archived.length - 1] || null
     return { fid: last?.fid ?? null }
+  })
+
+  on('deck:list', () => ({
+    found: s.decks.found(),
+    dir: s.decks.decksDir,
+    decks: s.decks.list(),
+    backups: s.decks.backups()
+  }))
+  on('deck:backup', (arg) => s.decks.backup(arg && 'name' in arg ? arg.name : undefined))
+  on('deck:restore', ({ name, overwrite }) => s.decks.restore(name, { overwrite }))
+
+  on('tracker:bond', (pid) => s.tracker.bond(String(pid)))
+
+  on('ban:get', () => s.bans.latest())
+  on('ban:check', async () => {
+    try {
+      return await s.bans.check()
+    } catch (e) {
+      return { error: String((e as Error)?.message || e) }
+    }
   })
 
   on('app:version', () => ({ current: app.getVersion(), latest: app.getVersion(), hasUpdate: false }))

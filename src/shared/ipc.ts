@@ -4,6 +4,48 @@ import type { DragonScore } from './dragon'
 import type { MatchReport } from './match'
 import type { LogSnapshot } from './log'
 
+/** 卡组文件 */
+export interface DeckFile {
+  name: string
+  size: number
+  mtime: number
+}
+export interface BackupFile {
+  name: string
+  path: string
+  size: number
+  mtime: number
+  decks: number
+  /** 每局开始自动覆盖的那一个 */
+  auto: boolean
+}
+
+/** 调查羁绊 */
+export interface Bond {
+  pid: string
+  name: string
+  matches: number
+  together: number
+  againstYou: number
+  withWin: number
+  withLose: number
+  vsWin: number
+  vsLose: number
+  firstSeen: number | null
+  lastSeen: number | null
+  names: string[]
+  banned: boolean
+  avgScore: number | null
+}
+
+/** 封禁检查结果 */
+export interface BanResult {
+  checkedAt: number
+  total: number
+  newly: { pid: string; name: string }[]
+  met: { pid: string; name: string; at: number | null }[]
+}
+
 /** 玩家卡片：粗查和龙区分合并后的唯一形态 */
 export interface PlayerCard {
   id: string
@@ -109,6 +151,12 @@ export interface IpcMap {
   'match:report': [{ fid: string; localIds?: string[] }, MatchReport | { error: string }]
   'archive:list': [void, ArchiveItem[]]
   'match:prev': [void, { fid: string | null }]
+  'deck:list': [void, { found: boolean; dir: string; decks: DeckFile[]; backups: BackupFile[] }]
+  'deck:backup': [{ name?: string } | void, { file: string; decks: number } | { error: string }]
+  'deck:restore': [{ name: string; overwrite?: boolean }, { restored: number; skipped: string[] } | { error: string }]
+  'tracker:bond': [string, Bond | null]
+  'ban:get': [void, BanResult | null]
+  'ban:check': [void, BanResult | { error: string }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   'update:get': [void, UpdateInfo | null]
   'update:install': [void, boolean]

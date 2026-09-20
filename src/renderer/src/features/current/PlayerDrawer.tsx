@@ -1,7 +1,7 @@
 // 玩家详情：一个窗口把该看的都放进去——龙区分和它的可能范围、分项百分位、角色构成、
 // 基础档案、最爱单位、地图表现、最近对局。4.0.x 分成两个窗口，这里合并。
 import { useEffect, useState } from 'react'
-import type { PlayerCard } from '@shared/ipc'
+import type { Bond, PlayerCard } from '@shared/ipc'
 import { scoreColor } from './PlayerRow'
 
 const ROLE_NAME: Record<string, string> = {
@@ -26,6 +26,10 @@ export default function PlayerDrawer({
   onRefresh: () => void
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
+  const [bond, setBond] = useState<Bond | null>(null)
+  useEffect(() => {
+    void window.BA.getBond(card.id).then(setBond)
+  }, [card.id])
   useEffect(() => {
     const esc = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
@@ -146,6 +150,39 @@ export default function PlayerDrawer({
                 最爱单位：{info.favUnits.map((u) => u.name + '（' + u.spawn + ' 次）').join('、')}
               </div>
             )}
+          </div>
+        )}
+
+        {bond && bond.matches > 0 && (
+          <div className="card">
+            <h2>调查羁绊</h2>
+            <div className="kv">
+              <div>
+                <b>{bond.matches}</b>
+                <span>一起打过</span>
+              </div>
+              <div>
+                <b>
+                  {bond.withWin} 胜 {bond.withLose} 负
+                </b>
+                <span>同队时</span>
+              </div>
+              <div>
+                <b>
+                  {bond.vsWin} 胜 {bond.vsLose} 负
+                </b>
+                <span>敌对时（你的战绩）</span>
+              </div>
+              <div>
+                <b>{bond.avgScore ?? '—'}</b>
+                <span>他的平均龙区分</span>
+              </div>
+            </div>
+            <div className="dim" style={{ fontSize: 12 }}>
+              {bond.firstSeen ? '第一次见：' + new Date(bond.firstSeen).toLocaleDateString('zh-CN') : ''}
+              {bond.names.length > 1 ? ' · 用过的名字：' + bond.names.join('、') : ''}
+              {bond.banned ? ' · ⚠ 在封禁名单上' : ''}
+            </div>
           </div>
         )}
 

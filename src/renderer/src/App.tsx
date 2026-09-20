@@ -6,6 +6,8 @@ import Search from './features/search/Search'
 import Settings from './features/settings/Settings'
 import Archive from './features/archive/Archive'
 import ReportView from './features/report/ReportView'
+import Decks from './features/decks/Decks'
+import Bans from './features/decks/Bans'
 
 export default function App(): React.JSX.Element {
   const { view, setView, setConfig, setSession, setQuery, patchCard, openPlayer, setOpenPlayer } = useStore()
@@ -49,6 +51,9 @@ export default function App(): React.JSX.Element {
         >
           上一局复盘
         </button>
+        <button onClick={() => setView('tools')} className={view === 'tools' ? 'primary' : ''}>
+          工具
+        </button>
         <button onClick={() => setView('settings')} className={view === 'settings' ? 'primary' : ''}>
           设置
         </button>
@@ -61,6 +66,12 @@ export default function App(): React.JSX.Element {
           </>
         )}
         {view === 'archive' && <Archive onOpen={setReportFid} />}
+        {view === 'tools' && (
+          <>
+            <Decks />
+            <Bans />
+          </>
+        )}
         {view === 'settings' && <Settings />}
       </div>
       {reportFid && <ReportView fid={reportFid} onClose={() => setReportFid(null)} />}

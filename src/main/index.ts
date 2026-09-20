@@ -10,6 +10,9 @@ import { BatraceClient } from './services/batrace'
 import { LogWatcher } from './services/logWatcher'
 import { PlayerService } from './services/players'
 import { QueryService } from './services/query'
+import { DeckService } from './services/decks'
+import { Tracker } from './services/tracker'
+import { BanService } from './services/bans'
 import { registerIpc } from './ipc'
 
 // 数据目录固定成 4.0.x 用的那个：改名、换版本，设置和对局档案都还在原处
@@ -23,6 +26,9 @@ export interface Services {
   client: BatraceClient
   players: PlayerService
   query: QueryService
+  decks: DeckService
+  tracker: Tracker
+  bans: BanService
   send: <T>(channel: string, payload?: T) => void
   session: () => SessionState
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
@@ -73,6 +79,7 @@ function startServices(): Services {
   const parser = new LogParser((type) => {
     // 日志事件：先把状态推给界面，进对局/名单变化时自动开查
     send('session:state', session())
+    if (type === 'matchStart') decks.autoBackup() // 每局开始滚动备份一次卡组
     if (type === 'matchStart' || type === 'roster') scheduleQuery()
   })
 
@@ -83,7 +90,10 @@ function startServices(): Services {
     onState: () => send('session:state', session())
   })
 
+  const decks = new DeckService(dataDir)
+  const tracker = new Tracker(db)
   const client = new BatraceClient({ db, delayMs: () => Number(config.get('apiDelayMs')) || 1200 })
+  const bans = new BanService(client, db)
   const players = new PlayerService(client, db)
   const query = new QueryService(players, {
     state: (s) => send('query:state', s),
@@ -113,7 +123,20 @@ function startServices(): Services {
   }
 
   watcher.start()
-  return { config, db, parser, watcher, client, players, query, send, session, queryRoster }
+  // 封禁名单：启动后等一会查一次（其余时候手动刷新），查到熟人被封就提示
+  if (config.get('banCheckOnStart')) {
+    setTimeout(() => {
+      void bans
+        .check()
+        .then((r) => {
+          if (r.newly.length) {
+            send('toast', { kind: 'warn', text: '你遇到过的 ' + r.newly.map((x) => x.name).join('、') + ' 被封了' })
+          }
+        })
+        .catch(() => undefined)
+    }, 10000)
+  }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, send, session, queryRoster }
 }
 
 app.whenReady().then(() => {
