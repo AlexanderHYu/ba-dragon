@@ -146,7 +146,7 @@ export default function Decks(): React.JSX.Element {
           </div>
           <div className="deck-actions">
             <button disabled={busy} onClick={() => void reload()}>
-              刷新
+              ↻ 刷新
             </button>
             <button disabled={busy} onClick={() => void window.BA.openDeckDir('backups')}>
               📂 打开备份目录
@@ -176,7 +176,7 @@ export default function Decks(): React.JSX.Element {
           <span className="grow" />
           {busy && <span className="spin" />}
           <button disabled={busy} onClick={() => void reload()}>
-            刷新
+            ↻ 刷新
           </button>
         </h2>
 

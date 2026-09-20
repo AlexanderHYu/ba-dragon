@@ -95,22 +95,41 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // 曲线：两队每分钟的场上兵力，归一到 0-100 的 viewBox；事件是竖线
+  // 曲线：从 0 画到全场最高的话，几千点的底座会把变化压平（用户原话「变化率有点小」）。
+  // 所以纵轴只取数据自己的范围（min~max），而且另外画一条「兵力差」：A − B，
+  // 正数说明 A 队在上风，这条比两条绝对曲线更容易一眼看出局势翻转。
   const curve = useMemo(() => {
     const n = tl?.minutes || 0
     const field = tl?.field || []
     if (!tl || n < 2 || field.length < 1) return null
     const rows = field.slice(0, 2).map((row) => row.slice(0, n))
-    let max = 0
-    for (const row of rows) for (const v of row) if (Number.isFinite(v) && v > max) max = v
-    if (max <= 0) return null
+    const flat = rows.flat().filter((v) => Number.isFinite(v))
+    if (!flat.length) return null
+    const lo = Math.min(...flat)
+    const hi = Math.max(...flat)
+    const span = Math.max(1, hi - lo)
     const x = (i: number): number => (i / (n - 1)) * 100
-    const y = (v: number): number => 98 - (Math.max(0, Number.isFinite(v) ? v : 0) / max) * 94
+    // 上下各留 4%，曲线不贴边
+    const y = (v: number): number => 96 - ((Math.max(lo, Number.isFinite(v) ? v : lo) - lo) / span) * 92
     const path = (row: number[]): string =>
       row.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(2) + ' ' + y(v).toFixed(2)).join(' ')
-    const area = (row: number[]): string =>
-      row.length ? path(row) + ' L100 100 L0 100 Z' : ''
-    return { n, max, rows, x, paths: rows.map(path), areas: rows.map(area), events: tl.events || [] }
+    const area = (row: number[]): string => (row.length ? path(row) + ' L100 100 L0 100 Z' : '')
+    // 兵力差：以中线为 0，按最大绝对差归一
+    const diff = rows.length > 1 ? rows[0].map((v, i) => v - (rows[1][i] ?? 0)) : []
+    const dMax = Math.max(1, ...diff.map((v) => Math.abs(v)))
+    const dy = (v: number): number => 50 - (v / dMax) * 46
+    const diffPath = diff.length
+      ? diff.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(2) + ' ' + dy(v).toFixed(2)).join(' ')
+      : ''
+    const diffArea = diff.length ? diffPath + ' L100 50 L0 50 Z' : ''
+    return {
+      n, lo, hi, rows, x, diff, dMax,
+      paths: rows.map(path),
+      areas: rows.map(area),
+      diffPath,
+      diffArea,
+      events: tl.events || []
+    }
   }, [tl])
 
   const ratioAt = (clientX: number): number => {
@@ -217,6 +236,19 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
                 vectorEffect="non-scaling-stroke"
               />
             ))}
+            {curve.diffArea && (
+              <>
+                <line x1="0" y1="50" x2="100" y2="50" stroke="var(--line-hi)" strokeWidth="0.6" vectorEffect="non-scaling-stroke" />
+                <path d={curve.diffArea} fill="var(--accent)" opacity="0.18" />
+                <path
+                  d={curve.diffPath}
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="1.6"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </>
+            )}
             {curve.paths.map((d, t) => (
               <path key={'p' + t} d={d} className={'line t' + t} vectorEffect="non-scaling-stroke" />
             ))}
@@ -280,7 +312,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       </div>
 
       <div className="bplayer-note dim">
-        {curve ? '兵力曲线按比例对齐，可能有几秒误差' : '这一局没有对局数据，只有普通进度条'} · 空格播放/暂停，←
+        {curve ? '细线 = 两队兵力，粗线 = 兵力差（在中线上方 = A 队占上风）；按比例对齐，可能有几秒误差' : '这一局没有对局数据，只有普通进度条'} · 空格播放/暂停，←
         → ±5 秒
       </div>
     </div>

@@ -803,3 +803,105 @@ pre.log {
   bottom: 16px;
   z-index: 25;
 }
+
+/* ================= 表面层次 =================
+   老版好看的关键不是什么框架，是四级表面色阶：
+     --bg 页面底 → --card 卡片 → --card-hi 卡片里的子面板 → --card-3 再里一层的徽章/菜单
+   这里把层次用起来：卡片里的每一块都比卡片本身亮一档，小徽章再亮一档。 */
+
+/* 卡片里的子面板：队伍栏、搜索结果、玩家详情的每一节、日志框 */
+.teams > div,
+.search-list,
+.pdetail-grid > section,
+pre.log {
+  background: var(--card-hi);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.teams > div > .team-head {
+  margin-top: 2px;
+}
+.pdetail-grid > section {
+  padding: 12px 14px;
+}
+
+/* 子面板里的行：底色透明，悬浮才变（老版 .row-hover 的做法） */
+.prow:hover {
+  background: var(--row-hover);
+  border-color: var(--line);
+}
+.prow.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+/* 再里一层：计数徽章、标签、翻页按钮 */
+.team-head .dim,
+.card > h2 > .dim {
+  background: var(--card-3);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11.5px;
+}
+.tag {
+  background: var(--card-3);
+}
+.pager button {
+  background: var(--card-3);
+}
+
+/* 表头压一档底色，和数据行分开 */
+table.t thead th {
+  background: var(--card-hi);
+  position: sticky;
+  top: 0;
+}
+.pdetail-grid table.t thead th,
+.search-list table.t thead th {
+  background: var(--card-3);
+}
+
+/* 输入框跟卡片里的子面板同一层 */
+input,
+select {
+  background: var(--card-hi);
+}
+
+/* 通用标签页：下划线式（老版 .mr-tab）。小号的是药丸式过滤器（老版 .mr-tab.small） */
+.tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.tabs button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  padding: 8px 14px;
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.tabs button:hover {
+  background: var(--row-hover);
+  color: var(--text-2);
+}
+.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+.pill {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-3);
+}
+.pill.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--text);
+}

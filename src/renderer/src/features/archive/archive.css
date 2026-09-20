@@ -1,16 +1,30 @@
 /* 对局档案表：这张卡可能只有 ~600px 宽，所以列要压得住。颜色只用全局变量。 */
 
+/* 一页 30 条：表格本身滚动，别把整页撑得没边；表头钉在顶上 */
 .archive-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 520px;
 }
 
 table.archive-t {
-  min-width: 520px;
+  min-width: 560px;
 }
 
-/* 前四列（时间/地图/模式/账号）左对齐，后三列（胜负/ELO/龙区分）跟 .t 一样靠右 */
-table.archive-t th:nth-child(-n + 4),
-table.archive-t td:nth-child(-n + 4) {
+table.archive-t thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+}
+
+/* 列：胜负 | 模式 | 龙区分 | 地图 | ELO | 账号 | 时间 | ▶
+   .t 默认靠右（首列靠左），这里把文字列（模式/地图/账号）扳回左对齐 */
+table.archive-t th:nth-child(2),
+table.archive-t td:nth-child(2),
+table.archive-t th:nth-child(4),
+table.archive-t td:nth-child(4),
+table.archive-t th:nth-child(6),
+table.archive-t td:nth-child(6) {
   text-align: left;
 }
 
@@ -40,6 +54,41 @@ table.archive-t tbody tr:hover .archive-time {
   text-overflow: ellipsis;
 }
 
+/* ---------- 模式标签（对齐老版 .mode-tag：排位强调色、自定义警告色） ---------- */
+.archive-mode {
+  padding-right: 2px;
+}
+.mode-tag {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 17px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.mode-tag.ranked {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.mode-tag.custom {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+/* ---------- 行末尾的「播放这局录像」 ---------- */
+.archive-play {
+  width: 1%;
+  padding-left: 0;
+}
+button.archive-play-btn {
+  padding: 1px 7px;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--accent);
+}
+
 .archive-elo {
   font-variant-numeric: tabular-nums;
 }
@@ -59,10 +108,4 @@ table.archive-t tbody tr:hover .archive-time {
   .elo > .dim:first-child {
     display: none;
   }
-}
-
-/* 档案可能有上百局：列表本身滚动，别把整页撑得没边 */
-.archive-scroll {
-  max-height: 460px;
-  overflow-y: auto;
 }

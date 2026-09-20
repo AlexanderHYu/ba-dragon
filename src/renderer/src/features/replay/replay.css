@@ -1,6 +1,68 @@
 /* 行车记录仪：录像列表的可点行 + 内置播放器。
    颜色只用 styles.css 里的变量，这里不新定义主题色。 */
 
+/* ---------- 设置菜单（右上角 ⚙ 设置 点开） ---------- */
+button.rec-set-btn.open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rec-set {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.rec-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rec-field > select {
+  width: 100%;
+}
+
+.rec-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rec-val {
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.rec-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.rec-range {
+  width: 100%;
+  padding: 0;
+  accent-color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.rec-est {
+  font-size: 12.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-dir {
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 /* ---------- 列表：整行可点，点了就在卡片里开播放器 ---------- */
 tr.replay-row {
   cursor: pointer;
@@ -237,7 +299,8 @@ tr.replay-row.active > td:first-child {
 }
 
 
-/* 全屏播放：黑底铺满，控制条和兵力曲线压在底部 */
+/* 全屏播放：video 上的 max-height 必须解除，否则进了全屏画面还是只有 60vh 那么大 */
+.bplayer:fullscreen,
 .bplayer.full {
   background: #000;
   border: none;
@@ -245,27 +308,39 @@ tr.replay-row.active > td:first-child {
   padding: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
 }
-.bplayer.full .bplayer-head {
-  padding: 8px 14px;
-  background: rgba(0, 0, 0, 0.6);
-  color: var(--text);
-}
+.bplayer:fullscreen video,
 .bplayer.full video {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  width: 100%;
+  max-height: none;
   height: auto;
+  width: 100%;
+  border-radius: 0;
   object-fit: contain;
   background: #000;
 }
+.bplayer:fullscreen .bplayer-head,
+.bplayer.full .bplayer-head {
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  flex: none;
+}
+.bplayer:fullscreen .bplayer-bar,
+.bplayer:fullscreen .bplayer-ctrl,
+.bplayer:fullscreen .bplayer-note,
 .bplayer.full .bplayer-bar,
 .bplayer.full .bplayer-ctrl,
 .bplayer.full .bplayer-note {
-  padding-left: 14px;
-  padding-right: 14px;
-  background: rgba(0, 0, 0, 0.6);
+  flex: none;
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.bplayer:fullscreen .bplayer-note,
+.bplayer.full .bplayer-note {
+  padding-bottom: 10px;
 }
 .bplayer-full {
   padding: 3px 9px;

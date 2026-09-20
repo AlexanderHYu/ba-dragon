@@ -125,6 +125,28 @@ export async function run(win: BrowserWindow): Promise<void> {
     const shot = process.env.BA_SMOKE_SHOT
     if (shot) {
       writeFileSync(shot.replace(/\.png$/, '') + '-main.png', (await win.webContents.capturePage()).toPNG())
+      // 搜到人的话点开他的详情截一张（玩家详情是整个界面里最重的一块）。
+      // 要走界面自己的搜索：直接调 IPC 不会把结果放进界面状态
+      if (process.env.BA_SMOKE_SEARCH) {
+        await win.webContents.executeJavaScript(`(() => {
+          const input = document.querySelector('.card input[placeholder*="玩家名"]')
+          const btn = [...document.querySelectorAll('.card button')].find((b) => /搜索/.test(b.textContent || ''))
+          if (!input || !btn) return false
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          setter.call(input, '${process.env.BA_SMOKE_SEARCH}')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          btn.click()
+          return true
+        })()`)
+        await new Promise((r) => setTimeout(r, 3000))
+        const hit = await win.webContents.executeJavaScript(
+          `(() => { const r = document.querySelector('.search-list .prow:not(.head)'); if (r) r.click(); return !!r })()`
+        )
+        if (hit) {
+          await new Promise((r) => setTimeout(r, 1200))
+          writeFileSync(shot.replace(/\.png$/, '') + '-player.png', (await win.webContents.capturePage()).toPNG())
+        }
+      }
       // 点开第一条录像，看播放器和兵力曲线渲染出来没有
       const opened = await win.webContents.executeJavaScript(`(() => {
         const row = document.querySelector('.replay-row')
@@ -139,6 +161,27 @@ export async function run(win: BrowserWindow): Promise<void> {
           const v = document.querySelector('video')
           return { video: !!v, src: v && v.getAttribute('src'), curves: document.querySelectorAll('.bplayer-bar path, .bplayer-bar polyline').length }
         })()`)
+      }
+      // 全屏：requestFullscreen 需要用户手势，executeJavaScript 的第二个参数就是「当成用户手势」
+      if (opened) {
+        await win.webContents.executeJavaScript(
+          `(() => { const b = [...document.querySelectorAll('.bplayer button')].find((x) => /全屏/.test(x.textContent || '')); if (b) b.click(); return !!b })()`,
+          true
+        )
+        await new Promise((r) => setTimeout(r, 900))
+        out.fullscreen = await win.webContents.executeJavaScript(`(() => {
+          const v = document.querySelector('video')
+          const r = v && v.getBoundingClientRect()
+          return {
+            el: !!document.fullscreenElement,
+            winFull: innerHeight,
+            videoH: r ? Math.round(r.height) : 0,
+            fillsScreen: !!r && r.height > innerHeight * 0.6
+          }
+        })()`)
+        writeFileSync(shot.replace(/\.png$/, '') + '-full.png', (await win.webContents.capturePage()).toPNG())
+        await win.webContents.executeJavaScript('document.exitFullscreen && document.exitFullscreen()', true)
+        await new Promise((r) => setTimeout(r, 500))
       }
       // 亮色配色也来一张
       await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'light'`)

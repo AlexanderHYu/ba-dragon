@@ -50,7 +50,7 @@ export default function PlayerPanel(): React.JSX.Element {
         {searching && <span className="spin" />}
         {card && (
           <button onClick={() => setOpenPlayer(null)} title="收起详细信息">
-            收起
+            ▴ 收起
           </button>
         )}
       </h2>
@@ -64,7 +64,7 @@ export default function PlayerPanel(): React.JSX.Element {
           style={{ flex: 1, maxWidth: 320 }}
         />
         <button className="primary" onClick={() => void go()}>
-          搜索
+          🔍 搜索
         </button>
         {err && <span className="dim">{err}</span>}
       </div>

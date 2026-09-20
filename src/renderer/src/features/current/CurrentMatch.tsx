@@ -30,7 +30,7 @@ export default function CurrentMatch(): React.JSX.Element {
             <span className="spin" style={{ marginLeft: 6 }} />
           </span>
         )}
-        <button onClick={() => void window.BA.queryRoster()}>重新查询</button>
+        <button onClick={() => void window.BA.queryRoster()}>🔄 重新查询</button>
       </h2>
 
       {query.pass && (

@@ -314,6 +314,17 @@ export interface DragonReason {
   weight: number
   params: Record<string, unknown>
 }
+/**
+ * 龙区分里的单场一行：就是 MatchFeatures 去掉只给算法用的中间量（c/x/S/E/eloN/gapN），
+ * 加上这一场的分项百分位、单场分和龙/区/泯。
+ * `map` 是地图名，shared 里查不到表，由主进程按 mapId 补上（见 services/players.ts）。
+ */
+export interface DragonRow extends Omit<MatchFeatures, 'x' | 'S' | 'E' | 'eloN' | 'gapN'> {
+  parts: ScoreParts
+  score: number
+  mark: Mark
+  map?: string
+}
 export interface DragonScore {
   stbid: string
   value: number
@@ -333,7 +344,7 @@ export interface DragonScore {
     winRate: number
   }
   reasons: DragonReason[]
-  rows: unknown[]
+  rows: DragonRow[]
   error?: undefined
 }
 

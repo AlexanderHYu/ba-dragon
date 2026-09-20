@@ -28,7 +28,7 @@ export default function Bans(): React.JSX.Element {
             setBusy(false)
           }}
         >
-          {busy ? '查询中…' : '刷新'}
+          {busy ? '查询中…' : '↻ 刷新'}
         </button>
       </h2>
       {err && <div style={{ color: 'var(--bad)' }}>{err}</div>}

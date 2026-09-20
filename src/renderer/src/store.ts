@@ -16,6 +16,8 @@ interface State {
   search: PlayerCard[]
   searching: boolean
   page: Page
+  /** 档案里点了 ▶：行车记录仪看到非空就播这一条，然后清空 */
+  playReplay: string | null
   setConfig: (c: Settings) => void
   setStatus: (s: AppStatus) => void
   setSession: (s: SessionState) => void
@@ -24,6 +26,7 @@ interface State {
   setOpenPlayer: (id: string | null) => void
   setSearch: (list: PlayerCard[], searching?: boolean) => void
   setPage: (p: Page) => void
+  setPlayReplay: (id: string | null) => void
 }
 
 const emptyQuery: QueryState = { fid: null, pass: null, done: 0, total: 0, prev: false, cards: [] }
@@ -37,6 +40,7 @@ export const useStore = create<State>((set) => ({
   search: [],
   searching: false,
   page: { name: 'home' },
+  playReplay: null,
   setConfig: (config) => set({ config }),
   setStatus: (status) => set({ status }),
   setSession: (session) => set({ session }),
@@ -53,7 +57,8 @@ export const useStore = create<State>((set) => ({
     }),
   setOpenPlayer: (openPlayer) => set({ openPlayer }),
   setSearch: (search, searching = false) => set({ search, searching }),
-  setPage: (page) => set({ page })
+  setPage: (page) => set({ page }),
+  setPlayReplay: (playReplay) => set({ playReplay })
 }))
 
 /** 当前对局 + 搜索结果里找这个人 */
