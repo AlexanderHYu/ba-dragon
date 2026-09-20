@@ -260,7 +260,7 @@ function saveMatch(
             `INSERT OR REPLACE INTO match_unit
              (fid, pid, unit_id, options, deployed, refunded, dead, spent, lost, dmg, kills, destr)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [fid, p.id, u.id, '', u.deployed, u.refunded, u.dead, u.spent, u.lost, u.dmg, u.kills, u.destr]
+            [fid, p.id, u.id, u.options, u.deployed, u.refunded, u.dead, u.spent, u.lost, u.dmg, u.kills, u.destr]
           )
         }
       }

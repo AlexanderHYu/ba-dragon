@@ -45,6 +45,8 @@ export const ROLE_NAME: Record<string, string> = {
 
 export interface ReportUnit {
   id: number
+  /** 配装（OptionIds 排序后拼起来） */
+  options: string
   name: string
   role: RoleKey | null
   roleName: string
@@ -180,6 +182,8 @@ export interface MatchReport {
 
 interface UnitAgg {
   id: number
+  /** 配装（OptionIds 排序后拼起来），空串 = 没有配装信息 */
+  options: string
   name: string
   role: RoleKey | null
   country: number
@@ -205,6 +209,39 @@ export interface ReportOpts {
   localIds?: string[]
   mapName?: (id?: number) => string
   unitMap?: UnitMap
+  /**
+   * 同一个单位的不同配装分开统计（默认开）。
+   * BATrace 的公开接口没有配装名字，所以只能显示「配装 A / B」，
+   * 但至少能把 Airborne 和 Airborne NGWS 的数据分开看。对拍老版时传 false。
+   */
+  groupByLoadout?: boolean
+}
+
+/** 配装签名：OptionIds 排序后拼起来 */
+function optionsKey(ids?: number[]): string {
+  if (!Array.isArray(ids) || !ids.length) return ''
+  return [...ids].sort((a, b) => a - b).join(',')
+}
+
+/**
+ * 同一个单位出现了多种配装就给名字加上「配装 A / B」，按出兵次数排，出得多的是 A。
+ * 只出现一种配装的单位名字不动。
+ */
+function labelLoadouts(units: ReportUnit[]): void {
+  const byUnit = new Map<string, ReportUnit[]>()
+  for (const u of units) {
+    const k = u.team + ':' + u.id
+    const list = byUnit.get(k)
+    if (list) list.push(u)
+    else byUnit.set(k, [u])
+  }
+  for (const list of byUnit.values()) {
+    if (list.length < 2) continue
+    const sorted = [...list].sort((a, b) => b.deployed - a.deployed)
+    sorted.forEach((u, i) => {
+      u.name = u.name + '（配装 ' + String.fromCharCode(65 + i) + '）'
+    })
+  }
 }
 
 export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
@@ -278,13 +315,14 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
         timeline[team].loss[minuteOf(u.DeathTime)] += lossCost
         timeline[team].deathsN[minuteOf(u.DeathTime)]++
       }
-      // 按单位型号聚合（玩家内 / 队伍内）
+      // 按单位型号聚合；开了配装分组就连配装一起分（同一个单位的不同挂载分开统计）
+      const optKey = opts.groupByLoadout === false ? '' : optionsKey(u.OptionIds)
       for (const [map, key] of [
-        [mine, String(u.Id)],
-        [unitAgg, team + ':' + u.Id]
+        [mine, u.Id + '|' + optKey],
+        [unitAgg, team + ':' + u.Id + '|' + optKey]
       ] as [Map<string, UnitAgg>, string][]) {
         const a: UnitAgg = map.get(key) || {
-          id: u.Id, name: e[2], role: e[0], country: e[3], team,
+          id: u.Id, options: optKey, name: e[2], role: e[0], country: e[3], team,
           count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [],
           users: new Set<string>(), spent: 0, lost: 0, destr: 0, price: cost
         }
@@ -305,6 +343,7 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     const D = num(p.DestructionScore)
     const L = num(p.LossesScore)
     const unitList = [...mine.values()].map(finishUnit).sort((a, b) => b.spent - a.spent)
+    if (opts.groupByLoadout !== false) labelLoadouts(unitList)
     return {
       id, name: p.Name || id, team, me: localIds.has(id),
       eloBefore: hasRating(p) ? r2(p.OldRating as number) : null,
@@ -394,6 +433,7 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
 
   // ---------- 单位 ----------
   const units = [...unitAgg.values()].map(finishUnit).sort((a, b) => b.spent - a.spent)
+  if (opts.groupByLoadout !== false) labelLoadouts(units)
 
   // ---------- 时间线：场上兵力 = 累计出兵 − 累计损失（估算） ----------
   const field = timeline.map((tl) => {
@@ -449,6 +489,7 @@ function finishUnit(a: UnitAgg): ReportUnit {
   const spent = a.spent
   return {
     id: a.id,
+    options: a.options,
     name: a.name,
     role: a.role,
     roleName: ROLE_NAME[String(a.role)] || ROLE_NAME.null,

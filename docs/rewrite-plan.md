@@ -64,8 +64,10 @@ scripts/         建模、采数据、打包辅助（照搬，改成 ts 可选�
   所以两种配装都成了 NGWS。BATrace 单位页里有配装表（option 带 `replaceUnitName` /
   `concatenateWithUnitName` / `cost`），但公开 API 没有这个接口（试过 `/api/unit`、
   `/api/units/351`、`/api/modifications`、`/api/options` 等都是 404）。
-  - 最好：找 BATrace 要一个配装接口，然后复盘里按配装分开统计。
-  - 暂时：按 `OptionIds` 分组显示「配装 A / B」，名字仍用单位名。
+  - 游戏文件里也没有：扫过 units 资源包（3.3GB，只有模型动画）、unitmodifications（只有图标）、
+    data.unity3d、本地化包（5379 条界面文本，没有单位和配装名）。那份数据多半在游戏服务器上。
+  - **已做**：按 `OptionIds` 分组，同一单位有多种配装时名字带「配装 A / B」（出得多的是 A）。
+  - 还差：配装的真实名字，要找 BATrace 开个接口。
 - **`smoke.js` 的断言方式**：改成 vitest 测纯逻辑 + 一个启动冒烟。
 - **`main.js` 1214 行什么都管**：拆成 service + ipc 模块。
 

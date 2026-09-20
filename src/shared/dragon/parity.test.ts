@@ -70,9 +70,11 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
     const oldReport = require(join(LEGACY, 'src', 'matchReport.js'))
     for (const { fid, mi } of matches) {
       const review = analyzeMatch(mi, fid)
-      const a = buildMatchReport(mi, { fid, review })
+      // 配装分组是新版才有的：对拍时关掉分组，并抹掉新增的 options 字段
+      const a = buildMatchReport(mi, { fid, review, groupByLoadout: false })
       const b = oldReport.buildMatchReport(mi, { fid, review: oldScore.analyzeMatch(mi, fid) })
-      expect(JSON.parse(JSON.stringify(a)), '对局 ' + fid).toEqual(JSON.parse(JSON.stringify(b)))
+      const strip = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (k, x) => (k === 'options' ? undefined : x)))
+      expect(strip(a), '对局 ' + fid).toEqual(strip(b))
     }
   })
 
