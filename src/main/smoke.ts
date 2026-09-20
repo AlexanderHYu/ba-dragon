@@ -71,6 +71,21 @@ export async function run(win: BrowserWindow): Promise<void> {
       )
     }
     out.archive = await win.webContents.executeJavaScript('window.BA.listArchive().then(l => l.length)')
+    // 搜一个人并打开他的档案（BA_SMOKE_SEARCH 给名字）：验证搜索→详情这条链路
+    if (process.env.BA_SMOKE_SEARCH) {
+      out.search = await win.webContents.executeJavaScript(
+        `window.BA.searchPlayers('${process.env.BA_SMOKE_SEARCH}').then(async (list) => {
+          if (!list.length) return { found: 0 }
+          const card = await window.BA.getPlayerCard(list[0].id)
+          return {
+            found: list.length, id: list[0].id, name: card.name,
+            infoState: card.infoState, dragonState: card.dragonState,
+            elo: card.info && card.info.elo, score: card.dragon && card.dragon.value,
+            kd: card.dragon && card.dragon.summary.kdAgg, error: card.error || null
+          }
+        })`
+      )
+    }
     // 截图（BA_SMOKE_SHOT 给路径）：主界面一张，复盘页一张
     const shot = process.env.BA_SMOKE_SHOT
     if (shot) {

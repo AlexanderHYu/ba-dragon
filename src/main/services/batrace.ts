@@ -65,8 +65,18 @@ export interface ClientOpts {
   onRequest?: (url: string) => void
 }
 
+export interface ApiHealth {
+  /** 最近一次真实请求的结果 */
+  ok: boolean | null
+  at: number | null
+  message: string | null
+  /** 这次启动以来发了多少个真实请求（缓存命中不算） */
+  requests: number
+}
+
 export class BatraceClient {
   private db: Db
+  private healthState: ApiHealth = { ok: null, at: null, message: null, requests: 0 }
   private delayMs: () => number
   private onRequest?: (url: string) => void
   private queue: Promise<unknown> = Promise.resolve()
@@ -90,8 +100,17 @@ export class BatraceClient {
     return run
   }
 
+  health(): ApiHealth {
+    return { ...this.healthState }
+  }
+
+  private mark(ok: boolean, message?: string): void {
+    this.healthState = { ok, at: Date.now(), message: message || null, requests: this.healthState.requests }
+  }
+
   private async fetchJson<T>(url: string): Promise<T> {
     this.onRequest?.(url)
+    this.healthState.requests++
     const r = await net.fetch(BASE + url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(30000)
@@ -99,12 +118,24 @@ export class BatraceClient {
     const ct = r.headers.get('content-type') || ''
     if (!/json/.test(ct)) {
       const text = await r.text()
-      if (isCaptchaHtml(text)) throw new CaptchaError()
+      if (isCaptchaHtml(text)) {
+        this.mark(false, '需要人机验证')
+        throw new CaptchaError()
+      }
+      this.mark(false, '非 JSON 响应 HTTP ' + r.status)
       throw new Error('非 JSON 响应 HTTP ' + r.status)
     }
-    if (r.status >= 500) throw new Error('服务器错误 HTTP ' + r.status)
-    if (!r.ok) throw new Error('HTTP ' + r.status)
-    return (await r.json()) as T
+    if (r.status >= 500) {
+      this.mark(false, '服务器错误 HTTP ' + r.status)
+      throw new Error('服务器错误 HTTP ' + r.status)
+    }
+    if (!r.ok) {
+      this.mark(false, 'HTTP ' + r.status)
+      throw new Error('HTTP ' + r.status)
+    }
+    const json = (await r.json()) as T
+    this.mark(true)
+    return json
   }
 
   /**
@@ -141,7 +172,11 @@ export class BatraceClient {
     return this.db.cacheGet<T>(key, ttl)
   }
 
-  searchPlayers(q: string, limit = 20): Promise<{ players?: { stbid: string; name: string; rating?: number }[] }> {
+  /** 搜索玩家。返回的字段是 id / name / rating / rating_games / updated_at（rating 是档案里的旧值） */
+  searchPlayers(
+    q: string,
+    limit = 20
+  ): Promise<{ players?: { id: number | string; name: string; rating?: number; rating_games?: number; updated_at?: string }[] }> {
     return this.get(
       `/api/players/search?q=${encodeURIComponent(q)}&limit=${limit}`,
       `search:${q}:${limit}`,

@@ -1,0 +1,270 @@
+/* 单局复盘（整页版）自己的样式。
+   颜色一律走 styles.css 里的主题变量，这里不写死颜色，深色/浅色两套主题都跟着变。
+   全部选择器都挂在 .rp 下面，不影响别的页面。 */
+
+.rp {
+  /* 本页自用的两档交互底色：用 --text 混出来，深色主题变亮、浅色主题变暗，两边都看得见 */
+  --rp-hover: color-mix(in srgb, var(--text) 9%, var(--card));
+  --rp-hit: color-mix(in srgb, var(--accent) 16%, var(--card));
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ---------- 顶部一行：返回 + 标题 + 外链 ---------- */
+.rp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.rp-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.rp-title .dim {
+  font-weight: 400;
+  font-size: 14px;
+}
+.rp-back:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- 标签页 ---------- */
+.rp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.rp-meta {
+  font-size: 12px;
+}
+.rp-tab {
+  padding: 6px 16px;
+}
+.rp-tab:hover:not(:disabled) {
+  background: var(--rp-hover);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.rp-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.rp-tab.active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 82%, var(--text));
+  border-color: color-mix(in srgb, var(--accent) 82%, var(--text));
+  color: var(--bg);
+}
+
+/* 卡片里的小工具条（单位页的分队筛选） */
+.rp-subbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.rp-note {
+  font-size: 12px;
+}
+
+/* ---------- 总览：对比表居中，两侧等宽 ---------- */
+.rp-vs {
+  max-width: 780px;
+  margin: 0 auto;
+}
+.rp .vs {
+  table-layout: fixed;
+}
+.rp .vs td {
+  width: 37%;
+  font-size: 13.5px;
+  padding: 6px 10px;
+}
+.rp .vs thead th {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding-bottom: 8px;
+}
+.rp .vs tbody th {
+  width: 26%;
+  color: var(--dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rp .vs tbody th.tip {
+  cursor: help;
+  border-bottom: 1px dotted var(--line);
+}
+.rp .vs tbody tr:hover {
+  background: var(--rp-hover);
+}
+
+.rp .roles-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 本局要点：整页宽了，窄屏一列、宽屏两列，省得一条条排到天边 */
+.rp-insights {
+  margin: 0;
+  padding-left: 18px;
+  columns: 1;
+  column-gap: 32px;
+}
+.rp-insights li {
+  break-inside: avoid;
+  margin-bottom: 4px;
+}
+@media (min-width: 1000px) {
+  .rp-insights {
+    columns: 2;
+  }
+}
+
+/* ---------- 玩家表 / 单位表：撑满卡片 ---------- */
+.rp-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+.rp .rp-wide {
+  width: 100%;
+  min-width: 100%;
+}
+/* 第一列（玩家名 / 单位名）吃掉多余的宽度，数字列各自贴边 */
+.rp .rp-wide th:first-child,
+.rp .rp-wide td:first-child {
+  width: 22%;
+  white-space: normal;
+}
+.rp .rp-wide th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+}
+
+.rp .rp-sort {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+.rp .rp-sort:hover {
+  background: var(--rp-hover);
+  color: var(--text);
+}
+.rp .rp-sort.sorted {
+  color: var(--accent);
+}
+
+/* 玩家行：可点开明细 */
+.rp .rp-prow {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.rp .rp-prow:hover > td {
+  background: var(--rp-hover);
+}
+.rp .rp-prow.open > td {
+  background: var(--rp-hit);
+}
+.rp .rp-prow.open > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+/* 展开的明细行不要再跟着高亮 */
+.rp .rp-detail-row > td {
+  padding: 10px 6px 16px;
+  background: var(--bg-2);
+}
+.rp .rp-detail-row:hover > td {
+  background: var(--bg-2);
+}
+.rp .rp-detail .kv {
+  max-width: 900px;
+}
+.rp-users {
+  white-space: normal;
+}
+
+/* 使用率条 */
+.rp .usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  width: 100%;
+}
+.rp .usage i {
+  display: inline-block;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 3px;
+  min-width: 2px;
+}
+
+/* ---------- 时间线 ---------- */
+.rp .rp-chart {
+  width: 100%;
+}
+.rp .rp-chart svg {
+  display: block;
+  width: 100%;
+}
+.rp-chart-legend {
+  margin: 0;
+  font-weight: 400;
+}
+.rp .lossbars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 90px;
+  width: 100%;
+}
+.rp .lossbars .lb {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 100%;
+  border-radius: 2px;
+  transition: background 0.12s;
+}
+.rp .lossbars .lb:hover {
+  background: var(--rp-hover);
+}
+.rp .lossbars .lb i {
+  flex: 1;
+  display: block;
+  border-radius: 1px 1px 0 0;
+  min-height: 1px;
+}
+
+/* ---------- 窄窗口 ---------- */
+@media (max-width: 760px) {
+  .rp-title {
+    font-size: 16px;
+    width: 100%;
+    order: 3;
+  }
+  .rp .vs td,
+  .rp .vs tbody th {
+    padding: 5px 4px;
+  }
+}

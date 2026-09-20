@@ -85,6 +85,9 @@ export interface PlayerCard {
   error?: string | null
   /** 上次见到这个人时的龙区分（本地库里的快照），用于「上次 6.2，这次 7.8」 */
   lastSeen?: { score: number; at: number } | null
+  /** 搜索接口给的 ELO：BATrace 档案里的旧值，可能是几周前的，只在没有更新数据时兜底显示 */
+  staleElo?: number | null
+  staleEloAt?: number | null
   updatedAt?: number
 }
 
@@ -121,11 +124,13 @@ export interface PlayerInfo {
 }
 
 export interface Settings {
+  /** 游戏根目录；日志目录从它推 */
+  gameDir: string
   logDir: string
   pollMs: number
   apiDelayMs: number
   autoQueryCurrentMatch: boolean
-  theme: string
+  theme: 'dark' | 'light' | string
   banCheckOnStart: boolean
   matchSyncEnabled: boolean
   replayEnabled: boolean
@@ -135,6 +140,18 @@ export interface Settings {
 export interface SessionState {
   snapshot: LogSnapshot
   watcher: { file: string | null; listening: boolean; mtime: number | null }
+}
+
+/** 顶栏那一行状态 */
+export interface AppStatus {
+  version: string
+  /** 游戏目录找没找到 */
+  gameDir: string
+  logDir: string
+  logFound: boolean
+  watching: boolean
+  /** BATrace 最近一次真实请求的结果 */
+  api: { ok: boolean | null; at: number | null; message: string | null; requests: number }
 }
 
 export interface QueryState {
@@ -154,18 +171,27 @@ export interface ArchiveItem {
   startTime: number | null
   durationSec: number | null
   winnerTeam: number | null
-  /** 本机玩家这局的结果和分数，本地库里有就带上 */
-  mine?: { won: boolean | null; score: number | null; mark: string | null } | null
-  /** 有没有算过复盘（算过就是读本地库，不用再请求） */
-  cached: boolean
+  /** 排位还是自定义（看这局有没有人掉分涨分） */
+  mode: '排位' | '自定义' | '未知'
+  /** 我这局：哪个账号、胜负、赛前赛后 ELO、龙区分 */
+  mine?: {
+    account: string
+    won: boolean | null
+    eloBefore: number | null
+    eloAfter: number | null
+    score: number | null
+    mark: string | null
+  } | null
 }
 
 /** invoke 通道：名字 → [参数, 返回值] */
 export interface IpcMap {
   'config:get': [void, Settings]
   'config:set': [Partial<Settings>, Settings]
-  'config:selectDir': [void, string | null]
-  'config:detectDir': [void, string | null]
+  'config:selectDir': [void, { gameDir: string; logDir: string } | { error: string } | null]
+  'config:detectDir': [void, { gameDir: string; logDir: string } | null]
+  'config:openLogDir': [void, void]
+  'app:status': [void, AppStatus]
   'session:get': [void, SessionState]
   'players:search': [string, PlayerCard[]]
   'player:card': [{ stbid: string; refresh?: boolean }, PlayerCard]
@@ -173,10 +199,12 @@ export interface IpcMap {
   'match:state': [void, QueryState]
   'match:report': [{ fid: string; localIds?: string[] }, MatchReport | { error: string }]
   'archive:list': [void, ArchiveItem[]]
-  'match:prev': [void, { fid: string | null }]
-  'deck:list': [void, { found: boolean; dir: string; decks: DeckFile[]; backups: BackupFile[] }]
-  'deck:backup': [{ name?: string } | void, { file: string; decks: number } | { error: string }]
+  'deck:list': [void, { found: boolean; dir: string; backupDir: string; decks: DeckFile[]; backups: BackupFile[] }]
+  'deck:backup': [{ name?: string; only?: string[] } | void, { file: string; decks: number } | { error: string }]
   'deck:restore': [{ name: string; overwrite?: boolean }, { restored: number; skipped: string[] } | { error: string }]
+  'deck:deleteDecks': [string[], { removed: number; error?: string }]
+  'deck:deleteBackups': [string[], { removed: number; error?: string }]
+  'deck:openDir': ['decks' | 'backups', void]
   'tracker:bond': [string, Bond | null]
   'ban:get': [void, BanResult | null]
   'ban:check': [void, BanResult | { error: string }]

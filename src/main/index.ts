@@ -1,6 +1,6 @@
 // ================= 主进程 =================
 // 只负责搭台子：建窗口、起服务、把 IPC 接上。具体逻辑都在 services/ 里。
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, protocol, shell } from 'electron'
 import { join } from 'node:path'
 import { LogParser } from '@shared/log'
 import type { SessionState } from '@shared/ipc'
@@ -17,6 +17,11 @@ import { Updater } from './services/updater'
 import { ReplayService } from './services/replays'
 import { migrateLegacy } from './services/migrate'
 import { registerIpc } from './ipc'
+
+// 录像播放走自定义协议 replay://local/<文件名>：支持 Range 请求，拖进度条只读需要的那一段
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'replay', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }
+])
 
 // 数据目录固定成 4.0.x 用的那个：改名、换版本，设置和对局档案都还在原处
 app.setPath('userData', join(app.getPath('appData'), 'broken-arrow-log-assistant'))
@@ -180,6 +185,7 @@ function startServices(): Services {
   }
 
   watcher.start()
+  replays.registerProtocol()
   // 封禁名单：启动后等一会查一次（其余时候手动刷新），查到熟人被封就提示
   if (config.get('banCheckOnStart')) {
     setTimeout(() => {

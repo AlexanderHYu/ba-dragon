@@ -325,6 +325,8 @@ export interface DragonScore {
   parts: Record<string, number | null>
   summary: {
     kdMedian: number | null
+    /** 这 20 场的总体 K/D：Σ摧毁分 ÷ Σ损失分（比逐场取平均稳，界面上显示的是它） */
+    kdAgg: number | null
     contribMedian: number | null
     objMedian: number | null
     avgExpected: number
@@ -423,6 +425,11 @@ export function computeDragonScore(input: {
     parts,
     summary: {
       kdMedian: kdMed,
+      kdAgg: (() => {
+        const d = feats.reduce((a, f) => a + f.destruction, 0)
+        const l = feats.reduce((a, f) => a + f.losses, 0)
+        return l > 0 ? Math.round((d / l) * 100) / 100 : null
+      })(),
       contribMedian: contribMed,
       objMedian: objMed,
       avgExpected: Math.round(avgExp * 100) / 100,

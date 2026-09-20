@@ -1,9 +1,10 @@
 // ================= 行车记录仪（录像） =================
 // 每局自动录游戏所在那块屏幕，打完合成 MP4 存本地。录制本身在 recorder.ts，
 // 这里管「什么时候开、什么时候停、存哪、叫什么名字」。
-import { copyFileSync, mkdirSync, renameSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { copyFileSync, createReadStream, mkdirSync, renameSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { Readable } from 'node:stream'
 import { join, resolve } from 'node:path'
-import { Notification, app, screen } from 'electron'
+import { Notification, app, protocol, screen } from 'electron'
 import {
   FfmpegRecorder,
   probeEncoders,
@@ -229,6 +230,41 @@ export class ReplayService {
           Math.abs(o.height - Math.round(d.size.height * d.scaleFactor)) <= 2
       )
     }))
+  }
+
+  /**
+   * replay://local/<文件名> → 本地录像文件。
+   * 支持 Range（206 分段），拖进度条只读需要的那一段，几百 MB 的录像也不用整个读进内存。
+   */
+  registerProtocol(): void {
+    protocol.handle('replay', (req) => {
+      const name = decodeURIComponent(new URL(req.url).pathname.replace(/^\//, ''))
+      const file = this.pathOf(name)
+      if (!file) return new Response('not found', { status: 404 })
+      const size = statSync(file).size
+      const range = req.headers.get('range')
+      const m = range ? /bytes=(\d*)-(\d*)/.exec(range) : null
+      if (!m) {
+        return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, {
+          status: 200,
+          headers: { 'content-type': 'video/mp4', 'content-length': String(size), 'accept-ranges': 'bytes' }
+        })
+      }
+      const start = m[1] ? Number(m[1]) : 0
+      const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1
+      if (start >= size || start > end) {
+        return new Response('range not satisfiable', { status: 416, headers: { 'content-range': 'bytes */' + size } })
+      }
+      return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream, {
+        status: 206,
+        headers: {
+          'content-type': 'video/mp4',
+          'content-length': String(end - start + 1),
+          'content-range': 'bytes ' + start + '-' + end + '/' + size,
+          'accept-ranges': 'bytes'
+        }
+      })
+    })
   }
 
   encoders(): Promise<string[]> {

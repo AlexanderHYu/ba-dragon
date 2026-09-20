@@ -1,4 +1,5 @@
-// 名单里的一行：龙区分 + 名字 + 一句话档案。粗查和龙区分合并后，一行就把该看的都摆出来。
+// 名单里的一行：龙区分 + 名字 + ELO / K/D / 胜率 / 样本数 / 常用单位。
+// K/D 和胜率都取龙区分用的那 20 场排位局（非排位、没参考价值的局本来就不在里面），口径对得上分数。
 import type { PlayerCard } from '@shared/ipc'
 
 /** 分档由模型给（tiers 是拟合出来的分位点），界面不自己定阈值 */
@@ -18,48 +19,67 @@ export function scoreColor(v: number | null | undefined): string {
   return 'var(--bad)'
 }
 
-export default function PlayerRow({ card, onOpen }: { card: PlayerCard; onOpen: () => void }): React.JSX.Element {
+export function PlayerRowHead(): React.JSX.Element {
+  return (
+    <div className="prow head">
+      <div style={{ textAlign: 'center' }}>龙区分</div>
+      <div>玩家</div>
+      <div className="num">ELO</div>
+      <div className="num" title="最近 20 场排位的总体 K/D（Σ摧毁分 ÷ Σ损失分）">
+        K/D
+      </div>
+      <div className="num" title="最近 20 场排位的胜率">
+        胜率
+      </div>
+      <div className="num" title="算分用了多少场">
+        样本
+      </div>
+      <div>常用单位</div>
+    </div>
+  )
+}
+
+export default function PlayerRow({
+  card,
+  active,
+  onOpen
+}: {
+  card: PlayerCard
+  active?: boolean
+  onOpen: () => void
+}): React.JSX.Element {
   const d = card.dragon
   const score = d?.value ?? null
   const info = card.info
   const loading = card.infoState === 'loading' || card.dragonState === 'loading'
-  const sub: string[] = []
-  if (info) {
-    if (info.elo != null) sub.push('ELO ' + Math.round(info.elo))
-    sub.push(info.winRate + '% 胜率')
-    if (info.matchCount) sub.push(info.matchCount + ' 局')
-  } else if (card.infoState === 'error') {
-    sub.push(card.error || '查不到')
-  } else if (card.infoState === 'loading') {
-    sub.push('正在查…')
-  }
-  const last = card.lastSeen
+  const elo = info?.elo ?? card.staleElo ?? null
+  const units = (info?.favUnits || []).slice(0, 2).map((u) => u.name).join('、')
+
   return (
-    <div className="pcard" onClick={onOpen} title="点开看详细">
+    <div className={'prow' + (active ? ' active' : '')} onClick={onOpen} title="点开看详细">
       <div className="score" style={{ color: scoreColor(score) }}>
         {score != null ? score.toFixed(1) : card.dragonState === 'loading' ? <span className="spin" /> : '—'}
         <small className={markClass(d?.tier)}>
           {d ? TIER_TEXT[d.tier] || '' : card.dragonState === 'done' ? '无排位' : ''}
         </small>
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div className="name">
-          {card.name || card.id}
-          {loading && <span className="spin" style={{ marginLeft: 6 }} />}
-        </div>
-        <div className="sub">{sub.join(' · ')}</div>
+      <div className="name">
+        {card.name || card.id}
+        {loading && <span className="spin" style={{ marginLeft: 6 }} />}
+        {card.infoState === 'error' && (
+          <span className="dim" style={{ marginLeft: 6, fontWeight: 400 }}>
+            {card.error || '查不到'}
+          </span>
+        )}
       </div>
-      <div style={{ textAlign: 'right' }}>
-        {d?.range && (
-          <div className="sub" title="可能范围（±1 个标准差）">
-            {d.range[0].toFixed(1)}–{d.range[1].toFixed(1)}
-          </div>
-        )}
-        {last && score != null && Math.abs(last.score - score) >= 0.3 && (
-          <div className="sub" title={'上次见到是 ' + last.score.toFixed(1)}>
-            上次 {last.score.toFixed(1)}
-          </div>
-        )}
+      <div className="num" title={info?.elo == null && card.staleElo != null ? '这是 BATrace 档案里的旧值' : ''}>
+        {elo != null ? Math.round(elo) : '—'}
+      </div>
+      <div className="num">{d?.summary.kdAgg != null ? d.summary.kdAgg.toFixed(2) : '—'}</div>
+      <div className="num">{d ? Math.round(d.summary.winRate * 100) + '%' : info ? info.winRate + '%' : '—'}</div>
+      <div className="num">{d ? d.matchCount : info?.matchCount ?? '—'}</div>
+      <div className="units" title={units}>
+        {units || '—'}
       </div>
     </div>
   )

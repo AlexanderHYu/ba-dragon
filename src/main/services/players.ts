@@ -212,8 +212,8 @@ export class PlayerService {
     return card
   }
 
-  /** 存档里的卡片（点开先显示它，再决定要不要刷新） */
-  cached(pid: string, maxAgeMs = 6 * 3600 * 1000): PlayerCard | null {
+  /** 存档里的卡片。默认 30 分钟内查过就直接用，不再访问接口 */
+  cached(pid: string, maxAgeMs = 30 * 60 * 1000): PlayerCard | null {
     const row = this.db.get<{ at: number; json: string }>(
       'SELECT at, json FROM card WHERE pid = ? ORDER BY at DESC LIMIT 1',
       [pid]

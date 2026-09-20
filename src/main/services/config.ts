@@ -5,7 +5,9 @@ import { dirname, join } from 'node:path'
 import type { Settings } from '@shared/ipc'
 
 export const DEFAULTS: Settings = {
-  /** 游戏日志目录（空 = 未设置） */
+  /** 游戏根目录（…\\steamapps\\common\\broken_arrow），日志目录从它推出来 */
+  gameDir: '',
+  /** 游戏日志目录（空 = 未设置；选了根目录会自动填这里） */
   logDir: '',
   /** 日志轮询间隔 */
   pollMs: 1500,
@@ -99,6 +101,18 @@ const STEAM_ROOTS = [
   'E:\\Steam',
   'F:\\Steam'
 ]
+
+/** 给一个目录，判断它是不是游戏根目录（或者它的上一级/下一级是），返回 { gameDir, logDir } */
+export function resolveGameDir(dir: string): { gameDir: string; logDir: string } | null {
+  if (!dir) return null
+  const tries = [dir, join(dir, '..')] // 选成 GameLogs 也认
+  for (const d of tries) {
+    if (existsSync(join(d, 'BrokenArrow.exe')) || existsSync(join(d, 'GameLogs'))) {
+      return { gameDir: d, logDir: join(d, 'GameLogs') }
+    }
+  }
+  return null
+}
 
 /** 找 broken_arrow/GameLogs：先看几个常见 Steam 目录，再看 libraryfolders.vdf 里登记的库 */
 export function detectLogDir(): string | null {

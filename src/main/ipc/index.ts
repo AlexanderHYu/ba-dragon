@@ -1,10 +1,11 @@
 // IPC 注册：通道名和类型来自 shared/ipc.ts，两边共用一份契约。
+import { existsSync } from 'node:fs'
 import { app, dialog, ipcMain, shell } from 'electron'
 import { analyzeMatch } from '@shared/dragon'
 import { buildMatchReport } from '@shared/match'
 import type { ArchiveItem, IpcMap, PlayerCard, Settings } from '@shared/ipc'
 import type { Services } from '../index'
-import { detectLogDir } from '../services/config'
+import { detectLogDir, resolveGameDir } from '../services/config'
 import { mapName } from '../services/players'
 import { legacyLocalIds } from '../services/migrate'
 
@@ -22,20 +23,39 @@ export function registerIpc(s: Services): void {
     if (before.logDir !== next.logDir || before.pollMs !== next.pollMs) s.watcher.restart()
     return next
   })
+  // 选游戏根目录就行（…\\steamapps\\common\\broken_arrow），日志目录自己推
   on('config:selectDir', async () => {
-    const r = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择 GameLogs 目录' })
+    const r = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择断箭的游戏目录' })
     if (r.canceled || !r.filePaths[0]) return null
-    s.config.set({ logDir: r.filePaths[0] })
+    const hit = resolveGameDir(r.filePaths[0])
+    if (!hit) return { error: '这个目录里没有 BrokenArrow.exe，也没有 GameLogs 文件夹' }
+    s.config.set(hit)
     s.watcher.restart()
-    return r.filePaths[0]
+    return hit
   })
   on('config:detectDir', () => {
-    const dir = detectLogDir()
-    if (dir) {
-      s.config.set({ logDir: dir })
-      s.watcher.restart()
+    const logDir = detectLogDir()
+    if (!logDir) return null
+    const hit = resolveGameDir(logDir) || { gameDir: '', logDir }
+    s.config.set(hit)
+    s.watcher.restart()
+    return hit
+  })
+  on('config:openLogDir', () => {
+    const dir = String(s.config.get('logDir') || '')
+    if (dir) void shell.openPath(dir)
+  })
+
+  on('app:status', () => {
+    const logDir = String(s.config.get('logDir') || '')
+    return {
+      version: app.getVersion(),
+      gameDir: String(s.config.get('gameDir') || ''),
+      logDir,
+      logFound: !!logDir && existsSync(logDir),
+      watching: s.watcher.state().listening,
+      api: s.client.health()
     }
-    return dir
   })
 
   on('session:get', () => s.session())
@@ -44,16 +64,21 @@ export function registerIpc(s: Services): void {
     const query = String(q || '').trim()
     if (!query) return []
     const res = await s.client.searchPlayers(query, 20)
-    // 搜索接口的 rating 是档案里的旧值，卡片里的 ELO 以本地快照/分析接口为准
+    // 注意：搜索接口的字段是 id（不是 stbid），而且 rating 是档案里的旧值
+    // （updated_at 可能是几周前），所以卡片里的 ELO 以分析接口/本地快照为准
     return (res?.players || []).map((p) => {
-      const card = s.players.cached(String(p.stbid)) || s.players.emptyCard(String(p.stbid), p.name)
+      const id = String(p.id)
+      const card = s.players.cached(id) || s.players.emptyCard(id, p.name)
       card.name = p.name || card.name
+      card.staleElo = p.rating ?? null
+      card.staleEloAt = p.updated_at ? Date.parse(p.updated_at) : null
       return card
     })
   })
 
   on('player:card', async ({ stbid, refresh }) => {
     const id = String(stbid)
+    // 30 分钟内查过就读本地，不发请求（想重查点「重新查询」）
     if (!refresh) {
       const cached = s.players.cached(id)
       if (cached && cached.dragonState === 'done') return cached
@@ -103,13 +128,21 @@ export function registerIpc(s: Services): void {
       start_time: number | null
       duration_sec: number | null
       winner_team: number | null
-    }>('SELECT fid, map_id, start_time, duration_sec, winner_team FROM match ORDER BY start_time DESC LIMIT 100')
+      rated: number | null
+    }>('SELECT fid, map_id, start_time, duration_sec, winner_team, rated FROM match ORDER BY start_time DESC LIMIT 100')
     const localIds = new Set(localPlayerIds(s))
     const out: ArchiveItem[] = rows.map((r) => {
       // 不知道本机账号（日志还没读到名字）时就不查「我这局」
       const mineRow = localIds.size
-        ? s.db.get<{ score: number | null; mark: string | null; team: number }>(
-            'SELECT score, mark, team FROM match_player WHERE fid = ? AND pid IN (' +
+        ? s.db.get<{
+            name: string
+            score: number | null
+            mark: string | null
+            team: number
+            elo_before: number | null
+            elo_after: number | null
+          }>(
+            'SELECT name, score, mark, team, elo_before, elo_after FROM match_player WHERE fid = ? AND pid IN (' +
               [...localIds].map(() => '?').join(',') +
               ') LIMIT 1',
             [r.fid, ...localIds]
@@ -121,10 +154,17 @@ export function registerIpc(s: Services): void {
         startTime: r.start_time,
         durationSec: r.duration_sec,
         winnerTeam: r.winner_team,
+        mode: r.rated == null ? ('未知' as const) : r.rated ? ('排位' as const) : ('自定义' as const),
         mine: mineRow
-          ? { won: r.winner_team == null ? null : r.winner_team === mineRow.team, score: mineRow.score, mark: mineRow.mark }
-          : null,
-        cached: true
+          ? {
+              account: mineRow.name || '',
+              won: r.winner_team == null ? null : r.winner_team === mineRow.team,
+              eloBefore: mineRow.elo_before,
+              eloAfter: mineRow.elo_after,
+              score: mineRow.score,
+              mark: mineRow.mark
+            }
+          : null
       }
     })
     const have = new Set(out.map((x) => x.fid))
@@ -136,37 +176,11 @@ export function registerIpc(s: Services): void {
         startTime: m.startTime,
         durationSec: m.durationSec,
         winnerTeam: null,
-        mine: null,
-        cached: false
+        mode: '未知',
+        mine: null
       })
     }
     return out
-  })
-
-  // 上一局：日志里刚打完的那局
-  on('match:prev', () => {
-    const last = s.parser.lastEnded || s.parser.archived[s.parser.archived.length - 1] || null
-    return { fid: last?.fid ?? null }
-  })
-
-  on('deck:list', () => ({
-    found: s.decks.found(),
-    dir: s.decks.decksDir,
-    decks: s.decks.list(),
-    backups: s.decks.backups()
-  }))
-  on('deck:backup', (arg) => s.decks.backup(arg && 'name' in arg ? arg.name : undefined))
-  on('deck:restore', ({ name, overwrite }) => s.decks.restore(name, { overwrite }))
-
-  on('tracker:bond', (pid) => s.tracker.bond(String(pid)))
-
-  on('ban:get', () => s.bans.latest())
-  on('ban:check', async () => {
-    try {
-      return await s.bans.check()
-    } catch (e) {
-      return { error: String((e as Error)?.message || e) }
-    }
   })
 
   on('replay:status', () => s.replays.status())

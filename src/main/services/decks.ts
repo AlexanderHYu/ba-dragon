@@ -5,7 +5,7 @@
 //   2. 手动备份成带时间戳的包
 //   3. 把某个包里的卡组还原回游戏目录（换号、重装之后用）
 // 还原前先自动备份一份现有的，免得覆盖掉没备份过的卡组。
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { homedir } from 'node:os'
 import { zipCreate, zipExtract } from '@shared/zip'
@@ -26,6 +26,8 @@ export interface BackupFile {
   decks: number
   auto: boolean
 }
+
+const stamp = (): string => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
 
 /** 文件名安全校验：只收纯文件名，不许带路径 */
 function safeName(name: string): string | null {
@@ -83,17 +85,56 @@ export class DeckService {
     }
   }
 
-  /** 打包当前卡组。name 不给就用时间戳 */
-  backup(name?: string): { file: string; decks: number } | { error: string } {
-    const decks = this.list()
-    if (!decks.length) return { error: '游戏卡组目录里没有卡组' }
+  /**
+   * 打包卡组。only 给了就只打包这几副（前线那栏「备份选中」），不给就全部。
+   * name 不给就用时间戳。
+   */
+  backup(name?: string, only?: string[]): { file: string; decks: number } | { error: string } {
+    let decks = this.list()
+    if (only?.length) {
+      const want = new Set(only.map((x) => safeName(x)).filter(Boolean) as string[])
+      decks = decks.filter((d) => want.has(d.name))
+    }
+    if (!decks.length) return { error: only?.length ? '没选中卡组' : '游戏卡组目录里没有卡组' }
     const files = decks.map((d) => ({ name: d.name, data: readFileSync(join(this.decksDir, d.name)) }))
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
-    const fileName = safeName(name || `卡组备份-${stamp}.zip`) || `卡组备份-${stamp}.zip`
+    const fileName = safeName(name || '卡组备份-' + stamp() + '.zip') || '卡组备份-' + stamp() + '.zip'
     mkdirSync(this.backupDir, { recursive: true })
     const out = join(this.backupDir, fileName)
     writeFileSync(out, zipCreate(files))
     return { file: out, decks: files.length }
+  }
+
+  /** 删卡组（前线那栏的「删除所选」）。删之前先整体备份一份，免得手滑 */
+  deleteDecks(names: string[]): { removed: number; error?: string } {
+    const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
+    if (!want.length) return { removed: 0, error: '没选中卡组' }
+    this.backup('删除前-' + stamp() + '.zip')
+    let removed = 0
+    for (const n of want) {
+      try {
+        unlinkSync(join(this.decksDir, n))
+        removed++
+      } catch {
+        /* 删不掉就跳过 */
+      }
+    }
+    return { removed }
+  }
+
+  /** 删备份包（后勤那栏的「删除所选」） */
+  deleteBackups(names: string[]): { removed: number; error?: string } {
+    const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
+    if (!want.length) return { removed: 0, error: '没选中备份' }
+    let removed = 0
+    for (const n of want) {
+      try {
+        unlinkSync(join(this.backupDir, n))
+        removed++
+      } catch {
+        /* 删不掉就跳过 */
+      }
+    }
+    return { removed }
   }
 
   /** 每局开始自动覆盖「上一局卡组包」 */
@@ -119,7 +160,7 @@ export class DeckService {
       return { error: '备份包读不出来：' + String((e as Error).message) }
     }
     if (!entries.length) return { error: '这个包里没有卡组' }
-    this.backup(`还原前-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}.zip`)
+    this.backup('还原前-' + stamp() + '.zip')
     let restored = 0
     const skipped: string[] = []
     for (const e of entries) {

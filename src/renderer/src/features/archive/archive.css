@@ -1,0 +1,62 @@
+/* 对局档案表：这张卡可能只有 ~600px 宽，所以列要压得住。颜色只用全局变量。 */
+
+.archive-wrap {
+  overflow-x: auto;
+}
+
+table.archive-t {
+  min-width: 520px;
+}
+
+/* 前四列（时间/地图/模式/账号）左对齐，后三列（胜负/ELO/龙区分）跟 .t 一样靠右 */
+table.archive-t th:nth-child(-n + 4),
+table.archive-t td:nth-child(-n + 4) {
+  text-align: left;
+}
+
+table.archive-t tbody tr {
+  cursor: pointer;
+}
+table.archive-t tbody tr:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+table.archive-t tbody tr:hover .archive-map,
+table.archive-t tbody tr:hover .archive-time {
+  color: var(--accent);
+}
+
+.archive-time {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.archive-map {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.archive-account {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.archive-elo {
+  font-variant-numeric: tabular-nums;
+}
+.elo {
+  white-space: nowrap;
+}
+.elo-arrow {
+  margin: 0 3px;
+}
+.elo-delta {
+  font-size: 11.5px;
+}
+
+/* 再窄一点就把 ELO 的「赛前 →」收起来，只留赛后分和涨跌 */
+@media (max-width: 560px) {
+  .elo-arrow,
+  .elo > .dim:first-child {
+    display: none;
+  }
+}

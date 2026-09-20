@@ -1,25 +1,25 @@
-// 当前对局：两队名单，每人一行。进对局自动开查，不用点。
+// 当前房间 / 对局：两队名单，每人一行，进对局自动开查，不用点。
+// 点一行不是弹窗，是把详细信息开在下面的「玩家查询」卡片里。
 import type { PlayerCard } from '@shared/ipc'
 import { useStore } from '../../store'
-import PlayerRow from './PlayerRow'
+import PlayerRow, { PlayerRowHead } from './PlayerRow'
 
 export default function CurrentMatch(): React.JSX.Element {
-  const { query, session, setOpenPlayer } = useStore()
+  const { query, session, openPlayer, setOpenPlayer } = useStore()
   const cur = session?.snapshot.current
   const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
   const cards = query.cards
-
   const teamOf = (c: PlayerCard): string => c.team || '?'
-  const teams = [
-    { key: 'Alpha', label: 'Alpha', cls: 't0' },
-    { key: 'Bravo', label: 'Bravo', cls: 't1' }
+  const groups: [string, string, PlayerCard[]][] = [
+    ['Alpha', 't0', cards.filter((c) => teamOf(c) === 'Alpha')],
+    ['Bravo', 't1', cards.filter((c) => teamOf(c) === 'Bravo')],
+    ['房间里的人', '', cards.filter((c) => teamOf(c) !== 'Alpha' && teamOf(c) !== 'Bravo')]
   ]
-  const unknown = cards.filter((c) => teamOf(c) !== 'Alpha' && teamOf(c) !== 'Bravo')
 
   return (
     <div className="card">
       <h2>
-        当前对局
+        {cur ? '当前对局' : '当前房间'}
         {cur?.map && <span className="dim">{cur.map}</span>}
         {cur?.fid && <span className="dim">#{cur.fid}</span>}
         <span className="grow" />
@@ -29,7 +29,7 @@ export default function CurrentMatch(): React.JSX.Element {
             <span className="spin" style={{ marginLeft: 6 }} />
           </span>
         )}
-        <button onClick={() => window.BA.queryRoster()}>重新查询</button>
+        <button onClick={() => void window.BA.queryRoster()}>重新查询</button>
       </h2>
 
       {query.pass && (
@@ -43,36 +43,25 @@ export default function CurrentMatch(): React.JSX.Element {
           {session?.watcher.listening
             ? cur || lobby
               ? '正在等名单…'
-              : '没在对局里。进游戏后会自动开始查。'
-            : '还没设置日志目录，去设置里选 GameLogs 文件夹。'}
+              : '没在对局里。进游戏后会自动把房间里每个人都算好。'
+            : '还没设置游戏目录，去右上角「设置」里选。'}
         </div>
       ) : (
         <div className="teams">
-          {teams.map((t) => {
-            const list = cards.filter((c) => teamOf(c) === t.key)
-            if (!list.length) return null
-            return (
-              <div key={t.key}>
-                <div className={'team-head ' + t.cls}>
-                  {t.label}
+          {groups.map(([label, cls, list]) =>
+            list.length ? (
+              <div key={label}>
+                <div className={'team-head ' + cls}>
+                  {label}
                   <span className="dim">{list.length} 人</span>
                   <span className="dim">{avgText(list)}</span>
                 </div>
+                <PlayerRowHead />
                 {list.map((c) => (
-                  <PlayerRow key={c.id} card={c} onOpen={() => setOpenPlayer(c.id)} />
+                  <PlayerRow key={c.id} card={c} active={openPlayer === c.id} onOpen={() => setOpenPlayer(c.id)} />
                 ))}
               </div>
-            )
-          })}
-          {!!unknown.length && (
-            <div>
-              <div className="team-head">
-                房间里的人<span className="dim">{unknown.length} 人</span>
-              </div>
-              {unknown.map((c) => (
-                <PlayerRow key={c.id} card={c} onOpen={() => setOpenPlayer(c.id)} />
-              ))}
-            </div>
+            ) : null
           )}
         </div>
       )}

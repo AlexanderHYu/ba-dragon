@@ -1,0 +1,36 @@
+/* 玩家查询卡片 */
+.search-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin-bottom: 12px;
+}
+.pdetail {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.pdetail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px 20px;
+  align-items: start;
+}
+.pdetail-grid section.wide {
+  grid-column: 1 / -1;
+}
+.pdetail-grid h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+.pdetail .reasons {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.pdetail .reasons li {
+  margin-bottom: 2px;
+}
