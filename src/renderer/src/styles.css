@@ -393,3 +393,16 @@ table.t th.sorted {
 .t1 {
   color: var(--t1);
 }
+
+/* 新版本横幅 */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}

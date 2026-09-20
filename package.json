@@ -33,5 +33,63 @@
     "vite": "^5.4.11",
     "vitest": "^2.1.8",
     "zustand": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.alexanderhyu.dragonclassifier",
+    "productName": "龙区分类器",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json",
+      "native/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "龙区分类器",
+      "artifactName": "DragonClassifier-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "DragonClassifier-Portable-${version}.${ext}"
+    },
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "ffmpeg.exe",
+          "LICENSE.txt"
+        ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AlexanderHYu",
+        "repo": "ba-dragon"
+      }
+    ]
   }
 }

@@ -168,9 +168,12 @@ export function registerIpc(s: Services): void {
     }
   })
 
-  on('app:version', () => ({ current: app.getVersion(), latest: app.getVersion(), hasUpdate: false }))
-  on('update:get', () => null)
-  on('update:install', () => false)
+  on('app:version', () => {
+    const u = s.updater.latest()
+    return { current: app.getVersion(), latest: u?.version || app.getVersion(), hasUpdate: !!u }
+  })
+  on('update:get', () => s.updater.latest())
+  on('update:install', () => s.updater.install())
 
   ipcMain.handle('shell:open', (_e, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url)

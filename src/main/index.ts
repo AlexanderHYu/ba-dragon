@@ -13,6 +13,7 @@ import { QueryService } from './services/query'
 import { DeckService } from './services/decks'
 import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
+import { Updater } from './services/updater'
 import { registerIpc } from './ipc'
 
 // 数据目录固定成 4.0.x 用的那个：改名、换版本，设置和对局档案都还在原处
@@ -29,6 +30,7 @@ export interface Services {
   decks: DeckService
   tracker: Tracker
   bans: BanService
+  updater: Updater
   send: <T>(channel: string, payload?: T) => void
   session: () => SessionState
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
@@ -94,6 +96,11 @@ function startServices(): Services {
   const tracker = new Tracker(db)
   const client = new BatraceClient({ db, delayMs: () => Number(config.get('apiDelayMs')) || 1200 })
   const bans = new BanService(client, db)
+  const updater = new Updater((info) => send('update:available', info))
+  updater.init()
+  // 启动 8 秒后查一次，之后每 6 小时查一次（只读 GitHub 公开 Release）
+  setTimeout(() => void updater.check(), 8000)
+  setInterval(() => void updater.check(), 6 * 3600 * 1000)
   const players = new PlayerService(client, db)
   const query = new QueryService(players, {
     state: (s) => send('query:state', s),
@@ -136,7 +143,7 @@ function startServices(): Services {
         .catch(() => undefined)
     }, 10000)
   }
-  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, send, session, queryRoster }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, send, session, queryRoster }
 }
 
 app.whenReady().then(() => {

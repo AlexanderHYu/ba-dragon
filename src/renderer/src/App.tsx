@@ -8,6 +8,7 @@ import Archive from './features/archive/Archive'
 import ReportView from './features/report/ReportView'
 import Decks from './features/decks/Decks'
 import Bans from './features/decks/Bans'
+import UpdateBanner from './components/UpdateBanner'
 
 export default function App(): React.JSX.Element {
   const { view, setView, setConfig, setSession, setQuery, patchCard, openPlayer, setOpenPlayer } = useStore()
@@ -59,6 +60,7 @@ export default function App(): React.JSX.Element {
         </button>
       </div>
       <div className="main">
+        <UpdateBanner />
         {view === 'current' && (
           <>
             <CurrentMatch />
