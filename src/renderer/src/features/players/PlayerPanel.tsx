@@ -23,7 +23,7 @@ export default function PlayerPanel(): React.JSX.Element {
     if (!openPlayer) return
     const c = cardOf(openPlayer)
     if (!c || c.dragonState !== 'idle') return
-    void window.BA.getPlayerCard(openPlayer).then(patchCard)
+    void window.BA.getPlayerCard(openPlayer, { name: c.name }).then(patchCard)
   }, [openPlayer, patchCard])
 
   const go = async (): Promise<void> => {
@@ -81,7 +81,7 @@ export default function PlayerPanel(): React.JSX.Element {
         <PlayerDetail
           card={card}
           onRefresh={async () => {
-            patchCard(await window.BA.getPlayerCard(card.id, true))
+            patchCard(await window.BA.getPlayerCard(card.id, { name: card.name, refresh: true }))
           }}
         />
       ) : (

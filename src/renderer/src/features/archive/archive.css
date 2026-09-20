@@ -60,3 +60,9 @@ table.archive-t tbody tr:hover .archive-time {
     display: none;
   }
 }
+
+/* 档案可能有上百局：列表本身滚动，别把整页撑得没边 */
+.archive-scroll {
+  max-height: 460px;
+  overflow-y: auto;
+}

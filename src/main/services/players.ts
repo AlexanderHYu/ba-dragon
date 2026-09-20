@@ -142,10 +142,13 @@ export class PlayerService {
       at,
       JSON.stringify({ ...card, updatedAt: at })
     ])
+    // 名字可能是空的（按 ID 查的人，分析接口不给名字）：别用空名字盖掉已经记过的
     this.db.run(
       `INSERT INTO player (pid, name, names, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(pid) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen`,
-      [card.id, card.name, JSON.stringify([card.name]), at, at]
+       ON CONFLICT(pid) DO UPDATE SET
+         name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE player.name END,
+         last_seen = excluded.last_seen`,
+      [card.id, card.name || '', JSON.stringify(card.name ? [card.name] : []), at, at]
     )
     const elo = card.info?.elo
     if (elo != null) {

@@ -76,14 +76,16 @@ export function registerIpc(s: Services): void {
     })
   })
 
-  on('player:card', async ({ stbid, refresh }) => {
+  on('player:card', async ({ stbid, name, refresh }) => {
     const id = String(stbid)
+    // 名字：调用方给了就用，否则查本地库里记过的（不然详情页只有一个 ID）
+    const known = name || s.db.get<{ name: string }>('SELECT name FROM player WHERE pid = ?', [id])?.name || ''
     // 30 分钟内查过就读本地，不发请求（想重查点「重新查询」）
     if (!refresh) {
       const cached = s.players.cached(id)
-      if (cached && cached.dragonState === 'done') return cached
+      if (cached && cached.dragonState === 'done') return { ...cached, name: cached.name || known }
     }
-    return s.players.fullCard(id, { refresh })
+    return s.players.fullCard(id, { name: known, refresh })
   })
 
   on('match:query', (arg) => {

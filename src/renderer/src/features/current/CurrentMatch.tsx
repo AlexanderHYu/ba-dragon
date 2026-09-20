@@ -5,7 +5,7 @@ import { useStore } from '../../store'
 import PlayerRow, { PlayerRowHead } from './PlayerRow'
 
 export default function CurrentMatch(): React.JSX.Element {
-  const { query, session, openPlayer, setOpenPlayer } = useStore()
+  const { query, session, status, openPlayer, setOpenPlayer } = useStore()
   const cur = session?.snapshot.current
   const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
   const cards = query.cards
@@ -40,11 +40,11 @@ export default function CurrentMatch(): React.JSX.Element {
 
       {!cards.length ? (
         <div className="empty">
-          {session?.watcher.listening
-            ? cur || lobby
+          {!status?.logFound
+            ? '还没设置游戏目录，去右上角「设置」里选。'
+            : cur || lobby
               ? '正在等名单…'
-              : '没在对局里。进游戏后会自动把房间里每个人都算好。'
-            : '还没设置游戏目录，去右上角「设置」里选。'}
+              : '没在对局里。进游戏后会自动把房间里每个人都算好。'}
         </div>
       ) : (
         <div className="teams">

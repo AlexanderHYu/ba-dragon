@@ -1,0 +1,237 @@
+/* 行车记录仪：录像列表的可点行 + 内置播放器。
+   颜色只用 styles.css 里的变量，这里不新定义主题色。 */
+
+/* ---------- 列表：整行可点，点了就在卡片里开播放器 ---------- */
+tr.replay-row {
+  cursor: pointer;
+}
+tr.replay-row:hover > td {
+  background: var(--card-hi);
+  color: var(--text);
+}
+tr.replay-row.active > td {
+  background: var(--card-hi);
+}
+tr.replay-row.active > td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---------- 播放器 ---------- */
+.bplayer {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.bplayer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+}
+.bplayer-head b {
+  font-size: 13px;
+}
+.bplayer-head .grow {
+  flex: 1;
+}
+
+.bplayer video {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  background: #000;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* ---------- 进度条（兵力曲线铺在背景上） ---------- */
+.bplayer-bar {
+  position: relative;
+  height: 12px;
+  margin-top: 8px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: visible;
+  cursor: pointer;
+  touch-action: none;
+  transition: border-color 0.12s;
+}
+.bplayer-bar.has-curve {
+  height: 46px;
+  border-radius: 8px;
+  background: var(--card);
+}
+.bplayer-bar:hover {
+  border-color: var(--line-hi);
+}
+
+.bplayer-curve {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.bplayer-curve .line {
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+.bplayer-curve .line.t0 {
+  stroke: var(--t0);
+}
+.bplayer-curve .line.t1 {
+  stroke: var(--t1);
+}
+.bplayer-curve .fill {
+  stroke: none;
+}
+.bplayer-curve .fill.t0 {
+  fill: color-mix(in srgb, var(--t0) 22%, transparent);
+}
+.bplayer-curve .fill.t1 {
+  fill: color-mix(in srgb, var(--t1) 22%, transparent);
+}
+.bplayer-curve .ev {
+  stroke-width: 1px;
+  stroke-dasharray: 3 2;
+}
+.bplayer-curve .ev.leave {
+  stroke: var(--bad);
+}
+.bplayer-curve .ev.spike {
+  stroke: var(--warn);
+}
+
+/* 已播放的部分：压一层，不挡曲线 */
+.bplayer-played {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: block;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-radius: 6px 0 0 6px;
+  pointer-events: none;
+}
+.bplayer-head-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  display: block;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* 悬浮提示：贴在鼠标那一分钟上方 */
+.bplayer-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+  background: var(--card);
+  border: 1px solid var(--line-hi);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  z-index: 3;
+}
+.bplayer-tip .t0 {
+  color: var(--t0);
+}
+.bplayer-tip .t1 {
+  color: var(--t1);
+}
+.bplayer-tip .bad {
+  color: var(--bad);
+}
+.bplayer-tip .warn {
+  color: var(--warn);
+}
+/* ---------- 控制条 ---------- */
+.bplayer-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bplayer-ctrl .grow {
+  flex: 1;
+}
+.bplayer-ctrl button.play {
+  width: 38px;
+  text-align: center;
+  padding: 5px 0;
+}
+.bplayer-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  font-size: 12.5px;
+  min-width: 92px;
+}
+
+.bplayer-rate {
+  display: inline-flex;
+  gap: 4px;
+}
+.bplayer-rate button {
+  padding: 3px 8px;
+  font-size: 11.5px;
+}
+.bplayer-rate button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.bplayer-rate button.active:hover {
+  background: color-mix(in srgb, var(--accent) 85%, white);
+  border-color: color-mix(in srgb, var(--accent) 85%, white);
+  color: var(--accent-ink);
+}
+
+.bplayer-vol {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bplayer-vol input[type='range'] {
+  width: 80px;
+  padding: 0;
+  accent-color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.bplayer-vol button {
+  padding: 4px 8px;
+}
+
+.bplayer-note {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+/* 窄栏（卡片被放到右边一栏时）音量条先让位 */
+@media (max-width: 560px) {
+  .bplayer-vol input[type='range'] {
+    width: 54px;
+  }
+  .bplayer-time {
+    min-width: 0;
+  }
+}

@@ -15,7 +15,8 @@ const api = {
 
   getSession: () => invoke('session:get'),
   searchPlayers: (q: string) => invoke('players:search', q),
-  getPlayerCard: (stbid: string, refresh?: boolean) => invoke('player:card', { stbid, refresh }),
+  getPlayerCard: (stbid: string, opts?: { name?: string; refresh?: boolean }) =>
+    invoke('player:card', { stbid, ...(opts || {}) }),
 
   queryRoster: (players?: IpcMap['match:query'][0]) => invoke('match:query', players),
   getQueryState: () => invoke('match:state'),

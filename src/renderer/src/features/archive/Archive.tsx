@@ -67,7 +67,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
       {!list?.length ? (
         <div className="empty">还没有对局。打完一局，或者在上面点「上一局复盘」。</div>
       ) : (
-        <div className="archive-wrap">
+        <div className="archive-wrap archive-scroll">
           <table className="t archive-t">
             <thead>
               <tr>

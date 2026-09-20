@@ -194,7 +194,7 @@ export interface IpcMap {
   'app:status': [void, AppStatus]
   'session:get': [void, SessionState]
   'players:search': [string, PlayerCard[]]
-  'player:card': [{ stbid: string; refresh?: boolean }, PlayerCard]
+  'player:card': [{ stbid: string; name?: string; refresh?: boolean }, PlayerCard]
   'match:query': [{ players?: { id: string; name: string; team?: string | null }[] } | void, void]
   'match:state': [void, QueryState]
   'match:report': [{ fid: string; localIds?: string[] }, MatchReport | { error: string }]

@@ -76,7 +76,7 @@ export async function run(win: BrowserWindow): Promise<void> {
       out.search = await win.webContents.executeJavaScript(
         `window.BA.searchPlayers('${process.env.BA_SMOKE_SEARCH}').then(async (list) => {
           if (!list.length) return { found: 0 }
-          const card = await window.BA.getPlayerCard(list[0].id)
+          const card = await window.BA.getPlayerCard(list[0].id, { name: list[0].name })
           return {
             found: list.length, id: list[0].id, name: card.name,
             infoState: card.infoState, dragonState: card.dragonState,
@@ -90,6 +90,26 @@ export async function run(win: BrowserWindow): Promise<void> {
     const shot = process.env.BA_SMOKE_SHOT
     if (shot) {
       writeFileSync(shot.replace(/\.png$/, '') + '-main.png', (await win.webContents.capturePage()).toPNG())
+      // 点开第一条录像，看播放器和兵力曲线渲染出来没有
+      const opened = await win.webContents.executeJavaScript(`(() => {
+        const row = document.querySelector('.replay-row')
+        if (!row) return false
+        row.click()
+        return true
+      })()`)
+      if (opened) {
+        await new Promise((r) => setTimeout(r, 2500))
+        writeFileSync(shot.replace(/\.png$/, '') + '-player.png', (await win.webContents.capturePage()).toPNG())
+        out.player = await win.webContents.executeJavaScript(`(() => {
+          const v = document.querySelector('video')
+          return { video: !!v, src: v && v.getAttribute('src'), curves: document.querySelectorAll('.bplayer-bar path, .bplayer-bar polyline').length }
+        })()`)
+      }
+      // 亮色配色也来一张
+      await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'light'`)
+      await new Promise((r) => setTimeout(r, 300))
+      writeFileSync(shot.replace(/\.png$/, '') + '-light.png', (await win.webContents.capturePage()).toPNG())
+      await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'dark'`)
       if (fid) {
         await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
         await new Promise((r) => setTimeout(r, 1500))

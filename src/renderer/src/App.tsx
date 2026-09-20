@@ -25,6 +25,13 @@ export default function App(): React.JSX.Element {
     }
   }, [setConfig, setStatus, setSession, setQuery, patchCard])
 
+  // 冒烟测试用：带 ?smoke=1 启动时，允许外部直接打开某一局的复盘（截图验收）
+  useEffect(() => {
+    if (!location.search.includes('smoke=1')) return
+    ;(window as unknown as { __openReport?: (fid: string) => void }).__openReport = (fid) =>
+      setPage({ name: 'report', fid })
+  }, [setPage])
+
   // 配色跟着设置走
   useEffect(() => {
     document.documentElement.dataset.theme = String(config?.theme || 'dark')

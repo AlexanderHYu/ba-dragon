@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import type { DisplayChoice, ReplayItem } from '@shared/ipc'
 import { useStore } from '../../store'
+import Player from './Player'
+import './replay.css'
 
 const QUALITIES: [number, string][] = [
   [0, '原生'],
@@ -20,9 +22,15 @@ export default function Replays(): React.JSX.Element {
   const [encoders, setEncoders] = useState<string[] | null>(null)
   const [showLog, setShowLog] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
+  /** 正在播的那一条（点列表某一行就在卡片里开播放器） */
+  const [playing, setPlaying] = useState<ReplayItem | null>(null)
 
   const reload = (): void => {
-    void window.BA.listReplays().then(setList)
+    void window.BA.listReplays().then((l) => {
+      setList(l)
+      // 文件被清理/删掉了就把播放器收起来，别留着一个放不出来的黑框
+      setPlaying((p) => (p && l.some((r) => r.id === p.id) ? p : null))
+    })
     void window.BA.getReplayStatus().then(setStatus)
   }
   useEffect(() => {
@@ -140,6 +148,8 @@ export default function Replays(): React.JSX.Element {
         </div>
       )}
 
+      {playing && <Player key={playing.id} item={playing} onClose={() => setPlaying(null)} />}
+
       <table className="t">
         <thead>
           <tr>
@@ -151,14 +161,20 @@ export default function Replays(): React.JSX.Element {
         </thead>
         <tbody>
           {list.map((r) => (
-            <tr key={r.id}>
+            <tr
+              key={r.id}
+              className={'replay-row' + (playing?.id === r.id ? ' active' : '')}
+              title="点一下在这里播放"
+              onClick={() => setPlaying((p) => (p?.id === r.id ? null : r))}
+            >
               <td>{new Date(r.createdAt).toLocaleString('zh-CN')}</td>
               <td>{r.map || '—'}</td>
               <td>{size(r.size)}</td>
               <td>
-                <button onClick={() => void window.BA.openReplayFolder(r.id)}>定位</button>
                 <button
-                  onClick={async () => {
+                  className="danger"
+                  onClick={async (e) => {
+                    e.stopPropagation()
                     await window.BA.deleteReplay(r.id)
                     reload()
                   }}
