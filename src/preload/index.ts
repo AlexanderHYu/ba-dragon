@@ -28,6 +28,15 @@ const api = {
   getBans: () => invoke('ban:get'),
   checkBans: () => invoke('ban:check'),
 
+  getReplayStatus: () => invoke('replay:status'),
+  listReplays: () => invoke('replay:list'),
+  deleteReplay: (key: string) => invoke('replay:delete', key),
+  cleanReplays: (days: number) => invoke('replay:clean', days),
+  listDisplays: () => invoke('replay:displays'),
+  listEncoders: () => invoke('replay:encoders'),
+  openReplayFolder: (key?: string) => invoke('replay:openFolder', key),
+  getReplayLogs: () => invoke('replay:logs'),
+
   getVersion: () => invoke('app:version'),
   getUpdateInfo: () => invoke('update:get'),
   installUpdate: () => invoke('update:install'),

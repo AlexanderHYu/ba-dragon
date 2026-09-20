@@ -18,7 +18,22 @@ export const DEFAULTS: Settings = {
   banCheckOnStart: true,
   /** 每小时同步本机最近对局（玩家追踪回填用） */
   matchSyncEnabled: true,
-  replayEnabled: false
+  /** 行车记录仪：每局自动录游戏那块屏幕（默认关，开了要选显示器） */
+  replayEnabled: false,
+  /** 录哪块屏幕（Electron 的 display.id） */
+  replayDisplayId: '',
+  /** 分辨率：0 = 原生 / 720 / 1080 / 1440 */
+  replayQuality: 1080,
+  replayFps: 30,
+  replayBitrateMbps: 8,
+  /** 曝光补偿（EV）：录像偏暗/偏亮时调 */
+  replayExposure: 0,
+  /** 录音：'off' 关闭 / 'default' 系统声音 */
+  replayAudio: 'default',
+  /** 录像保存目录（空 = 数据目录下的 replays） */
+  replaySaveDir: '',
+  /** 自动删除多少天前的录像（0 = 不删） */
+  replayKeepDays: 0
 }
 
 const KNOWN = Object.keys(DEFAULTS)

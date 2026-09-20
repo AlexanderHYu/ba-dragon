@@ -3,6 +3,47 @@
 import { writeFileSync } from 'node:fs'
 import { app, type BrowserWindow } from 'electron'
 
+/** 录 6 秒主屏，确认能出 MP4（要 vendor/ffmpeg；文件录完就删） */
+async function recordTest(Svc: typeof import('./services/replays').ReplayService): Promise<Record<string, unknown>> {
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { existsSync, mkdtempSync, readdirSync, statSync, rmSync } = await import('node:fs')
+  const dir = mkdtempSync(join(tmpdir(), 'ba-rec-'))
+  const cfg = {
+    get: (k: string): unknown =>
+      ({ replayEnabled: true, replayQuality: 720, replayFps: 30, replayBitrateMbps: 5, replayExposure: 0, replayAudio: 'off', replaySaveDir: dir, replayDisplayId: '', replayKeepDays: 0 })[k]
+  }
+  const logs: string[] = []
+  const svc = new Svc(cfg as never, { get: () => undefined } as never, {
+    status: (st: { error?: string }) => {
+      if (st?.error) logs.push(Date.now() % 100000 + ' ERROR ' + st.error)
+    },
+    changed: () => undefined,
+    log: (l: string) => logs.push(Date.now() % 100000 + ' ' + l)
+  })
+  // 先把编码器探测预热掉（首次要十几秒），不然 6 秒的测试还没开录就停了
+  const { probeEncoders: warmEnc, probeOutputs: warmOut } = await import('./services/recorder')
+  await Promise.all([warmEnc(), warmOut()])
+  logs.push(Date.now() % 100000 + ' >> start')
+  svc.startForMatch('smoketest', '冒烟')
+  await new Promise((r) => setTimeout(r, 6000))
+  logs.push(Date.now() % 100000 + ' >> stop')
+  svc.stopForMatch('smoketest', '冒烟')
+  // 合成要一会儿
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 500))
+    if (existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.mp4'))) break
+  }
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.mp4')) : []
+  const size = files.length ? statSync(join(dir, files[0])).size : 0
+  try {
+    rmSync(dir, { recursive: true, force: true })
+  } catch {
+    /* 临时目录删不掉无所谓 */
+  }
+  return { ok: files.length > 0 && size > 10000, file: files[0] || null, size, log: logs.slice(-25) }
+}
+
 export async function run(win: BrowserWindow): Promise<void> {
   const out: Record<string, unknown> = {}
   try {
@@ -44,9 +85,21 @@ export async function run(win: BrowserWindow): Promise<void> {
   } catch (e) {
     out.error = String((e as Error)?.message || e)
   }
+  // 录像真机自测：开录几秒再停，看合成出来的 MP4 在不在
+  if (process.env.BA_SMOKE_REC) {
+    try {
+      const { ReplayService } = await import('./services/replays')
+      out.rec = await recordTest(ReplayService)
+    } catch (e) {
+      out.rec = { error: String((e as Error)?.message || e) }
+    }
+  }
+
   const dom = out.dom as { rendered?: boolean; hasBridge?: boolean } | undefined
   const rep = out.report as { players?: number; error?: string } | undefined
-  const ok = !!dom?.rendered && !!dom?.hasBridge && !out.error && (!rep || (rep.players ?? 0) > 0)
+  const rec = out.rec as { ok?: boolean } | undefined
+  const ok =
+    !!dom?.rendered && !!dom?.hasBridge && !out.error && (!rep || (rep.players ?? 0) > 0) && (!rec || !!rec.ok)
   console.log('SMOKE ' + JSON.stringify({ ok, ...out }))
   app.exit(ok ? 0 : 1)
 }

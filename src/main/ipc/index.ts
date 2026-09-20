@@ -168,6 +168,31 @@ export function registerIpc(s: Services): void {
     }
   })
 
+  on('replay:status', () => s.replays.status())
+  on('replay:list', () =>
+    s.replays.list().map((r) => ({
+      id: r.id,
+      fid: r.fid,
+      map: r.map,
+      mapId: r.mapId,
+      uploaderName: r.uploaderName,
+      teamId: r.teamId,
+      size: r.size,
+      createdAt: r.createdAt,
+      localPath: r.localPath
+    }))
+  )
+  on('replay:delete', (key) => s.replays.remove(String(key)))
+  on('replay:clean', (days) => s.replays.clean(Number(days) || 0))
+  on('replay:displays', () => s.replays.displays())
+  on('replay:encoders', () => s.replays.encoders())
+  on('replay:openFolder', (key) => {
+    const p = key ? s.replays.pathOf(String(key)) : null
+    if (p) shell.showItemInFolder(p)
+    else void shell.openPath(s.replays.dir())
+  })
+  on('replay:logs', () => s.replays.recentLogs())
+
   on('app:version', () => {
     const u = s.updater.latest()
     return { current: app.getVersion(), latest: u?.version || app.getVersion(), hasUpdate: !!u }

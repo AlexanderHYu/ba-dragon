@@ -38,6 +38,29 @@ export interface Bond {
   avgScore: number | null
 }
 
+/** 本地录像 */
+export interface ReplayItem {
+  id: string
+  fid: string
+  map: string
+  mapId: number | null
+  uploaderName: string
+  teamId: number | null
+  size: number
+  createdAt: number
+  localPath: string
+}
+
+/** 可选的显示器 */
+export interface DisplayChoice {
+  id: string
+  label: string
+  width: number
+  height: number
+  primary: boolean
+  capturable: boolean
+}
+
 /** 封禁检查结果 */
 export interface BanResult {
   checkedAt: number
@@ -157,6 +180,14 @@ export interface IpcMap {
   'tracker:bond': [string, Bond | null]
   'ban:get': [void, BanResult | null]
   'ban:check': [void, BanResult | { error: string }]
+  'replay:status': [void, { active: boolean; current: { fid: string; map: string; startedAt: number; sourceId: string } | null; error?: string }]
+  'replay:list': [void, ReplayItem[]]
+  'replay:delete': [string, { ok: boolean; message: string }]
+  'replay:clean': [number, number]
+  'replay:displays': [void, DisplayChoice[]]
+  'replay:encoders': [void, string[]]
+  'replay:openFolder': [string | void, void]
+  'replay:logs': [void, string[]]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   'update:get': [void, UpdateInfo | null]
   'update:install': [void, boolean]
@@ -179,6 +210,9 @@ export interface EventMap {
   'query:card': PlayerCard
   'update:available': UpdateInfo
   'toast': { kind: 'info' | 'warn' | 'error'; text: string }
+  'replay:status': { active: boolean; current: { fid: string; map: string; startedAt: number; sourceId: string } | null; error?: string }
+  'replay:changed': void
+  'replay:log': string
 }
 
 export type IpcChannel = keyof IpcMap

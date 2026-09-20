@@ -8,6 +8,7 @@ import Archive from './features/archive/Archive'
 import ReportView from './features/report/ReportView'
 import Decks from './features/decks/Decks'
 import Bans from './features/decks/Bans'
+import Replays from './features/replay/Replays'
 import UpdateBanner from './components/UpdateBanner'
 import Toasts from './components/Toasts'
 
@@ -85,6 +86,7 @@ export default function App(): React.JSX.Element {
         {view === 'archive' && <Archive onOpen={setReportFid} />}
         {view === 'tools' && (
           <>
+            <Replays />
             <Decks />
             <Bans />
           </>

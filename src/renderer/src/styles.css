@@ -436,3 +436,15 @@ table.t th.sorted {
 .toast.info {
   border-left-color: var(--t0);
 }
+
+pre.log {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 11.5px;
+  color: var(--dim);
+  white-space: pre-wrap;
+}

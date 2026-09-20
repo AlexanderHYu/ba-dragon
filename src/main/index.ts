@@ -14,6 +14,7 @@ import { DeckService } from './services/decks'
 import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
 import { Updater } from './services/updater'
+import { ReplayService } from './services/replays'
 import { registerIpc } from './ipc'
 
 // 数据目录固定成 4.0.x 用的那个：改名、换版本，设置和对局档案都还在原处
@@ -31,6 +32,7 @@ export interface Services {
   tracker: Tracker
   bans: BanService
   updater: Updater
+  replays: ReplayService
   send: <T>(channel: string, payload?: T) => void
   session: () => SessionState
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
@@ -83,10 +85,18 @@ function startServices(): Services {
   db.importLegacyCache(dataDir) // 老版缓存搬过来，省一批请求
   loadMapNames(db) // 地图名字是一点点学来的，存在库里
 
-  const parser = new LogParser((type) => {
+  const parser = new LogParser((type, data) => {
     // 日志事件：先把状态推给界面，进对局/名单变化时自动开查
     send('session:state', session())
-    if (type === 'matchStart') decks.autoBackup() // 每局开始滚动备份一次卡组
+    if (type === 'matchStart') {
+      decks.autoBackup() // 每局开始滚动备份一次卡组
+      const m = data as { fid?: string | null; map?: string }
+      replays?.startForMatch(m?.fid ?? null, m?.map || '')
+    }
+    if (type === 'matchEnd') {
+      const m = data as { fid?: string | null; map?: string }
+      replays?.stopForMatch(m?.fid ?? null, m?.map || '')
+    }
     if (type === 'matchStart' || type === 'roster') scheduleQuery()
   })
 
@@ -101,6 +111,14 @@ function startServices(): Services {
   const tracker = new Tracker(db)
   const client = new BatraceClient({ db, delayMs: () => Number(config.get('apiDelayMs')) || 1200 })
   const bans = new BanService(client, db)
+  const replays = new ReplayService(config, db, {
+    status: (st) => send('replay:status', st),
+    changed: () => send('replay:changed'),
+    log: (line) => send('replay:log', line)
+  })
+  // 不在对局了还在录（崩溃退出、日志漏了结束行）：每 30 秒兜一次
+  setInterval(() => replays.watchdog(!!parser.snapshot().current), 30000)
+
   const updater = new Updater((info) => send('update:available', info))
   updater.init()
   // 启动 8 秒后查一次，之后每 6 小时查一次（只读 GitHub 公开 Release）
@@ -148,7 +166,7 @@ function startServices(): Services {
         .catch(() => undefined)
     }, 10000)
   }
-  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, send, session, queryRoster }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, replays, send, session, queryRoster }
 }
 
 app.whenReady().then(() => {
@@ -165,6 +183,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  services?.replays.abort() // 录到一半退出：先把 ffmpeg 停掉
   services?.watcher.stop()
   services?.db.close()
 })
