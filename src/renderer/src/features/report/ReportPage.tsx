@@ -493,52 +493,103 @@ function useBoxWidth(fallback: number): [React.RefObject<HTMLDivElement | null>,
 function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
   const { minutes, field, loss, events } = r.timeline
   const [boxRef, W] = useBoxWidth(900)
+  // 三种看法：兵力本身、双方差、每分钟的净变化（谁在推谁）
+  const [mode, setMode] = useState<'field' | 'diff' | 'slope'>('field')
   const H = 260
   const pad = { l: 56, r: 14, t: 12, b: 24 }
-  const maxField = Math.max(1, ...field.flat())
+
+  // 每分钟净变化 = 这一分钟的兵力 − 上一分钟的兵力
+  const slope = field.map((arr) => arr.map((v, i) => (i ? v - arr[i - 1] : 0)))
+  const diff = field[0].map((v, i) => v - field[1][i])
+  const series: { rows: number[][]; colors: string[]; zero: boolean } =
+    mode === 'field'
+      ? { rows: field, colors: ['var(--t0)', 'var(--t1)'], zero: false }
+      : mode === 'slope'
+        ? { rows: slope, colors: ['var(--t0)', 'var(--t1)'], zero: true }
+        : { rows: [diff], colors: ['var(--accent)'], zero: true }
+
+  const flat = series.rows.flat()
+  // 绝对兵力从数据最低点开始画（从 0 开始的话，几千点的底座会把变化压平）
+  const lo = series.zero ? -Math.max(1, ...flat.map(Math.abs)) : Math.min(...flat)
+  const hi = series.zero ? Math.max(1, ...flat.map(Math.abs)) : Math.max(...flat)
+  const spanRaw = Math.max(1, hi - lo)
+  const padY = spanRaw * 0.08
+  const top = hi + padY
+  const bottom = lo - padY
+  const span = Math.max(1, top - bottom)
+
   const x = (i: number): number => pad.l + (i / Math.max(1, minutes - 1)) * (W - pad.l - pad.r)
-  const y = (v: number): number => H - pad.b - (v / maxField) * (H - pad.t - pad.b)
+  const y = (v: number): number => H - pad.b - ((v - bottom) / span) * (H - pad.t - pad.b)
   const path = (arr: number[]): string => arr.map((v, i) => (i ? 'L' : 'M') + x(i) + ',' + y(v)).join(' ')
+  // 差值/变化率：折线和 0 线之间填色，更容易一眼看出谁在上风
+  const area = (arr: number[]): string =>
+    path(arr) + ' L' + x(arr.length - 1) + ',' + y(0) + ' L' + x(0) + ',' + y(0) + ' Z'
   const maxLoss = Math.max(1, ...loss.flat())
-  // 宽了以后横轴可以多标几个刻度
   const last = Math.max(0, minutes - 1)
   const ticks = [...new Set([0, Math.round(last / 4), Math.round(last / 2), Math.round((last * 3) / 4), last])]
+  const gridVals = [0, 0.25, 0.5, 0.75, 1].map((f) => bottom + span * f)
+
+  const TITLE: Record<typeof mode, string> = {
+    field: '场上兵力（估算：累计出兵 − 累计损失）',
+    diff: '兵力差（A 队 − B 队，正数 = A 队占上风）',
+    slope: '每分钟净变化（正数 = 这一分钟在扩大兵力）'
+  }
 
   return (
     <div className="card">
       <h2>
-        场上兵力（估算：累计出兵 − 累计损失）
+        {TITLE[mode]}
+        <span className="grow" />
+        {(
+          [
+            ['field', '兵力'],
+            ['diff', '兵力差'],
+            ['slope', '变化率']
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} className={'rp-tab' + (mode === k ? ' active' : '')} onClick={() => setMode(k)}>
+            {label}
+          </button>
+        ))}
         <span className="legend rp-chart-legend">
-          <span>
-            <i style={{ background: 'var(--t0)' }} />
-            {teamName(0)}
-          </span>
-          <span>
-            <i style={{ background: 'var(--t1)' }} />
-            {teamName(1)}
-          </span>
+          {mode === 'diff' ? (
+            <span>
+              <i style={{ background: 'var(--accent)' }} />
+              A − B
+            </span>
+          ) : (
+            <>
+              <span>
+                <i style={{ background: 'var(--t0)' }} />
+                {teamName(0)}
+              </span>
+              <span>
+                <i style={{ background: 'var(--t1)' }} />
+                {teamName(1)}
+              </span>
+            </>
+          )}
         </span>
       </h2>
       <div className="rp-chart" ref={boxRef}>
         <svg viewBox={'0 0 ' + W + ' ' + H} width="100%" height={H}>
-          <line x1={pad.l} y1={H - pad.b} x2={W - pad.r} y2={H - pad.b} stroke="var(--line)" />
-          {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-            <g key={f}>
-              <line
-                x1={pad.l}
-                y1={y(maxField * f)}
-                x2={W - pad.r}
-                y2={y(maxField * f)}
-                stroke="var(--line)"
-                strokeDasharray="3 4"
-              />
-              <text x={pad.l - 8} y={y(maxField * f) + 4} textAnchor="end" fontSize="10" fill="var(--dim)">
-                {num(maxField * f)}
+          {gridVals.map((v, i) => (
+            <g key={i}>
+              <line x1={pad.l} y1={y(v)} x2={W - pad.r} y2={y(v)} stroke="var(--line)" strokeDasharray="3 4" />
+              <text x={pad.l - 8} y={y(v) + 4} textAnchor="end" fontSize="10" fill="var(--dim)">
+                {num(v)}
               </text>
             </g>
           ))}
-          <path d={path(field[0])} fill="none" stroke="var(--t0)" strokeWidth="2" />
-          <path d={path(field[1])} fill="none" stroke="var(--t1)" strokeWidth="2" />
+          {series.zero && (
+            <line x1={pad.l} y1={y(0)} x2={W - pad.r} y2={y(0)} stroke="var(--line-hi)" strokeWidth="1.5" />
+          )}
+          {series.rows.map((row, i) => (
+            <g key={i}>
+              {series.zero && <path d={area(row)} fill={series.colors[i]} opacity="0.16" />}
+              <path d={path(row)} fill="none" stroke={series.colors[i]} strokeWidth="2" />
+            </g>
+          ))}
           {events.map((e, i) => (
             <g key={i}>
               <line
