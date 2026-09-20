@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+.vite/
+*.log
+.DS_Store
+# 建模和对拍用的本地数据，不入库
+data/cache/
+scratch/

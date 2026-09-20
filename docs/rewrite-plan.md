@@ -1,0 +1,123 @@
+# 5.0 重写方案
+
+现在的 4.0.x 是 Zola 的 3.5.6 改出来的：12k 行里大约 7k 行还是原作者的（`main.js`、
+`renderer/app.js`、玩家追踪、录像骨架），我们加的是龙区分模型、复盘页、称号、自动更新。
+朋友开始用了，要长期做下去，就把它重写成一个独立的软件。
+
+## 目标
+
+1. **独立**：新仓库、自己的代码结构，不再是 fork 的补丁堆。
+2. **能长期加功能**：TypeScript + React，界面拆成组件，纯逻辑有测试。
+3. **老用户无感升级**：数据目录不变，4.0.3 的自动更新能一步跳到 5.0。
+
+## 技术栈
+
+| | 选择 | 为什么 |
+|---|---|---|
+| 框架 | Electron + electron-vite | 沿用 Electron（要读本地日志、调 FFmpeg、免跨域）；electron-vite 给主进程/预加载/界面统一打包和热重载 |
+| 语言 | TypeScript（全量） | IPC 两头共用一份类型，主进程改了字段界面会编译报错 |
+| 界面 | React + zustand | 复盘页、排序表格、弹窗这类状态多的界面，手写 DOM 已经到瓶颈（`app.js` 2219 行） |
+| 样式 | 原生 CSS + CSS 变量 | 现在的主题就是 CSS 变量，直接搬，不引 UI 框架 |
+| 测试 | vitest（纯逻辑）+ 一个 Electron 冒烟 | 现在的 `smoke.js` 是在渲染进程里塞断言，脆；纯逻辑（龙区分、称号、复盘、日志解析）值得真测试 |
+| 打包 | electron-builder | 已经跑通了 NSIS + portable + latest.yml 自动更新 |
+
+## 目录结构
+
+```
+src/
+  shared/        纯逻辑，不碰 Electron，可单测
+    dragon/      dragonScore, matchTitles, model.json
+    match/       matchReport
+    log/         logParser
+    types/       BATrace 响应、对局、玩家等类型
+    ipc.ts       IPC 契约（通道名 + 参数/返回类型，主进程和界面共用）
+  main/
+    index.ts     启动、窗口、单实例
+    ipc/         按域注册：config search match archive replay deck tracker ban update
+    services/    logWatcher batrace storage tracker deckSync recorder updater
+  preload/       contextBridge，按 ipc.ts 生成 typed API
+  renderer/
+    features/    current report archive replay deck tracker settings
+    components/  通用组件（表格、弹窗、横幅、图表）
+    store/       zustand
+    styles/
+native/          WASAPI 录音的 C#（照搬）
+scripts/         建模、采数据、打包辅助（照搬，改成 ts 可选）
+```
+
+## 功能取舍
+
+| 功能 | 处理 |
+|---|---|
+| 龙区分 / 称号 / 复盘页 | **原样搬**，这是我们写的，逻辑干净，只加类型和测试 |
+| 日志监听、自动粗查 | 重写，`logParser` 的解析规则保留（它是纯函数） |
+| 行车记录仪（录像） | 保留。FFmpeg 调用和 C# 录音照搬，外面包一层 service，把散在 `main.js` 里的状态收进去 |
+| 玩家追踪 / 调查羁绊 | 保留，存储层重写（现在是一个大 JSON，改成按需加载） |
+| 卡组备份 / 部署 | 保留，逻辑基本照搬 |
+| 封禁监控 | **改**：不再每小时轮询，启动时查一次，另外给一个手动刷新按钮 |
+| 防空小游戏 | **删**（`renderer/game.js` 407 行） |
+| 多语言 | 已经删了，新版只做中文 |
+
+## 要修的问题
+
+- **配装名字**：单位 351 `name` = Airborne、`hud_name` = Airborne NGWS，我们显示 `hud_name`，
+  所以两种配装都成了 NGWS。BATrace 单位页里有配装表（option 带 `replaceUnitName` /
+  `concatenateWithUnitName` / `cost`），但公开 API 没有这个接口（试过 `/api/unit`、
+  `/api/units/351`、`/api/modifications`、`/api/options` 等都是 404）。
+  - 最好：找 BATrace 要一个配装接口，然后复盘里按配装分开统计。
+  - 暂时：按 `OptionIds` 分组显示「配装 A / B」，名字仍用单位名。
+- **`smoke.js` 的断言方式**：改成 vitest 测纯逻辑 + 一个启动冒烟。
+- **`main.js` 1214 行什么都管**：拆成 service + ipc 模块。
+
+## 存储：换成本地 SQLite
+
+现在是几个大 JSON（`players-db.json`、`match-archive.json`、`batrace-cache.json`），
+改一条要整个文件重写，读也要整个读进内存，而且只能按 key 取、不能查询。
+换成本地库不是为了正规，是为了几个做不了的功能：
+
+- **和自己的历史比**：复盘说「这把 T-90 击杀分/花费 2.1」没有参照系，有库才能说「你平时 1.4」
+- **单位的全局表现**：按单位、按配装（`OptionIds`）聚合自己几百局的数据
+- **羁绊查询**：`encounter` 表加索引，不用把整个 JSON 读进来遍历
+- **ELO 趋势**：每次查到就存一条快照，也不会再显示几周前的旧分数
+- **接口缓存带过期时间**：一条一条存，不整个文件重写
+
+表：`match`（对局 + 原始 JSON）、`match_player`（每局每人）、`match_unit`（每局每人每单位）、
+`player`、`encounter`、`elo_snapshot`、`api_cache`。
+设置仍留 JSON（要能手改），录像仍是硬盘上的文件。
+
+代价：`better-sqlite3` 是原生模块，打包要针对 Electron 重编译，CI 多一步；
+纯 JS 的 sql.js 是备选，慢一些。老数据要写一次性导入，这一步不能出错，不然朋友的档案就没了。
+
+放在**阶段 4**（和玩家追踪、卡组一起重写存储层）。阶段 1-3 先照旧读现有 JSON，保证能跑。
+
+## 升级路径（老用户无感）
+
+1. 新版沿用 `appId = com.alexanderhyu.dragonclassifier` 和产品名，NSIS 才会**覆盖**旧版而不是装两份。
+2. 数据目录仍然固定在 `%APPDATA%\broken-arrow-log-assistant`：设置、对局档案、玩家库、录像全部保留。
+3. 5.0.0 打好后，**同一份安装包在新旧两个仓库各发一次**：老仓库那次让 4.0.3 的自动更新直接升上来，
+   装完以后软件查的就是新仓库了。老仓库 README 留一句「已迁移到 xxx」。
+4. 5.0 发布前，4.0.x 继续修 bug，朋友不受影响。
+
+## 许可与署名
+
+录像、玩家追踪、卡组、日志解析这几块会保留原作者的代码。Zola 的项目是 MIT，
+MIT 要求保留版权声明，所以新仓库的 LICENSE 里继续写上他的版权行，README 里写明哪些部分来自他的项目。
+完全自己重写的部分（龙区分、称号、复盘、自动更新）照常署我们自己的。
+
+## 分阶段
+
+| 阶段 | 内容 | 能验收什么 |
+|---|---|---|
+| 1 | 脚手架 + shared 纯逻辑迁移 + 单测 | `npm test` 绿；龙区分、称号、复盘的结果和 4.0.3 逐字段一致 |
+| 2 | 主进程骨架：配置、日志监听、BATrace 客户端、搜索、龙区分报告 | 能开着软件进游戏，看到当前对局和每个人的龙区分 |
+| 3 | 复盘页、对局档案、上一局 | 复盘页和 4.0.3 显示一致（拿同一局对拍） |
+| 4 | 玩家追踪、卡组、封禁（改成启动查一次 + 手动刷新） | 老数据能读出来 |
+| 5 | 录像 | 录一局，画质/声音/HDR 都对 |
+| 6 | 打包、自动更新、双仓库发布 5.0.0 | 从装好的 4.0.3 点更新能直接升上来 |
+
+每个阶段结束都能跑起来，不会出现「重写到一半两个版本都不能用」。
+
+## 对拍（保证不退化）
+
+阶段 1 和 3 用同一批缓存的对局，分别跑 4.0.3 和新版，逐字段比对龙区分、称号、复盘数字。
+不一致的地方必须能解释清楚（比如这次的出兵口径修正），不能是「大概差不多」。
