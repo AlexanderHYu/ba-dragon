@@ -89,15 +89,20 @@
 .rp .vs {
   table-layout: fixed;
 }
+/* 数值 / 标签分两档：中间一列是标签（--dim），两侧是数值（--text，粗一点） */
 .rp .vs td {
   width: 37%;
-  font-size: 13.5px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
   padding: 6px 10px;
+  font-variant-numeric: tabular-nums;
 }
 .rp .vs thead th {
   color: var(--text);
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   padding-bottom: 8px;
 }
 .rp .vs tbody th {
@@ -154,6 +159,24 @@
 .rp .rp-wide td:first-child {
   width: 22%;
   white-space: normal;
+}
+/* 玩家表 / 单位表的文字层次：
+   次要数字压到 --text-2，第一列（名字）和加粗过的关键值留在 --text。
+   龙区分那一列有内联颜色，压不到，正好保留它的红黄绿。 */
+.rp .rp-wide tbody td {
+  color: var(--text-2);
+}
+.rp .rp-wide tbody td:first-child {
+  color: var(--text);
+}
+.rp .rp-wide tbody td b {
+  color: var(--text);
+  font-weight: 700;
+}
+.rp .rp-wide thead th {
+  color: var(--dim);
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
 }
 .rp .rp-sort {
   cursor: pointer;

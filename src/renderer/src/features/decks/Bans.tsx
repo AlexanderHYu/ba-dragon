@@ -13,6 +13,7 @@ export default function Bans(): React.JSX.Element {
   return (
     <div className="card">
       <h2>
+        <span className="ico">🛡</span>
         封禁监控
         <span className="grow" />
         {data && <span className="dim">{new Date(data.checkedAt).toLocaleString('zh-CN')} 查的</span>}

@@ -2,6 +2,7 @@
 // 录制是自动的——进对局开录，打完合成存盘，这里只管设置和查看。
 import { useEffect, useState } from 'react'
 import Pager, { pageSlice } from '../../components/Pager'
+import Switch from '../../components/Switch'
 import type { DisplayChoice, ReplayItem } from '@shared/ipc'
 import { useStore } from '../../store'
 import Player from './Player'
@@ -55,17 +56,15 @@ export default function Replays(): React.JSX.Element {
   return (
     <div className="card">
       <h2>
+        <span className="ico">🚗</span>
         行车记录仪
-        {status?.active && <span style={{ color: 'var(--bad)' }}>● 正在录</span>}
+        {status?.active && <span className="lit-bad">● 正在录</span>}
         <span className="grow" />
-        <label className="row">
-          <input type="checkbox" checked={on} onChange={(e) => void patch({ replayEnabled: e.target.checked })} />
-          开启
-        </label>
+        <Switch checked={on} onChange={(v) => void patch({ replayEnabled: v })} label="开启" />
         <button onClick={() => void window.BA.openReplayFolder()}>打开文件夹</button>
       </h2>
 
-      {status?.error && <div style={{ color: 'var(--bad)', marginBottom: 8 }}>{status.error}</div>}
+      {status?.error && <div className="lit-bad" style={{ marginBottom: 8 }}>{status.error}</div>}
       {status?.active && status.current && (
         <div className="dim" style={{ marginBottom: 8 }}>
           {status.current.map || '本局'} · 已录 {Math.round((Date.now() - status.current.startedAt) / 1000)} 秒 ·{' '}

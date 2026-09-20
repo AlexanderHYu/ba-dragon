@@ -118,7 +118,10 @@ export default function Decks(): React.JSX.Element {
     return (
       <>
         <div className="card">
-          <h2>卡组工具</h2>
+          <h2>
+            <span className="ico">🃏</span>
+            卡组工具
+          </h2>
           <div className="empty">读卡组中…</div>
         </div>
       </>
@@ -129,7 +132,10 @@ export default function Decks(): React.JSX.Element {
     return (
       <>
         <div className="card">
-          <h2>卡组工具</h2>
+          <h2>
+            <span className="ico">🃏</span>
+            卡组工具
+          </h2>
           <div className="deck-note">
             <p>没找到游戏的卡组目录，前线这边就没法操作了。</p>
             <p className="deck-path">{data.dir || '（路径为空）'}</p>
@@ -165,6 +171,7 @@ export default function Decks(): React.JSX.Element {
     <>
       <div className="card">
         <h2>
+          <span className="ico">🃏</span>
           卡组工具
           <span className="grow" />
           {busy && <span className="spin" />}

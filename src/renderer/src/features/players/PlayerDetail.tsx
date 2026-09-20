@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { Bond, PlayerCard } from '@shared/ipc'
 import { scoreColor } from '../current/PlayerRow'
+import Mark from '../../components/Mark'
 
 const ROLE_NAME: Record<string, string> = {
   armor: '装甲', inf: '步兵', recon: '侦察', arty: '炮兵', aa: '防空', heli: '直升机', jet: '固定翼'
@@ -15,7 +16,6 @@ const CAT_NAME: Record<string, string> = {
   helicopters: '直升机', aircrafts: '固定翼'
 }
 const PART_NAME: Record<string, string> = { kd: 'K/D', contrib: '摧毁贡献', obj: '占点', outcome: '胜负' }
-const TIER_TEXT: Record<string, string> = { dragon: '龙', solid: '强', average: '中', weak: '弱', qu: '区' }
 const pctText = (p: number | null | undefined): string => (p == null ? '—' : '第 ' + Math.round(p * 100) + ' 百分位')
 const num = (n: number | null | undefined): string => (n == null ? '—' : Math.round(n).toLocaleString('zh-CN'))
 
@@ -65,10 +65,12 @@ export default function PlayerDetail({
           <h3>龙区分</h3>
           {d ? (
             <>
-              <div className="row" style={{ alignItems: 'baseline' }}>
-                <div style={{ fontSize: 34, fontWeight: 700, color: scoreColor(d.value) }}>{d.value.toFixed(1)}</div>
+              <div className="row" style={{ alignItems: 'center' }}>
+                <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.1, color: scoreColor(d.value) }}>
+                  {d.value.toFixed(1)}
+                </div>
                 <div>
-                  <b>{TIER_TEXT[d.tier] || d.tier}</b>
+                  <Mark tier={d.tier} big />
                   <div className="dim">
                     可能范围 {d.range[0].toFixed(1)}–{d.range[1].toFixed(1)} · 最近 {d.matchCount} 场排位
                   </div>
@@ -260,7 +262,7 @@ export default function PlayerDetail({
                 {info.recentMatches.map((m) => (
                   <tr key={String(m.matchId)}>
                     <td>{m.endTime ? new Date(m.endTime * 1000).toLocaleDateString('zh-CN') : '—'}</td>
-                    <td style={{ color: m.win ? 'var(--good)' : 'var(--bad)' }}>{m.win ? '胜' : '负'}</td>
+                    <td className={m.win ? 'lit-ok' : 'lit-bad'}>{m.win ? '胜' : '负'}</td>
                     <td style={{ color: (m.eloDelta ?? 0) > 0 ? 'var(--good)' : 'var(--bad)' }}>
                       {m.eloDelta != null ? (m.eloDelta > 0 ? '+' : '') + m.eloDelta : '—'}
                     </td>

@@ -4,45 +4,79 @@
    颜色一律走变量，组件里不写死。 */
 :root,
 :root[data-theme='dark'] {
-  --bg: #14171d;
-  --bg-2: #191d25;
-  --card: #1e232c;
-  --card-hi: #252b36;
-  --line: #2c3340;
-  --line-hi: #3d4657;
-  --text: #dde3ee;
-  --text-2: #aeb7c6;
-  --dim: #7f8a9c;
-  --accent: #e8b339;
-  --accent-ink: #1d1704;
-  --good: #57b96a;
-  --bad: #e5646a;
-  --warn: #d9a441;
-  --t0: #5fa8e6;
-  --t1: #e8866a;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --radius: 10px;
+  --bg: #0d1017;
+  --bg-2: #12161f;
+  --card: #151a24;
+  --card-hi: #1c2330;
+  --card-3: #232c3b;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-hi: rgba(255, 255, 255, 0.18);
+  --text: #e4eaf4;
+  --text-2: #b4bed0;
+  --dim: #8b95a8;
+  --accent: #5aa2ff;
+  --accent2: #8b6cff;
+  --accent-ink: #ffffff;
+  --good: #4cd98a;
+  --bad: #ff6b6b;
+  --warn: #f5b942;
+  --pink: #ff9dd2;
+  --t0: #5aa2ff;
+  --t1: #ff6b6b;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --radius: 12px;
+  --grad: linear-gradient(135deg, #5aa2ff, #8b6cff);
+  --accent-soft: rgba(90, 162, 255, 0.12);
+  --accent-line: rgba(90, 162, 255, 0.28);
+  --accent-glow: rgba(90, 162, 255, 0.3);
+  --row-hover: rgba(255, 255, 255, 0.03);
+  --card-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40%);
+  /* 发光文字（顶栏状态灯之类）：深色底上用亮色 + 光晕 */
+  --gold: #facc15;
+  --lit-ok: #4ade80;
+  --lit-ok-glow: rgba(74, 222, 128, 0.6);
+  --lit-warn: #facc15;
+  --lit-warn-glow: rgba(250, 204, 21, 0.5);
+  --lit-bad: #f87171;
+  --lit-bad-glow: rgba(248, 113, 113, 0.6);
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --bg: #f2f4f7;
-  --bg-2: #e9ecf1;
+  --bg: #eef1f6;
+  --bg-2: #e4e9f1;
   --card: #ffffff;
-  --card-hi: #f4f6fa;
-  --line: #dde1e9;
-  --line-hi: #c3cad6;
-  --text: #2b313b;
-  --text-2: #4d5665;
-  --dim: #7b8494;
-  --accent: #b5811a;
-  --accent-ink: #fff8e6;
-  --good: #2f8a45;
-  --bad: #c33d44;
-  --warn: #a97516;
-  --t0: #2b6fb3;
-  --t1: #b6552f;
-  --shadow: 0 6px 18px rgba(20, 30, 50, 0.1);
+  --card-hi: #f3f5f9;
+  --card-3: #e4e9f1;
+  --line: rgba(15, 23, 42, 0.12);
+  --line-hi: rgba(15, 23, 42, 0.26);
+  --text: #1c2534;
+  --text-2: #45536b;
+  --dim: #667085;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --accent-ink: #ffffff;
+  --good: #16a34a;
+  --bad: #dc2626;
+  --warn: #b45309;
+  --pink: #db2777;
+  --t0: #2563eb;
+  --t1: #dc2626;
+  --shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --grad: linear-gradient(135deg, #2563eb, #7c3aed);
+  --accent-soft: rgba(37, 99, 235, 0.1);
+  --accent-line: rgba(37, 99, 235, 0.28);
+  --accent-glow: rgba(37, 99, 235, 0.25);
+  --row-hover: rgba(15, 23, 42, 0.04);
+  --card-sheen: linear-gradient(180deg, rgba(15, 23, 42, 0.015), transparent 40%);
+  /* 亮色底上光晕要收着点，不然糊成一团 */
+  --gold: #b45309;
+  --lit-ok: #15803d;
+  --lit-ok-glow: rgba(22, 163, 74, 0.35);
+  --lit-warn: #a16207;
+  --lit-warn-glow: rgba(180, 83, 9, 0.3);
+  --lit-bad: #dc2626;
+  --lit-bad-glow: rgba(220, 38, 38, 0.28);
   color-scheme: light;
 }
 
@@ -71,22 +105,24 @@ button {
 }
 button:hover:not(:disabled) {
   background: var(--card-hi);
-  border-color: var(--line-hi);
-  color: var(--text);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 button:active:not(:disabled) {
   transform: translateY(1px);
 }
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: var(--grad);
+  border-color: transparent;
+  color: #fff;
   font-weight: 600;
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 button.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 85%, white);
-  border-color: color-mix(in srgb, var(--accent) 85%, white);
-  color: var(--accent-ink);
+  background: var(--grad);
+  border-color: transparent;
+  color: #fff;
+  filter: brightness(1.08);
 }
 button.danger:hover:not(:disabled) {
   border-color: var(--bad);
@@ -153,8 +189,12 @@ a {
 }
 .brand .ver {
   font-weight: 400;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--dim);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 .grow {
   flex: 1;
@@ -168,47 +208,91 @@ a {
   padding: 16px;
 }
 
-/* 顶栏的状态灯 */
+/* 顶栏的状态灯：老版那种「发光文字 + 发光圆点」 */
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
+  font-weight: 600;
   color: var(--text-2);
   cursor: default;
 }
 .status i {
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--dim);
   display: inline-block;
+  flex: none;
+}
+.status.ok {
+  color: var(--lit-ok);
+  text-shadow: 0 0 6px var(--lit-ok-glow);
 }
 .status.ok i {
-  background: var(--good);
+  background: var(--lit-ok);
+  box-shadow: 0 0 8px var(--lit-ok);
+}
+.status.bad {
+  color: var(--lit-bad);
+  text-shadow: 0 0 6px var(--lit-bad-glow);
 }
 .status.bad i {
-  background: var(--bad);
+  background: var(--lit-bad);
+  box-shadow: 0 0 8px var(--lit-bad);
+}
+.status.wait {
+  color: var(--lit-warn);
+  text-shadow: 0 0 6px var(--lit-warn-glow);
 }
 .status.wait i {
-  background: var(--warn);
+  background: var(--lit-warn);
+  box-shadow: 0 0 8px var(--lit-warn);
 }
 
 /* ---------- 卡片 ---------- */
 .card {
-  background: var(--card);
+  background: var(--card-sheen), var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
   margin-bottom: 14px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s;
 }
+.card:hover {
+  border-color: var(--accent-line);
+}
+/* 卡片标题：老版那种 accent 色标题 + 前面一个小图标 */
 .card > h2 {
-  margin: 0 0 10px;
-  font-size: 14px;
+  margin: 0 0 12px;
+  font-size: 15.5px;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text);
+  gap: 8px;
+  color: var(--accent);
+}
+.card > h2 .ico {
+  font-size: 15px;
+  line-height: 1;
+  filter: saturate(1.1);
+}
+/* 标题里的附注（地图、局数、时间…）不跟着 accent 走 */
+.card > h2 .dim {
+  font-weight: 400;
+  font-size: 12px;
+}
+/* 标题右侧的按钮 / 开关不跟着标题变大变粗 */
+.card > h2 button,
+.card > h2 label,
+.card > h2 .spin {
+  font-size: 13px;
+  font-weight: 400;
+}
+.card > h2 label {
+  color: var(--text-2);
 }
 .card > h3 {
   margin: 0 0 8px;
@@ -244,11 +328,16 @@ a {
   }
 }
 .team-head {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 14px;
   margin-bottom: 6px;
   display: flex;
   gap: 8px;
   align-items: baseline;
+}
+.team-head .dim {
+  font-weight: 400;
+  font-size: 11.5px;
 }
 .team-head.t0 {
   color: var(--t0);
@@ -270,16 +359,17 @@ a {
   transition: background 0.12s, border-color 0.12s;
 }
 .prow:hover {
-  background: var(--card-hi);
-  border-color: var(--line-hi);
+  background: var(--row-hover);
+  border-color: var(--accent-line);
 }
 .prow.active {
-  background: var(--card-hi);
+  background: var(--accent-soft);
   border-color: var(--accent);
 }
 .prow.head {
   cursor: default;
-  font-size: 11.5px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
   color: var(--dim);
   padding-bottom: 2px;
 }
@@ -288,25 +378,35 @@ a {
   border-color: transparent;
 }
 .prow .score {
-  font-size: 19px;
-  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 20px;
+  font-weight: 800;
   text-align: center;
   line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
 .prow .score small {
-  display: block;
   font-size: 10px;
   font-weight: 600;
+  color: var(--dim);
 }
 .prow .name {
   font-weight: 600;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 数字列：主数值用 --text，单位/后缀交给 .num small */
 .prow .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.prow .num.soft {
   color: var(--text-2);
 }
 .prow .units {
@@ -316,14 +416,47 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mark-dragon {
+
+/* ---------- 龙区徽章（老版 .dg-mark） ---------- */
+.dg-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  border-radius: 6px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 13px;
+  padding: 0 3px;
+  vertical-align: middle;
+  flex: none;
+  line-height: 1;
+}
+.dg-mark.big {
+  min-width: 28px;
+  height: 28px;
+  font-size: 20px;
+  border-radius: 8px;
+  margin-right: 6px;
+}
+.dg-mark.dragon {
+  color: #1c1400;
+  background: linear-gradient(135deg, #fde047, #f59e0b);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.45);
+}
+.dg-mark.solid {
   color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
 }
-.mark-qu {
-  color: var(--bad);
+.dg-mark.qu {
+  color: #fff;
+  background: #b91c1c;
 }
-.mark-min {
+.dg-mark.min {
   color: var(--dim);
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--line);
 }
 
 /* ---------- 通用零件 ---------- */
@@ -350,7 +483,7 @@ a {
 .bar i {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: var(--grad);
 }
 .tag {
   display: inline-block;
@@ -380,8 +513,11 @@ a {
 }
 .kv div b {
   display: block;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
 .kv div span {
   color: var(--dim);
@@ -407,9 +543,14 @@ table.t td:first-child {
 table.t th {
   color: var(--dim);
   font-weight: 500;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+}
+table.t td {
+  color: var(--text);
 }
 table.t tbody tr:hover {
-  background: var(--card-hi);
+  background: var(--row-hover);
 }
 .empty {
   color: var(--dim);
@@ -481,6 +622,36 @@ pre.log {
 }
 .t1 {
   color: var(--t1);
+}
+
+/* 发光文字（老版的 .ok / .warn / .down）：给「胜」「正在录」这类状态字用 */
+.lit-ok {
+  color: var(--lit-ok);
+  font-weight: 600;
+  text-shadow: 0 0 6px var(--lit-ok-glow);
+}
+.lit-warn {
+  color: var(--lit-warn);
+  font-weight: 600;
+  text-shadow: 0 0 6px var(--lit-warn-glow);
+}
+.lit-bad {
+  color: var(--lit-bad);
+  font-weight: 600;
+  text-shadow: 0 0 6px var(--lit-bad-glow);
+}
+/* 发光圆点 */
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  background: var(--dim);
+}
+.dot.on {
+  background: var(--good);
+  box-shadow: 0 0 8px var(--good);
 }
 
 /* ---------- 横幅 / 提示 ---------- */

@@ -19,6 +19,7 @@ export default function CurrentMatch(): React.JSX.Element {
   return (
     <div className="card">
       <h2>
+        <span className="ico">📍</span>
         {cur ? '当前对局' : '当前房间'}
         {cur?.map && <span className="dim">{cur.map}</span>}
         {cur?.fid && <span className="dim">#{cur.fid}</span>}

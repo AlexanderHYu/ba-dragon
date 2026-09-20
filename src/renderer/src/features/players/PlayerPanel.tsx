@@ -44,7 +44,8 @@ export default function PlayerPanel(): React.JSX.Element {
   return (
     <div className="card" ref={boxRef}>
       <h2>
-        玩家查询
+        <span className="ico">🔍</span>
+        玩家查询 · 龙区分
         <span className="grow" />
         {searching && <span className="spin" />}
         {card && (

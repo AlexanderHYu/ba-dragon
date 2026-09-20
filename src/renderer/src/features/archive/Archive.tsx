@@ -61,6 +61,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
   return (
     <div className="card">
       <h2>
+        <span className="ico">🗂</span>
         对局档案
         {!!list?.length && <span className="dim">{list.length} 局</span>}
         <span className="grow" />

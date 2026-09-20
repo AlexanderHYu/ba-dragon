@@ -7,7 +7,7 @@ import './report.css'
 // 从 current/PlayerRow 复制过来的：复盘页不再依赖对局页的文件。
 export function scoreColor(v: number | null | undefined): string {
   if (v == null) return 'var(--dim)'
-  if (v >= 8) return 'var(--accent)'
+  if (v >= 8) return 'var(--gold)'
   if (v >= 6.5) return 'var(--good)'
   if (v >= 4) return 'var(--text)'
   if (v >= 2.5) return 'var(--warn)'
@@ -193,13 +193,13 @@ function Overview({ r }: { r: MatchReport }): React.JSX.Element {
       </div>
       {!!r.insights.length && (
         <div className="card">
-          <h2>本局要点</h2>
+          <h2>
+            <span className="ico">💡</span>
+            本局要点
+          </h2>
           <ul className="rp-insights">
             {r.insights.map((i, n) => (
-              <li
-                key={n}
-                style={{ color: i.kind === 'good' ? 'var(--good)' : i.kind === 'bad' ? 'var(--bad)' : undefined }}
-              >
+              <li key={n} className={i.kind === 'good' ? 'lit-ok' : i.kind === 'bad' ? 'lit-bad' : ''}>
                 {i.text}
               </li>
             ))}
