@@ -1,0 +1,91 @@
+// 当前对局：两队名单，每人一行。进对局自动开查，不用点。
+import type { PlayerCard } from '@shared/ipc'
+import { useStore } from '../../store'
+import PlayerRow from './PlayerRow'
+
+export default function CurrentMatch(): React.JSX.Element {
+  const { query, session, setOpenPlayer } = useStore()
+  const cur = session?.snapshot.current
+  const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
+  const cards = query.cards
+
+  const teamOf = (c: PlayerCard): string => c.team || '?'
+  const teams = [
+    { key: 'Alpha', label: 'Alpha', cls: 't0' },
+    { key: 'Bravo', label: 'Bravo', cls: 't1' }
+  ]
+  const unknown = cards.filter((c) => teamOf(c) !== 'Alpha' && teamOf(c) !== 'Bravo')
+
+  return (
+    <div className="card">
+      <h2>
+        当前对局
+        {cur?.map && <span className="dim">{cur.map}</span>}
+        {cur?.fid && <span className="dim">#{cur.fid}</span>}
+        <span className="grow" />
+        {query.pass && (
+          <span className="dim">
+            第 {query.pass} 轮 {query.done}/{query.total}
+            <span className="spin" style={{ marginLeft: 6 }} />
+          </span>
+        )}
+        <button onClick={() => window.BA.queryRoster()}>重新查询</button>
+      </h2>
+
+      {query.pass && (
+        <div className="bar" style={{ marginBottom: 10 }}>
+          <i style={{ width: (query.total ? (query.done / query.total) * 100 : 0) + '%' }} />
+        </div>
+      )}
+
+      {!cards.length ? (
+        <div className="empty">
+          {session?.watcher.listening
+            ? cur || lobby
+              ? '正在等名单…'
+              : '没在对局里。进游戏后会自动开始查。'
+            : '还没设置日志目录，去设置里选 GameLogs 文件夹。'}
+        </div>
+      ) : (
+        <div className="teams">
+          {teams.map((t) => {
+            const list = cards.filter((c) => teamOf(c) === t.key)
+            if (!list.length) return null
+            return (
+              <div key={t.key}>
+                <div className={'team-head ' + t.cls}>
+                  {t.label}
+                  <span className="dim">{list.length} 人</span>
+                  <span className="dim">{avgText(list)}</span>
+                </div>
+                {list.map((c) => (
+                  <PlayerRow key={c.id} card={c} onOpen={() => setOpenPlayer(c.id)} />
+                ))}
+              </div>
+            )
+          })}
+          {!!unknown.length && (
+            <div>
+              <div className="team-head">
+                房间里的人<span className="dim">{unknown.length} 人</span>
+              </div>
+              {unknown.map((c) => (
+                <PlayerRow key={c.id} card={c} onOpen={() => setOpenPlayer(c.id)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 一队的平均 ELO 和平均龙区分，算好了才显示 */
+function avgText(list: PlayerCard[]): string {
+  const elos = list.map((c) => c.info?.elo).filter((v): v is number => v != null)
+  const scores = list.map((c) => c.dragon?.value).filter((v): v is number => v != null)
+  const out: string[] = []
+  if (elos.length) out.push('平均 ELO ' + Math.round(elos.reduce((a, b) => a + b, 0) / elos.length))
+  if (scores.length) out.push('平均 ' + (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) + ' 分')
+  return out.join(' · ')
+}

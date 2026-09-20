@@ -12,10 +12,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "npm run build && electron-builder --win --publish never"
+    "dist": "npm run build && electron-builder --win --publish never",
+    "smoke": "electron-vite build && node scripts/smoke.mjs"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "node-sqlite3-wasm": "^0.8.60"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

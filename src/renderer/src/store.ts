@@ -1,0 +1,52 @@
+// 界面状态：主进程推什么就存什么，组件只管读。
+import { create } from 'zustand'
+import type { PlayerCard, QueryState, SessionState, Settings } from '@shared/ipc'
+
+interface State {
+  config: Settings | null
+  session: SessionState | null
+  query: QueryState
+  /** 打开详情抽屉的玩家 ID */
+  openPlayer: string | null
+  /** 搜索结果 */
+  search: PlayerCard[]
+  searching: boolean
+  view: 'current' | 'settings'
+  setConfig: (c: Settings) => void
+  setSession: (s: SessionState) => void
+  setQuery: (q: QueryState) => void
+  patchCard: (c: PlayerCard) => void
+  setOpenPlayer: (id: string | null) => void
+  setSearch: (list: PlayerCard[], searching?: boolean) => void
+  setView: (v: State['view']) => void
+}
+
+const emptyQuery: QueryState = { fid: null, pass: null, done: 0, total: 0, prev: false, cards: [] }
+
+export const useStore = create<State>((set) => ({
+  config: null,
+  session: null,
+  query: emptyQuery,
+  openPlayer: null,
+  search: [],
+  searching: false,
+  view: 'current',
+  setConfig: (config) => set({ config }),
+  setSession: (session) => set({ session }),
+  setQuery: (query) => set({ query }),
+  patchCard: (card) =>
+    set((s) => ({
+      query: { ...s.query, cards: s.query.cards.map((c) => (c.id === card.id ? card : c)) },
+      search: s.search.map((c) => (c.id === card.id ? card : c))
+    })),
+  setOpenPlayer: (openPlayer) => set({ openPlayer }),
+  setSearch: (search, searching = false) => set({ search, searching }),
+  setView: (view) => set({ view })
+}))
+
+/** 当前对局 + 搜索结果里找这个人 */
+export const cardOf = (id: string | null): PlayerCard | null => {
+  if (!id) return null
+  const s = useStore.getState()
+  return s.query.cards.find((c) => c.id === id) || s.search.find((c) => c.id === id) || null
+}
