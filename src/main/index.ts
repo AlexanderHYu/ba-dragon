@@ -15,6 +15,7 @@ import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
 import { Updater } from './services/updater'
 import { ReplayService } from './services/replays'
+import { migrateLegacy } from './services/migrate'
 import { registerIpc } from './ipc'
 
 // 数据目录固定成 4.0.x 用的那个：改名、换版本，设置和对局档案都还在原处
@@ -84,6 +85,18 @@ function startServices(): Services {
   const db = new Db(join(dataDir, 'dragon.sqlite'))
   db.importLegacyCache(dataDir) // 老版缓存搬过来，省一批请求
   loadMapNames(db) // 地图名字是一点点学来的，存在库里
+  // 4.0.x 的对局档案、玩家库、ELO 快照搬进本地库（只搬一次，只新增不覆盖）
+  const moved = migrateLegacy(db, dataDir)
+  if (moved.ran && (moved.matches || moved.players)) {
+    setTimeout(
+      () =>
+        send('toast', {
+          kind: 'info',
+          text: '老版数据已经搬过来了：' + moved.matches + ' 局对局、' + moved.players + ' 个玩家'
+        }),
+      3000
+    )
+  }
 
   const parser = new LogParser((type, data) => {
     // 日志事件：先把状态推给界面，进对局/名单变化时自动开查

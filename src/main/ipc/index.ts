@@ -6,6 +6,7 @@ import type { ArchiveItem, IpcMap, PlayerCard, Settings } from '@shared/ipc'
 import type { Services } from '../index'
 import { detectLogDir } from '../services/config'
 import { mapName } from '../services/players'
+import { legacyLocalIds } from '../services/migrate'
 
 type Handler<K extends keyof IpcMap> = (arg: IpcMap[K][0]) => IpcMap[K][1] | Promise<IpcMap[K][1]>
 
@@ -209,12 +210,13 @@ export function registerIpc(s: Services): void {
 function localPlayerIds(s: Services): string[] {
   const snap = s.parser.snapshot()
   const name = snap.localName
-  if (!name) return []
+  if (!name) return legacyLocalIds(s.db)
   const ids = new Set<string>()
   for (const m of [snap.current, ...s.parser.archived]) {
     for (const p of m?.players || []) if (p.name === name) ids.add(p.id)
   }
   for (const [id, n] of Object.entries(snap.lobbyPlayers || {})) if (n === name) ids.add(id)
+  for (const id of legacyLocalIds(s.db)) ids.add(id) // 老版记过的本机账号
   return [...ids]
 }
 
