@@ -19,6 +19,7 @@ const api = {
   getQueryState: () => invoke('match:state'),
   getMatchReport: (fid: string, localIds?: string[]) => invoke('match:report', { fid, localIds }),
   listArchive: () => invoke('archive:list'),
+  getPrevMatch: () => invoke('match:prev'),
 
   getVersion: () => invoke('app:version'),
   getUpdateInfo: () => invoke('update:get'),

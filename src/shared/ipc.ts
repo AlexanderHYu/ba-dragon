@@ -2,7 +2,7 @@
 // 加字段时这里改一次，主进程和界面哪边没跟上，编译就会报错。
 import type { DragonScore } from './dragon'
 import type { MatchReport } from './match'
-import type { LogMatch, LogSnapshot } from './log'
+import type { LogSnapshot } from './log'
 
 /** 玩家卡片：粗查和龙区分合并后的唯一形态 */
 export interface PlayerCard {
@@ -82,6 +82,19 @@ export interface QueryState {
   cards: PlayerCard[]
 }
 
+/** 对局档案里的一条 */
+export interface ArchiveItem {
+  fid: string
+  map: string
+  startTime: number | null
+  durationSec: number | null
+  winnerTeam: number | null
+  /** 本机玩家这局的结果和分数，本地库里有就带上 */
+  mine?: { won: boolean | null; score: number | null; mark: string | null } | null
+  /** 有没有算过复盘（算过就是读本地库，不用再请求） */
+  cached: boolean
+}
+
 /** invoke 通道：名字 → [参数, 返回值] */
 export interface IpcMap {
   'config:get': [void, Settings]
@@ -94,7 +107,8 @@ export interface IpcMap {
   'match:query': [{ players?: { id: string; name: string; team?: string | null }[] } | void, void]
   'match:state': [void, QueryState]
   'match:report': [{ fid: string; localIds?: string[] }, MatchReport | { error: string }]
-  'archive:list': [void, LogMatch[]]
+  'archive:list': [void, ArchiveItem[]]
+  'match:prev': [void, { fid: string | null }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   'update:get': [void, UpdateInfo | null]
   'update:install': [void, boolean]

@@ -2,7 +2,7 @@
 import { app, dialog, ipcMain, shell } from 'electron'
 import { analyzeMatch } from '@shared/dragon'
 import { buildMatchReport } from '@shared/match'
-import type { IpcMap, PlayerCard, Settings } from '@shared/ipc'
+import type { ArchiveItem, IpcMap, PlayerCard, Settings } from '@shared/ipc'
 import type { Services } from '../index'
 import { detectLogDir } from '../services/config'
 import { mapName } from '../services/players'
@@ -79,7 +79,7 @@ export function registerIpc(s: Services): void {
       const mi = res?.matchInfo
       if (!mi?.Data || !Object.keys(mi.Data).length) return { error: 'notYet' }
       const review = analyzeMatch(mi, fid)
-      const report = buildMatchReport(mi, { fid, review, localIds, mapName })
+      const report = buildMatchReport(mi, { fid, review, localIds: localIds?.length ? localIds : localPlayerIds(s), mapName })
       saveMatch(s, fid, mi, report)
       return report
     } catch (e) {
@@ -87,7 +87,59 @@ export function registerIpc(s: Services): void {
     }
   })
 
-  on('archive:list', () => s.parser.archived.slice().reverse())
+  // 对局档案：本地库里算过的 + 本次会话日志里打完但还没算的
+  on('archive:list', () => {
+    const rows = s.db.all<{
+      fid: string
+      map_id: number | null
+      start_time: number | null
+      duration_sec: number | null
+      winner_team: number | null
+    }>('SELECT fid, map_id, start_time, duration_sec, winner_team FROM match ORDER BY start_time DESC LIMIT 100')
+    const localIds = new Set(localPlayerIds(s))
+    const out: ArchiveItem[] = rows.map((r) => {
+      // 不知道本机账号（日志还没读到名字）时就不查「我这局」
+      const mineRow = localIds.size
+        ? s.db.get<{ score: number | null; mark: string | null; team: number }>(
+            'SELECT score, mark, team FROM match_player WHERE fid = ? AND pid IN (' +
+              [...localIds].map(() => '?').join(',') +
+              ') LIMIT 1',
+            [r.fid, ...localIds]
+          )
+        : null
+      return {
+        fid: r.fid,
+        map: mapName(r.map_id ?? undefined),
+        startTime: r.start_time,
+        durationSec: r.duration_sec,
+        winnerTeam: r.winner_team,
+        mine: mineRow
+          ? { won: r.winner_team == null ? null : r.winner_team === mineRow.team, score: mineRow.score, mark: mineRow.mark }
+          : null,
+        cached: true
+      }
+    })
+    const have = new Set(out.map((x) => x.fid))
+    for (const m of s.parser.archived.slice().reverse()) {
+      if (!m.fid || have.has(m.fid)) continue
+      out.unshift({
+        fid: m.fid,
+        map: m.map,
+        startTime: m.startTime,
+        durationSec: m.durationSec,
+        winnerTeam: null,
+        mine: null,
+        cached: false
+      })
+    }
+    return out
+  })
+
+  // 上一局：日志里刚打完的那局
+  on('match:prev', () => {
+    const last = s.parser.lastEnded || s.parser.archived[s.parser.archived.length - 1] || null
+    return { fid: last?.fid ?? null }
+  })
 
   on('app:version', () => ({ current: app.getVersion(), latest: app.getVersion(), hasUpdate: false }))
   on('update:get', () => null)
@@ -96,6 +148,19 @@ export function registerIpc(s: Services): void {
   ipcMain.handle('shell:open', (_e, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url)
   })
+}
+
+/** 本机账号的 batrace ID：日志里名字和本机玩家名对得上的那个人 */
+function localPlayerIds(s: Services): string[] {
+  const snap = s.parser.snapshot()
+  const name = snap.localName
+  if (!name) return []
+  const ids = new Set<string>()
+  for (const m of [snap.current, ...s.parser.archived]) {
+    for (const p of m?.players || []) if (p.name === name) ids.add(p.id)
+  }
+  for (const [id, n] of Object.entries(snap.lobbyPlayers || {})) if (n === name) ids.add(id)
+  return [...ids]
 }
 
 /** 复盘算完顺手入库：对局、每局每人、每局每人每单位（配装原样存着） */

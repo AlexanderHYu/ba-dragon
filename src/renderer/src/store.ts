@@ -11,7 +11,7 @@ interface State {
   /** 搜索结果 */
   search: PlayerCard[]
   searching: boolean
-  view: 'current' | 'settings'
+  view: 'current' | 'archive' | 'settings'
   setConfig: (c: Settings) => void
   setSession: (s: SessionState) => void
   setQuery: (q: QueryState) => void
