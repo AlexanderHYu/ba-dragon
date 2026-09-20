@@ -222,9 +222,6 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       >
         {curve && (
           <svg className="bplayer-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {curve.areas.map((d, t) =>
-              d ? <path key={'a' + t} d={d} className={'fill t' + t} /> : null
-            )}
             {curve.events.map((ev, k) => (
               <line
                 key={'e' + k}
@@ -249,9 +246,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
                 />
               </>
             )}
-            {curve.paths.map((d, t) => (
-              <path key={'p' + t} d={d} className={'line t' + t} vectorEffect="non-scaling-stroke" />
-            ))}
+
           </svg>
         )}
         <i className="bplayer-played" style={{ width: played + '%' }} />
@@ -312,7 +307,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       </div>
 
       <div className="bplayer-note dim">
-        {curve ? '细线 = 两队兵力，粗线 = 兵力差（在中线上方 = A 队占上风）；按比例对齐，可能有几秒误差' : '这一局没有对局数据，只有普通进度条'} · 空格播放/暂停，←
+        {curve ? '曲线 = 兵力差（在中线上方 = A 队占上风）；按比例对齐，可能有几秒误差' : '这一局没有对局数据，只有普通进度条'} · 空格播放/暂停，←
         → ±5 秒
       </div>
     </div>

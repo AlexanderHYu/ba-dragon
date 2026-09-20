@@ -1,6 +1,6 @@
 {
   "name": "ba-dragon",
-  "version": "5.0.0-dev.0",
+  "version": "1.0.0",
   "description": "龙区分类器 —— 断箭（Broken Arrow）对局复盘与龙区分工具",
   "main": "./out/main/index.js",
   "author": "AlexanderHYu",

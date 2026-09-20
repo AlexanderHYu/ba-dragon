@@ -61,7 +61,7 @@ export default function PlayerPanel(): React.JSX.Element {
           placeholder="玩家名或 ID"
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void go()}
-          style={{ flex: 1, maxWidth: 320 }}
+          style={{ flex: 1 }}
         />
         <button className="primary" onClick={() => void go()}>
           🔍 搜索

@@ -39,6 +39,12 @@ const num = (n: number | null | undefined): string => (n == null ? '—' : Math.
 /** 1~10 的分数 → 横条上的位置（%） */
 const posOf = (v: number): number => Math.max(0, Math.min(100, ((v - 1) / 9) * 100))
 /** 百分位（0~1）→ 颜色：明显好绿、明显差红，中间留白，不然满屏是色 */
+/** 胜率：60% 以上绿、40% 以下红 */
+const winColor = (v: number | null | undefined): string =>
+  v == null ? 'var(--dim)' : v >= 60 ? 'var(--good)' : v <= 40 ? 'var(--bad)' : 'var(--text)'
+/** K/D：1.2 以上绿、0.8 以下红 */
+const kdColor = (v: number | null | undefined): string =>
+  v == null ? 'var(--dim)' : v >= 1.2 ? 'var(--good)' : v <= 0.8 ? 'var(--bad)' : 'var(--text)'
 const partColor = (v: number | null | undefined): string =>
   v == null ? 'var(--dim)' : v >= 0.62 ? 'var(--good)' : v <= 0.38 ? 'var(--bad)' : 'var(--text)'
 
@@ -91,7 +97,6 @@ export default function PlayerDetail({
       <div className="pdetail-grid">
         {/* 龙区分：通栏，老版 4.0.3 的面板 */}
         <section className="wide dgpanel">
-          <h3>龙区分</h3>
           {d ? (
             <>
               <div className="dg-head">
@@ -107,7 +112,6 @@ export default function PlayerDetail({
                   </span>
                 </div>
                 <div className="dg-meta">
-                  <div className="dg-name">{card.name || card.id}</div>
                   <div className="dg-line">
                     最近 {d.matchCount} 场排位 · 可能范围 {d.range[0].toFixed(1)}~{d.range[1].toFixed(1)} · 胜率{' '}
                     <b style={{ color: partColor(d.parts.outcome) }}>{Math.round(d.summary.winRate * 100)}%</b>
@@ -161,6 +165,27 @@ export default function PlayerDetail({
                 })}
               </div>
 
+              {/* 兵种使用率：通栏一条，放在四个分项下面（这也是重要数据） */}
+              {!!roleList.length && (
+                <div className="rolewrap">
+                  <div className="rolebar tall">
+                    {roleList.map(([k, v]) => (
+                      <i key={k} style={{ width: v + '%', background: ROLE_COLOR[k] }} title={ROLE_NAME[k] + ' ' + v + '%'}>
+                        {v >= 7 ? v + '%' : ''}
+                      </i>
+                    ))}
+                  </div>
+                  <div className="legend">
+                    {roleList.map(([k, v]) => (
+                      <span key={k}>
+                        <i style={{ background: ROLE_COLOR[k] }} />
+                        {ROLE_NAME[k]} {v}%
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!!d.reasons.length && (
                 <ul className="dg-reasons">
                   {d.reasons.slice(0, 6).map((r) => (
@@ -170,6 +195,98 @@ export default function PlayerDetail({
                   ))}
                 </ul>
               )}
+
+              {/* 档案 + 地图表现：不单独开卡片，融进这个面板，排在战绩表上面 */}
+              <div className="dg-sub">
+                <div className="dg-sub-col">
+                  <h4>档案</h4>
+                  {info ? (
+                    <>
+                      <div className="kv">
+                        <div>
+                          <b>{info.elo != null ? Math.round(info.elo) : '—'}</b>
+                          <span>ELO</span>
+                        </div>
+                        <div>
+                          <b style={{ color: winColor(info.winRate) }}>{info.winRate}%</b>
+                          <span>
+                            胜率（{info.wins}胜 {info.losses}负）
+                          </span>
+                        </div>
+                        <div>
+                          <b>{info.matchCount}</b>
+                          <span>统计局数</span>
+                        </div>
+                        <div>
+                          <b style={{ color: kdColor(d?.summary.kdAgg ?? info.kd) }}>
+                            {d?.summary.kdAgg ?? info.kd ?? '—'}
+                          </b>
+                          <span>K/D</span>
+                        </div>
+                        <div>
+                          <b>{info.dmr ?? '—'}</b>
+                          <span>伤害交换比</span>
+                        </div>
+                      </div>
+                      {!!info.categories.length && (
+                        <div className="dim">
+                          花费偏好：
+                          {info.categories
+                            .map((c) => (CAT_NAME[c.key] || c.key) + ' ' + Math.round(c.pct) + '%')
+                            .join(' · ')}
+                        </div>
+                      )}
+                      {!!info.favUnits.length && (
+                        <table className="t" style={{ marginTop: 6 }}>
+                          <thead>
+                            <tr>
+                              <th>最爱单位</th>
+                              <th>出场</th>
+                              <th>伤害</th>
+                              <th title="平均每点花费打出的收益">回报</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {info.favUnits.map((u) => (
+                              <tr key={u.name}>
+                                <td>{u.name}</td>
+                                <td>{u.spawn}</td>
+                                <td>{num(u.val)}</td>
+                                <td>{u.roi ?? '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
+                  ) : (
+                    <div className="empty">{card.infoState === 'loading' ? '正在查…' : card.error || '没有档案'}</div>
+                  )}
+                </div>
+                {!!info?.mapStats.length && (
+                  <div className="dg-sub-col">
+                    <h4>地图表现</h4>
+                    <table className="t">
+                      <thead>
+                        <tr>
+                          <th>地图</th>
+                          <th>局数</th>
+                          <th>胜率</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {info.mapStats.map((m) => (
+                          <tr key={m.mapId}>
+                            <td>{m.name}</td>
+                            <td>{m.matchCount}</td>
+                            <td style={{ color: winColor(m.winRate) }}>{Math.round(m.winRate)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
 
               {!!d.rows.length && (
                 <table className="t dg-rows">
@@ -229,115 +346,6 @@ export default function PlayerDetail({
           )}
         </section>
 
-        {/* 档案 */}
-        <section>
-          <h3>档案</h3>
-          {info ? (
-            <>
-              <div className="kv">
-                <div>
-                  <b>{info.elo != null ? Math.round(info.elo) : '—'}</b>
-                  <span>ELO</span>
-                </div>
-                <div>
-                  <b>{info.winRate}%</b>
-                  <span>
-                    胜率（{info.wins}胜 {info.losses}负）
-                  </span>
-                </div>
-                <div>
-                  <b>{info.matchCount}</b>
-                  <span>统计局数</span>
-                </div>
-                <div>
-                  <b>{d?.summary.kdAgg ?? info.kd ?? '—'}</b>
-                  <span>K/D</span>
-                </div>
-                <div>
-                  <b>{info.dmr ?? '—'}</b>
-                  <span>伤害交换比</span>
-                </div>
-              </div>
-              {!!info.categories.length && (
-                <div className="dim">
-                  花费偏好：
-                  {info.categories.map((c) => (CAT_NAME[c.key] || c.key) + ' ' + Math.round(c.pct) + '%').join(' · ')}
-                </div>
-              )}
-              {!!info.favUnits.length && (
-                <table className="t" style={{ marginTop: 6 }}>
-                  <thead>
-                    <tr>
-                      <th>最爱单位</th>
-                      <th>出场</th>
-                      <th>伤害</th>
-                      <th title="平均每点花费打出的收益">回报</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {info.favUnits.map((u) => (
-                      <tr key={u.name}>
-                        <td>{u.name}</td>
-                        <td>{u.spawn}</td>
-                        <td>{num(u.val)}</td>
-                        <td>{u.roi ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {/* 兵种使用率：通栏一条，段内直接写百分比 */}
-              {!!roleList.length && (
-                <div className="rolewrap">
-                  <div className="rolebar tall">
-                    {roleList.map(([k, v]) => (
-                      <i key={k} style={{ width: v + '%', background: ROLE_COLOR[k] }} title={ROLE_NAME[k] + ' ' + v + '%'}>
-                        {v >= 8 ? v + '%' : ''}
-                      </i>
-                    ))}
-                  </div>
-                  <div className="legend">
-                    {roleList.map(([k, v]) => (
-                      <span key={k}>
-                        <i style={{ background: ROLE_COLOR[k] }} />
-                        {ROLE_NAME[k]} {v}%
-                      </span>
-                    ))}
-                  </div>
-                  {roles?.known === false && <div className="dim">没有生涯兵种数据，按全体平均算的</div>}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="empty">{card.infoState === 'loading' ? '正在查…' : card.error || '没有档案'}</div>
-          )}
-        </section>
-
-        {/* 地图 */}
-        {!!info?.mapStats.length && (
-          <section>
-            <h3>地图表现</h3>
-            <table className="t">
-              <thead>
-                <tr>
-                  <th>地图</th>
-                  <th>局数</th>
-                  <th>胜率</th>
-                </tr>
-              </thead>
-              <tbody>
-                {info.mapStats.map((m) => (
-                  <tr key={m.mapId}>
-                    <td>{m.name}</td>
-                    <td>{m.matchCount}</td>
-                    <td>{Math.round(m.winRate)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-
         {/* 羁绊 */}
         {bond && bond.matches > 0 && (
           <section>
@@ -372,40 +380,6 @@ export default function PlayerDetail({
           </section>
         )}
 
-        {/* 最近对局 */}
-        {!!info?.recentMatches.length && (
-          <section className="wide">
-            <h3>最近对局</h3>
-            <table className="t">
-              <thead>
-                <tr>
-                  <th>时间</th>
-                  <th>结果</th>
-                  <th>ELO</th>
-                  <th>K/D</th>
-                  <th>摧毁</th>
-                  <th>损失</th>
-                  <th>占点</th>
-                </tr>
-              </thead>
-              <tbody>
-                {info.recentMatches.map((m) => (
-                  <tr key={String(m.matchId)}>
-                    <td>{m.endTime ? new Date(m.endTime * 1000).toLocaleDateString('zh-CN') : '—'}</td>
-                    <td className={m.win ? 'lit-ok' : 'lit-bad'}>{m.win ? '胜' : '负'}</td>
-                    <td style={{ color: (m.eloDelta ?? 0) > 0 ? 'var(--good)' : 'var(--bad)' }}>
-                      {m.eloDelta != null ? (m.eloDelta > 0 ? '+' : '') + m.eloDelta : '—'}
-                    </td>
-                    <td>{m.kd != null ? m.kd.toFixed(2) : '—'}</td>
-                    <td>{num(m.destruction)}</td>
-                    <td>{num(m.losses)}</td>
-                    <td>{m.objectives}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
       </div>
     </div>
   )

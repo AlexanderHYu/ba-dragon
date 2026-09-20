@@ -40,7 +40,8 @@ const sec = (s: number | null | undefined): string => {
 }
 const pct = (v: number | null | undefined): string => (v == null ? '—' : Math.round(v * 100) + '%')
 const teamName = (t: number): string => (t === 0 ? 'A 队' : 'B 队')
-const facName = (f: ReportTeam['faction']): string => (f === 'RU' ? '（俄）' : f === 'US' ? '（美）' : '')
+/** 阵营：旗子 + 中文名（旗子比文字一眼就能认出来） */
+const facName = (f: ReportTeam['faction']): string => (f === 'RU' ? ' 🇷🇺 俄' : f === 'US' ? ' 🇺🇸 美' : '')
 
 // 标签顺序照老版：玩家在最前，默认就打开玩家页
 const TABS = [
@@ -418,7 +419,11 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
             <h2 className={'t' + t}>
               {teamName(t)}
               {facName(T.faction)}
-              {T.won == null ? '' : T.won ? ' · 胜' : ' · 负'}
+              {T.won == null ? null : (
+                <span className={T.won ? 'lit-ok' : 'lit-bad'} style={{ marginLeft: 6 }}>
+                  {T.won ? '胜' : '负'}
+                </span>
+              )}
             </h2>
             <div className="rp-scroll">
               <table className="t rp-wide rp-ptable">

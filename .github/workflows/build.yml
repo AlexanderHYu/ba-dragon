@@ -3,7 +3,7 @@ name: 打包 EXE（自动构建）
 on:
   push:
     tags:
-      - 'v*'            # 推 v5.0.0 这类标签时自动打包并发布
+      - 'v*'            # 推 v1.0.0 这类标签时自动打包并发布
   workflow_dispatch: {} # 也可以在 Actions 页面手动跑，只出产物不发布
 
 permissions:

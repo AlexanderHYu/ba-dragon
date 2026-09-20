@@ -145,6 +145,12 @@ export async function run(win: BrowserWindow): Promise<void> {
         if (hit) {
           await new Promise((r) => setTimeout(r, 1200))
           writeFileSync(shot.replace(/\.png$/, '') + '-player.png', (await win.webContents.capturePage()).toPNG())
+          // 往下滚一屏，看面板下半部分（档案 + 地图表现 + 战绩表）
+          await win.webContents.executeJavaScript(
+            `(() => { const m = document.querySelector('.main'); if (m) m.scrollTop = m.scrollTop + 900; return true })()`
+          )
+          await new Promise((r) => setTimeout(r, 600))
+          writeFileSync(shot.replace(/\.png$/, '') + '-player2.png', (await win.webContents.capturePage()).toPNG())
         }
       }
       // 点开第一条录像，看播放器和兵力曲线渲染出来没有

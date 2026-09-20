@@ -34,10 +34,10 @@ export default function TopBar(): React.JSX.Element {
       </span>
       <span className="grow" />
       <button className={page.name === 'home' ? 'primary' : ''} onClick={() => setPage({ name: 'home' })}>
-        主界面
+        🏠 主界面
       </button>
       <button className={page.name === 'settings' ? 'primary' : ''} onClick={() => setPage({ name: 'settings' })}>
-        设置
+        ⚙ 设置
       </button>
     </div>
   )

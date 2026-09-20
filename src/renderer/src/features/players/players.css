@@ -29,13 +29,21 @@
 /* ================= 龙区分面板（照 4.0.3 的 .maggot-panel 重做） =================
    条的颜色只有「低端那一头」在主题里没有现成变量：深色底上要接近白，浅色底上
    得压暗一点才看得见边界。所以这里给面板自己开两个局部 token，其余一律用全局变量。 */
+.pdetail-grid > section.dgpanel,
 .dgpanel {
   --dg-lo: #eef3fb; /* 区：接近白 */
   --dg-ind: #ffffff; /* 指针 */
   --dg-ind-line: #10141c; /* 指针描边，两种主题下都要是深色 */
+  /* 老版这块是整页里唯一一个反色面板，很突出。这里用暗红，和其余的蓝灰卡片拉开 */
+  background: linear-gradient(180deg, #241318, #1a1014);
+  border: 1px solid #4b2731;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-:root[data-theme='light'] .dgpanel {
+:root[data-theme='light'] .pdetail-grid > section.dgpanel,
+.dgpanel {
   --dg-lo: #c3cddf;
+  background: linear-gradient(180deg, #fff1f2, #ffe6e8);
+  border-color: #f2c4ca;
 }
 
 .dg-head {
@@ -115,12 +123,12 @@
   height: 14px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  /* 白（区）→ 蓝 → 紫 → 金（龙），炉石那种递进 */
+  /* 白（区）→ 蓝 → 红 → 金（龙）：蓝到金之间夹一段红，过渡不再发灰 */
   background: linear-gradient(
     90deg,
     var(--dg-lo) 0%,
-    var(--accent) 42%,
-    var(--accent2) 68%,
+    var(--accent) 38%,
+    var(--bad) 64%,
     var(--gold) 100%
   );
 }
@@ -151,13 +159,18 @@
 
 /* ---------- 四条分项 ---------- */
 /* 四条分项不跟着通栏拉满：一条 600px 的进度条读起来反而费劲 */
+/* 四个分项 2×2 排，窄窗口下退回单列 */
 .dg-parts {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 8px 28px;
   margin: 14px 0 10px;
-  max-width: 560px;
   font-size: 12.5px;
+}
+@media (max-width: 760px) {
+  .dg-parts {
+    grid-template-columns: 1fr;
+  }
 }
 .dg-part {
   display: flex;
@@ -265,5 +278,53 @@
 }
 .rolebar.tall i {
   font-size: 11px;
+  font-weight: 600;
+}
+
+
+/* ---------- 面板里的「档案 + 地图表现」两栏 ---------- */
+.dg-sub {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 14px 20px;
+  margin: 14px 0 10px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .dg-sub {
+    grid-template-columns: 1fr;
+  }
+}
+.dg-sub-col {
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+:root[data-theme='light'] .dg-sub-col {
+  background: rgba(255, 255, 255, 0.6);
+}
+.dg-sub-col h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.dg-sub-col .kv {
+  margin: 0 0 8px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+.dg-sub-col table.t thead th {
+  background: none;
+}
+
+/* 战绩表里的胜负：绿红带光晕，和界面其它地方一致 */
+.dg-rows td.w {
+  color: var(--lit-ok);
+  text-shadow: 0 0 6px var(--lit-ok-glow);
+  font-weight: 600;
+}
+.dg-rows td.l {
+  color: var(--lit-bad);
+  text-shadow: 0 0 6px var(--lit-bad-glow);
   font-weight: 600;
 }

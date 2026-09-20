@@ -45,7 +45,7 @@ export default function CurrentMatch(): React.JSX.Element {
             ? '还没设置游戏目录，去右上角「设置」里选。'
             : cur || lobby
               ? '正在等名单…'
-              : '没在对局里。进游戏后会自动把房间里每个人都算好。'}
+              : '等待对局开始…进游戏后会自动把房间里每个人都算好。'}
         </div>
       ) : (
         <div className="teams">
