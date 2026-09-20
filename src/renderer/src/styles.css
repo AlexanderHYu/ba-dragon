@@ -406,3 +406,33 @@ table.t th.sorted {
   margin-bottom: 14px;
   font-size: 13px;
 }
+
+/* 提示条 */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 30;
+}
+.toast {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--dim);
+  border-radius: 8px;
+  padding: 9px 14px;
+  max-width: 420px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.toast.warn {
+  border-left-color: var(--warn);
+}
+.toast.error {
+  border-left-color: var(--bad);
+}
+.toast.info {
+  border-left-color: var(--t0);
+}

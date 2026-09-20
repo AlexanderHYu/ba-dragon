@@ -6,10 +6,37 @@ import type { AnalysisPlayer } from './batrace'
 import type { BatraceClient } from './batrace'
 import type { Db } from './db'
 
-/** 地图 ID → 名字：从玩家分析里见到一个记一个 */
+// 地图 ID → 名字：接口里没有地图表，只能从玩家分析的 mapPerformance 里见一个记一个。
+// 记进本地库，下次启动直接有，不然复盘页开头几次只能显示「地图#20」。
 const MAP_NAMES = new Map<number, string>()
+let mapDb: Db | null = null
+
+export function loadMapNames(db: Db): void {
+  mapDb = db
+  try {
+    const raw = db.meta('mapNames')
+    if (!raw) return
+    for (const [k, v] of Object.entries(JSON.parse(raw) as Record<string, string>)) MAP_NAMES.set(Number(k), v)
+  } catch {
+    /* 存坏了就当没有，下次见到再记 */
+  }
+}
+
 export function registerMapNames(list?: { mapId: number; mapName?: string }[]): void {
-  for (const m of list || []) if (m.mapName) MAP_NAMES.set(Number(m.mapId), m.mapName)
+  let changed = false
+  for (const m of list || []) {
+    if (!m.mapName) continue
+    if (MAP_NAMES.get(Number(m.mapId)) === m.mapName) continue
+    MAP_NAMES.set(Number(m.mapId), m.mapName)
+    changed = true
+  }
+  if (changed && mapDb) {
+    try {
+      mapDb.setMeta('mapNames', JSON.stringify(Object.fromEntries(MAP_NAMES)))
+    } catch {
+      /* 写不进去也只是下次要重新学 */
+    }
+  }
 }
 export function mapName(id?: number): string {
   if (id == null) return ''

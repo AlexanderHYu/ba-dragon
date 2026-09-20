@@ -9,6 +9,7 @@ import ReportView from './features/report/ReportView'
 import Decks from './features/decks/Decks'
 import Bans from './features/decks/Bans'
 import UpdateBanner from './components/UpdateBanner'
+import Toasts from './components/Toasts'
 
 export default function App(): React.JSX.Element {
   const { view, setView, setConfig, setSession, setQuery, patchCard, openPlayer, setOpenPlayer } = useStore()
@@ -27,6 +28,20 @@ export default function App(): React.JSX.Element {
       offCard()
     }
   }, [setConfig, setSession, setQuery, patchCard])
+
+  // 搜索结果里的卡片是空壳，点开时才去算（对局里的已经算好了）
+  useEffect(() => {
+    if (!openPlayer) return
+    const c = cardOf(openPlayer)
+    if (!c || c.dragonState !== 'idle') return
+    void window.BA.getPlayerCard(openPlayer).then(patchCard)
+  }, [openPlayer, patchCard])
+
+  // 冒烟测试用：带 ?smoke=1 启动时，允许外部直接打开某一局的复盘（截图验收）
+  useEffect(() => {
+    if (!location.search.includes('smoke=1')) return
+    ;(window as unknown as { __openReport?: (fid: string) => void }).__openReport = setReportFid
+  }, [])
 
   const card = cardOf(openPlayer)
 
@@ -76,6 +91,7 @@ export default function App(): React.JSX.Element {
         )}
         {view === 'settings' && <Settings />}
       </div>
+      <Toasts />
       {reportFid && <ReportView fid={reportFid} onClose={() => setReportFid(null)} />}
       {card && (
         <PlayerDrawer

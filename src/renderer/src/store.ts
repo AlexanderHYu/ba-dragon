@@ -35,10 +35,17 @@ export const useStore = create<State>((set) => ({
   setSession: (session) => set({ session }),
   setQuery: (query) => set({ query }),
   patchCard: (card) =>
-    set((s) => ({
-      query: { ...s.query, cards: s.query.cards.map((c) => (c.id === card.id ? card : c)) },
-      search: s.search.map((c) => (c.id === card.id ? card : c))
-    })),
+    set((s) => {
+      const inQuery = s.query.cards.some((c) => c.id === card.id)
+      const inSearch = s.search.some((c) => c.id === card.id)
+      return {
+        query: inQuery
+          ? { ...s.query, cards: s.query.cards.map((c) => (c.id === card.id ? card : c)) }
+          : s.query,
+        // 既不在对局里也不在搜索结果里（比如从档案点进来的）：放进搜索结果，详情才找得到
+        search: inSearch ? s.search.map((c) => (c.id === card.id ? card : c)) : inQuery ? s.search : [card, ...s.search]
+      }
+    }),
   setOpenPlayer: (openPlayer) => set({ openPlayer }),
   setSearch: (search, searching = false) => set({ search, searching }),
   setView: (view) => set({ view })

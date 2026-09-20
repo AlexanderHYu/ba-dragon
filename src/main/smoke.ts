@@ -1,5 +1,6 @@
 // 冒烟测试：BA_SMOKE=1 启动时跑一遍，确认窗口真的渲染出来了、IPC 通了，然后退出。
 // 纯逻辑归 vitest 管，这里只管「能不能起来」。
+import { writeFileSync } from 'node:fs'
 import { app, type BrowserWindow } from 'electron'
 
 export async function run(win: BrowserWindow): Promise<void> {
@@ -29,6 +30,17 @@ export async function run(win: BrowserWindow): Promise<void> {
       )
     }
     out.archive = await win.webContents.executeJavaScript('window.BA.listArchive().then(l => l.length)')
+    // 截图（BA_SMOKE_SHOT 给路径）：主界面一张，复盘页一张
+    const shot = process.env.BA_SMOKE_SHOT
+    if (shot) {
+      writeFileSync(shot.replace(/\.png$/, '') + '-main.png', (await win.webContents.capturePage()).toPNG())
+      if (fid) {
+        await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
+        await new Promise((r) => setTimeout(r, 1500))
+        writeFileSync(shot.replace(/\.png$/, '') + '-report.png', (await win.webContents.capturePage()).toPNG())
+      }
+      out.shots = true
+    }
   } catch (e) {
     out.error = String((e as Error)?.message || e)
   }

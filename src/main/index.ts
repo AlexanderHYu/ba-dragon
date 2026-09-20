@@ -8,7 +8,7 @@ import { Config } from './services/config'
 import { Db } from './services/db'
 import { BatraceClient } from './services/batrace'
 import { LogWatcher } from './services/logWatcher'
-import { PlayerService } from './services/players'
+import { PlayerService, loadMapNames } from './services/players'
 import { QueryService } from './services/query'
 import { DeckService } from './services/decks'
 import { Tracker } from './services/tracker'
@@ -68,8 +68,12 @@ function createWindow(): void {
     shell.openExternal(url)
     return { action: 'deny' }
   })
-  if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else win.loadFile(join(__dirname, '../renderer/index.html'))
+  const search = process.env.BA_SMOKE ? 'smoke=1' : ''
+  if (process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(process.env.ELECTRON_RENDERER_URL + (search ? '?' + search : ''))
+  } else {
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { search })
+  }
 }
 
 function startServices(): Services {
@@ -77,6 +81,7 @@ function startServices(): Services {
   const config = new Config(dataDir)
   const db = new Db(join(dataDir, 'dragon.sqlite'))
   db.importLegacyCache(dataDir) // 老版缓存搬过来，省一批请求
+  loadMapNames(db) // 地图名字是一点点学来的，存在库里
 
   const parser = new LogParser((type) => {
     // 日志事件：先把状态推给界面，进对局/名单变化时自动开查
