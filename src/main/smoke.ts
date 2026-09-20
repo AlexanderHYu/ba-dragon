@@ -192,6 +192,12 @@ export async function run(win: BrowserWindow): Promise<void> {
         await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
         await new Promise((r) => setTimeout(r, 1500))
         writeFileSync(shot.replace(/\.png$/, '') + '-report.png', (await win.webContents.capturePage()).toPNG())
+        // 总览页（双方对比横条那一页）也截一张
+        await win.webContents.executeJavaScript(
+          `(() => { const b = [...document.querySelectorAll('.rp-tab')].find((x) => /总览/.test(x.textContent || '')); if (b) b.click(); return !!b })()`
+        )
+        await new Promise((r) => setTimeout(r, 800))
+        writeFileSync(shot.replace(/\.png$/, '') + '-overview.png', (await win.webContents.capturePage()).toPNG())
       }
       out.shots = true
     }

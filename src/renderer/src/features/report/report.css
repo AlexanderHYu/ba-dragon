@@ -41,28 +41,35 @@
 .rp-tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
   margin-bottom: 14px;
 }
 .rp-meta {
   font-size: 12px;
 }
+/* 主标签：老版那种下划线式（.mr-tab），不是色块按钮 */
 .rp-tab {
-  padding: 6px 16px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--dim);
+  padding: 8px 14px;
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
 .rp-tab:hover:not(:disabled) {
-  background: var(--rp-hover);
-  border-color: var(--accent);
-  color: var(--text);
+  background: var(--row-hover);
+  border-color: transparent;
+  color: var(--text-2);
 }
-/* 选中的标签：不填满色块，用描边 + 淡底 + 下划线，深浅两套主题都读得清 */
 .rp-tab.active {
-  background: var(--rp-hit);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--accent);
+  background: none;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 700;
 }
 .rp-tab.active:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 26%, var(--card));
