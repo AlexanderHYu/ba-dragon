@@ -18,12 +18,13 @@ export default function PlayerPanel(): React.JSX.Element {
     if (openPlayer) boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [openPlayer])
 
-  // 搜索结果里的卡片是空壳，点开时才去算（对局里的已经算好了）
+  // 搜索结果里的卡片是空壳，点开时才去算（对局里的已经算好了）。
+  // 从复盘右键「调查羁绊」跳过来的人，本地压根没有卡片，也在这里补算
   useEffect(() => {
     if (!openPlayer) return
     const c = cardOf(openPlayer)
-    if (!c || c.dragonState !== 'idle') return
-    void window.BA.getPlayerCard(openPlayer, { name: c.name }).then(patchCard)
+    if (c && c.dragonState !== 'idle') return
+    void window.BA.getPlayerCard(openPlayer, { name: c?.name }).then(patchCard)
   }, [openPlayer, patchCard])
 
   const go = async (): Promise<void> => {

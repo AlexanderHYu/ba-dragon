@@ -1,11 +1,14 @@
 // 当前房间 / 对局：两队名单，每人一行，进对局自动开查，不用点。
 // 点一行不是弹窗，是把详细信息开在下面的「玩家查询」卡片里。
+import { useState } from 'react'
 import type { PlayerCard } from '@shared/ipc'
 import { useStore } from '../../store'
+import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import PlayerRow, { PlayerRowHead } from './PlayerRow'
 
 export default function CurrentMatch(): React.JSX.Element {
   const { query, session, status, openPlayer, setOpenPlayer } = useStore()
+  const [menu, setMenu] = useState<MenuState | null>(null)
   const cur = session?.snapshot.current
   const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
   const cards = query.cards
@@ -59,13 +62,20 @@ export default function CurrentMatch(): React.JSX.Element {
                 </div>
                 <PlayerRowHead />
                 {list.map((c) => (
-                  <PlayerRow key={c.id} card={c} active={openPlayer === c.id} onOpen={() => setOpenPlayer(c.id)} />
+                  <PlayerRow
+                    key={c.id}
+                    card={c}
+                    active={openPlayer === c.id}
+                    onOpen={() => setOpenPlayer(c.id)}
+                    onMenu={setMenu}
+                  />
                 ))}
               </div>
             ) : null
           )}
         </div>
       )}
+      <ContextMenu menu={menu} onClose={() => setMenu(null)} />
     </div>
   )
 }

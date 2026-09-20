@@ -198,6 +198,26 @@ export async function run(win: BrowserWindow): Promise<void> {
         await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
         await new Promise((r) => setTimeout(r, 1500))
         writeFileSync(shot.replace(/\.png$/, '') + '-report.png', (await win.webContents.capturePage()).toPNG())
+        // 右键一个玩家：菜单要弹出来，点「调查羁绊」要跳回主界面并打开这个人
+        out.ctxMenu = await win.webContents.executeJavaScript(`(async () => {
+          const row = document.querySelector('.rp-prow')
+          if (!row) return { row: false }
+          row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 200, clientY: 200 }))
+          // React 的状态更新是异步的，等一拍再看 DOM
+          await new Promise((r) => setTimeout(r, 300))
+          const menu = document.querySelector('.ctx-menu')
+          const items = menu ? [...menu.querySelectorAll('.ctx-item')].map((b) => b.textContent.trim()) : []
+          const bond = menu && [...menu.querySelectorAll('.ctx-item')].find((b) => /调查羁绊/.test(b.textContent))
+          if (bond) bond.click()
+          return { row: true, items, clicked: !!bond }
+        })()`)
+        await new Promise((r) => setTimeout(r, 700))
+        out.ctxJump = await win.webContents.executeJavaScript(
+          `!!document.querySelector('.pdetail') || !!document.querySelector('.card .empty')`
+        )
+        // 回到复盘页继续截图
+        await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
+        await new Promise((r) => setTimeout(r, 1200))
         // 总览页（双方对比横条那一页）也截一张
         await win.webContents.executeJavaScript(
           `(() => { const b = [...document.querySelectorAll('.rp-tab')].find((x) => /总览/.test(x.textContent || '')); if (b) b.click(); return !!b })()`

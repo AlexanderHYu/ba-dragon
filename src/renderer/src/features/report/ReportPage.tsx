@@ -4,6 +4,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { MatchReport, ReportPlayer, ReportTeam } from '@shared/match'
 import Mark from '../../components/Mark'
+import ContextMenu, { type MenuState } from '../../components/ContextMenu'
+import { useStore } from '../../store'
 import './report.css'
 
 // 从 current/PlayerRow 复制过来的：复盘页不再依赖对局页的文件。
@@ -380,6 +382,9 @@ function sortList<T>(list: T[], key: string, dir: 1 | -1): T[] {
 function Players({ r }: { r: MatchReport }): React.JSX.Element {
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'score', dir: -1 })
   const [open, setOpen] = useState<string | null>(null)
+  // 右键一个人：调查羁绊 / 复制 ID / 去 BATrace（老版就是这几项）
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  const { setPage, setOpenPlayer } = useStore()
   const head = (
     <tr>
       {PCOLS.map(([k, label, , tip]) => (
@@ -406,7 +411,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
 
   return (
     <>
-      <div className="dim rp-hint">点表头排序，点一行展开这个人的单位明细</div>
+      <ContextMenu menu={menu} onClose={() => setMenu(null)} />
       {order.map((t) => {
         const T = r.teams[t]
         const rows = sortList(
@@ -434,7 +439,29 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
                       <tr
                         className={'rp-prow' + (p.me ? ' me' : '') + (open === p.id ? ' open' : '')}
                         onClick={() => setOpen(open === p.id ? null : p.id)}
-                        title={open === p.id ? '点一下收起' : '点一下看这个人的单位明细'}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          setMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            title: p.name,
+                            items: [
+                              {
+                                label: '🔍 调查羁绊',
+                                onClick: () => {
+                                  setOpenPlayer(p.id)
+                                  setPage({ name: 'home' })
+                                }
+                              },
+                              { label: '📋 复制 ID', onClick: () => void navigator.clipboard.writeText(p.id) },
+                              {
+                                label: '🌐 在 BATrace 打开',
+                                onClick: () => window.BA.openExternal('https://app.batrace.top/player/' + p.id)
+                              }
+                            ]
+                          })
+                        }}
+                        title={open === p.id ? '点一下收起' : '点一下看这个人的单位明细；右键有更多'}
                       >
                         {PCOLS.map(([k, , render]) => (
                           <td key={String(k)}>{render(p)}</td>
