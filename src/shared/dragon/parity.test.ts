@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { MatchInfo } from '../types/batrace'
 import { analyzeMatch } from './score'
 import { awardTitles, titleMetrics } from './titles'
+import { buildMatchReport } from '../match/report'
 
 const LEGACY = process.env.BA_LEGACY || 'H:/github/brokenarrow-log-maggot'
 const DATA = process.env.BA_DATA || join(process.env.APPDATA || '', 'broken-arrow-log-assistant')
@@ -59,6 +60,16 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
     for (const { fid, mi } of matches) {
       const a = analyzeMatch(mi, fid)
       const b = oldScore.analyzeMatch(mi, fid)
+      expect(JSON.parse(JSON.stringify(a)), '对局 ' + fid).toEqual(JSON.parse(JSON.stringify(b)))
+    }
+  })
+
+  it('单局复盘页的所有数字完全一致', () => {
+    const oldReport = require(join(LEGACY, 'src', 'matchReport.js'))
+    for (const { fid, mi } of matches) {
+      const review = analyzeMatch(mi, fid)
+      const a = buildMatchReport(mi, { fid, review })
+      const b = oldReport.buildMatchReport(mi, { fid, review: oldScore.analyzeMatch(mi, fid) })
       expect(JSON.parse(JSON.stringify(a)), '对局 ' + fid).toEqual(JSON.parse(JSON.stringify(b)))
     }
   })
