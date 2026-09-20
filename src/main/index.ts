@@ -39,6 +39,10 @@ export interface Services {
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
 }
 
+// 只允许开一个：两个实例同时写本地库会打架，再点图标就把已开的窗口叫到前面
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) app.quit()
+
 let win: BrowserWindow | null = null
 let services: Services | null = null
 
@@ -47,9 +51,11 @@ const send = <T,>(channel: string, payload?: T): void => {
 }
 
 function createWindow(): void {
+  // 窗口大小位置记在设置里，下次开还是这么大
+  const saved = (services?.config.get('windowBounds') as { width?: number; height?: number } | undefined) || {}
   win = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    width: Math.max(900, Number(saved.width) || 1280),
+    height: Math.max(600, Number(saved.height) || 860),
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -66,6 +72,14 @@ function createWindow(): void {
     win?.show()
     // 冒烟测试：起得来就退出，不用人看着
     if (process.env.BA_SMOKE && win) void import('./smoke').then((m) => m.run(win as BrowserWindow))
+  })
+  win.on('close', () => {
+    try {
+      const b = win?.getBounds()
+      if (b && !win?.isMaximized()) services?.config.set({ windowBounds: { width: b.width, height: b.height } })
+    } catch {
+      /* 记不住就算了 */
+    }
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -181,6 +195,13 @@ function startServices(): Services {
   }
   return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, replays, send, session, queryRoster }
 }
+
+app.on('second-instance', () => {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+})
 
 app.whenReady().then(() => {
   services = startServices()

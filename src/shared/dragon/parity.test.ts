@@ -45,6 +45,8 @@ function cachedMatches(): { fid: string; mi: MatchInfo }[] {
 }
 
 describe.runIf(ready)('和 4.0.x 老版对拍', () => {
+  // describe.skip 仍然会执行这个函数体来收集用例，所以 require 必须放在这道门后面
+  if (!ready) return
   const require = createRequire(import.meta.url)
   const oldScore = require(legacyScore)
   const oldTitles = require(join(LEGACY, 'src', 'matchTitles.js'))

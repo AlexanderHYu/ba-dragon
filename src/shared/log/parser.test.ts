@@ -34,6 +34,8 @@ function recentLogs(dir: string, n = 3): string[] {
 }
 
 describe.runIf(ready)('日志解析和 4.0.x 对拍', () => {
+  // describe.skip 仍然会执行这个函数体来收集用例，所以 require 必须放在这道门后面
+  if (!ready) return
   const require = createRequire(import.meta.url)
   const Old = require(legacyParser).LogParser as new (cb: (t: string, d?: unknown) => void) => {
     feed(lines: string[]): void

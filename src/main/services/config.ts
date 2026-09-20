@@ -33,7 +33,9 @@ export const DEFAULTS: Settings = {
   /** 录像保存目录（空 = 数据目录下的 replays） */
   replaySaveDir: '',
   /** 自动删除多少天前的录像（0 = 不删） */
-  replayKeepDays: 0
+  replayKeepDays: 0,
+  /** 窗口大小（关的时候记一下） */
+  windowBounds: { width: 1280, height: 860 }
 }
 
 const KNOWN = Object.keys(DEFAULTS)
