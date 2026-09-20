@@ -235,3 +235,38 @@ tr.replay-row.active > td:first-child {
     min-width: 0;
   }
 }
+
+
+/* 全屏播放：黑底铺满，控制条和兵力曲线压在底部 */
+.bplayer.full {
+  background: #000;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.bplayer.full .bplayer-head {
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+}
+.bplayer.full video {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  background: #000;
+}
+.bplayer.full .bplayer-bar,
+.bplayer.full .bplayer-ctrl,
+.bplayer.full .bplayer-note {
+  padding-left: 14px;
+  padding-right: 14px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.bplayer-full {
+  padding: 3px 9px;
+}

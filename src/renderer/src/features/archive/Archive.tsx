@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ArchiveItem } from '@shared/ipc'
 import { scoreColor } from '../current/PlayerRow'
+import Pager, { pageSlice } from '../../components/Pager'
 import './archive.css'
+
+const PAGE_SIZE = 5
 
 function fmtTime(ms: number | null): string {
   if (!ms) return '—'
@@ -38,6 +41,7 @@ function Elo({ mine }: { mine: ArchiveItem['mine'] }): React.JSX.Element {
 export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): React.JSX.Element {
   const [list, setList] = useState<ArchiveItem[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(0)
 
   const reload = useCallback(async (): Promise<void> => {
     setBusy(true)
@@ -52,6 +56,8 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
     void reload()
   }, [reload])
 
+  const { items: shown, page: cur } = pageSlice(list || [], page, PAGE_SIZE)
+
   return (
     <div className="card">
       <h2>
@@ -65,9 +71,9 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
       </h2>
 
       {!list?.length ? (
-        <div className="empty">还没有对局。打完一局，或者在上面点「上一局复盘」。</div>
+        <div className="empty">还没有对局。打完一局就会出现在这里。</div>
       ) : (
-        <div className="archive-wrap archive-scroll">
+        <div className="archive-wrap">
           <table className="t archive-t">
             <thead>
               <tr>
@@ -81,7 +87,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
               </tr>
             </thead>
             <tbody>
-              {list.map((m) => {
+              {shown.map((m) => {
                 const won = m.mine?.won
                 return (
                   <tr key={m.fid} onClick={() => onOpen(m.fid)} title="点开看这局复盘">
@@ -107,6 +113,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
               })}
             </tbody>
           </table>
+          <Pager page={cur} pageSize={PAGE_SIZE} total={list.length} onPage={setPage} />
         </div>
       )}
     </div>

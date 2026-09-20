@@ -114,20 +114,6 @@ export default function Decks(): React.JSX.Element {
     }
   }
 
-  const teammates = (
-    <div className="card">
-      <h2>队友卡组</h2>
-      <div className="deck-note">
-        <p>看不到，也做不出来。</p>
-        <p>
-          游戏日志里只有本机玩家自己的 <code>Deck set to:</code> 这一行，队友（和对手）换了什么卡组，日志里根本没写；
-          BATrace 的公开接口也只给战绩和单位使用情况，不给对局里每个人的卡组。
-        </p>
-        <p className="dim">所以这一块不会有数据。这里不放假数据，也不留空列表占位。</p>
-      </div>
-    </div>
-  )
-
   if (!data) {
     return (
       <>
@@ -135,7 +121,6 @@ export default function Decks(): React.JSX.Element {
           <h2>卡组工具</h2>
           <div className="empty">读卡组中…</div>
         </div>
-        {teammates}
       </>
     )
   }
@@ -162,7 +147,6 @@ export default function Decks(): React.JSX.Element {
             </button>
           </div>
         </div>
-        {teammates}
       </>
     )
   }
@@ -339,8 +323,6 @@ export default function Decks(): React.JSX.Element {
           </section>
         </div>
       </div>
-
-      {teammates}
     </>
   )
 }

@@ -216,6 +216,8 @@ export interface IpcMap {
   'replay:encoders': [void, string[]]
   'replay:openFolder': [string | void, void]
   'replay:logs': [void, string[]]
+  'replay:selectDir': [void, string | null]
+  'match:sync': [void, { added: number; accounts: number } | { error: string }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   'update:get': [void, UpdateInfo | null]
   'update:install': [void, boolean]

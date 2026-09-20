@@ -71,6 +71,34 @@ export async function run(win: BrowserWindow): Promise<void> {
       )
     }
     out.archive = await win.webContents.executeJavaScript('window.BA.listArchive().then(l => l.length)')
+    // 卡组列表（界面上卡在「读卡组中」）
+    out.decks = await win.webContents.executeJavaScript(
+      `window.BA.listDecks().then((d) => ({ found: d.found, dir: d.dir, decks: d.decks.length, backups: d.backups.length }), (e) => ({ error: String(e && e.message || e) }))`
+    )
+    // 每个 IPC 通道都 ping 一遍：删代码删漏了要立刻发现
+    out.ipc = await win.webContents.executeJavaScript(`(async () => {
+      const calls = {
+        config: () => window.BA.getConfig(),
+        status: () => window.BA.getStatus(),
+        session: () => window.BA.getSession(),
+        queryState: () => window.BA.getQueryState(),
+        archive: () => window.BA.listArchive(),
+        decks: () => window.BA.listDecks(),
+        replays: () => window.BA.listReplays(),
+        replayStatus: () => window.BA.getReplayStatus(),
+        replayLogs: () => window.BA.getReplayLogs(),
+        displays: () => window.BA.listDisplays(),
+        bond: () => window.BA.getBond('40710'),
+        bans: () => window.BA.getBans(),
+        version: () => window.BA.getVersion(),
+        update: () => window.BA.getUpdateInfo()
+      }
+      const bad = []
+      for (const [k, fn] of Object.entries(calls)) {
+        try { await fn() } catch (e) { bad.push(k + ': ' + String(e && e.message || e)) }
+      }
+      return { checked: Object.keys(calls).length, bad }
+    })()`)
     // 启动补读历史日志时不能开录（不然每次打开软件都会弹「没有录到画面」）
     await new Promise((r) => setTimeout(r, 4000))
     out.replay = await win.webContents.executeJavaScript(
@@ -139,9 +167,15 @@ export async function run(win: BrowserWindow): Promise<void> {
 
   const dom = out.dom as { rendered?: boolean; hasBridge?: boolean } | undefined
   const rep = out.report as { players?: number; error?: string } | undefined
+  const ipc = out.ipc as { bad?: string[] } | undefined
   const rec = out.rec as { ok?: boolean } | undefined
   const ok =
-    !!dom?.rendered && !!dom?.hasBridge && !out.error && (!rep || (rep.players ?? 0) > 0) && (!rec || !!rec.ok)
+    !!dom?.rendered &&
+    !!dom?.hasBridge &&
+    !out.error &&
+    !ipc?.bad?.length &&
+    (!rep || (rep.players ?? 0) > 0) &&
+    (!rec || !!rec.ok)
   const line = 'SMOKE ' + JSON.stringify({ ok, ...out })
   console.log(line)
   // 打包后的 exe 是 GUI 程序，标准输出拿不到，所以也写一份文件（验收打包产物用）

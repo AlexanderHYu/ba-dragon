@@ -209,6 +209,47 @@ export function registerIpc(s: Services): void {
     else void shell.openPath(s.replays.dir())
   })
   on('replay:logs', () => s.replays.recentLogs())
+  on('replay:selectDir', async () => {
+    const r = await dialog.showOpenDialog({ properties: ['openDirectory'], title: '选择录像保存目录' })
+    if (r.canceled || !r.filePaths[0]) return null
+    s.config.set({ replaySaveDir: r.filePaths[0] })
+    return r.filePaths[0]
+  })
+
+  on('match:sync', async () => {
+    try {
+      return await s.sync.run()
+    } catch (e) {
+      return { error: String((e as Error)?.message || e) }
+    }
+  })
+
+  // ---------- 卡组 ----------
+  on('deck:list', () => ({
+    found: s.decks.found(),
+    dir: s.decks.decksDir,
+    backupDir: s.decks.backupDir,
+    decks: s.decks.list(),
+    backups: s.decks.backups()
+  }))
+  on('deck:backup', (arg) => s.decks.backup(arg?.name, arg?.only))
+  on('deck:restore', ({ name, overwrite }) => s.decks.restore(name, { overwrite }))
+  on('deck:deleteDecks', (names) => s.decks.deleteDecks(names || []))
+  on('deck:deleteBackups', (names) => s.decks.deleteBackups(names || []))
+  on('deck:openDir', (which) => {
+    void shell.openPath(which === 'backups' ? s.decks.backupDir : s.decks.decksDir)
+  })
+
+  // ---------- 追踪 / 封禁 ----------
+  on('tracker:bond', (pid) => s.tracker.bond(String(pid)))
+  on('ban:get', () => s.bans.latest())
+  on('ban:check', async () => {
+    try {
+      return await s.bans.check()
+    } catch (e) {
+      return { error: String((e as Error)?.message || e) }
+    }
+  })
 
   on('app:version', () => {
     const u = s.updater.latest()

@@ -41,6 +41,8 @@ const api = {
   listEncoders: () => invoke('replay:encoders'),
   openReplayFolder: (key?: string) => invoke('replay:openFolder', key),
   getReplayLogs: () => invoke('replay:logs'),
+  selectReplayDir: () => invoke('replay:selectDir'),
+  syncMatches: () => invoke('match:sync'),
 
   getVersion: () => invoke('app:version'),
   getUpdateInfo: () => invoke('update:get'),

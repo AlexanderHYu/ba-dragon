@@ -208,6 +208,15 @@ export class BatraceClient {
     )
   }
 
+  /** 本机最近对局（后台同步用，30 分钟缓存，保证每小时能真拉一次） */
+  playerMatchesRecent(stbid: string, limit = 10): Promise<{ matches?: MatchEntry[] }> {
+    return this.get(
+      `/api/players/matches?stbid=${encodeURIComponent(stbid)}&limit=${limit}`,
+      `myMatches:${stbid}:${limit}`,
+      30 * 60 * 1000
+    )
+  }
+
   /** 单局原始数据（含 UnitData），24 小时缓存 */
   matchById(matchId: string | number): Promise<{ matchInfo?: MatchInfo }> {
     return this.get(
@@ -219,6 +228,19 @@ export class BatraceClient {
 
   leaderboardBan(limit = 500, offset = 0): Promise<{ players?: { stbid: string; name: string }[] }> {
     return this.get(`/api/leaderboard/ban?limit=${limit}&offset=${offset}`, `ban:${limit}:${offset}`, 3600 * 1000)
+  }
+
+  /**
+   * 轻量探活：拿一条搜索结果就行，用来点亮顶栏的状态灯。
+   * 不走缓存（缓存命中就探不出对面活没活），一次启动只探一次。
+   */
+  async probe(): Promise<boolean> {
+    try {
+      await this.schedule(() => this.fetchJson('/api/players/search?q=test&limit=1'))
+      return true
+    } catch {
+      return false
+    }
   }
 
   units(): Promise<{ units?: UnitInfo[] }> {

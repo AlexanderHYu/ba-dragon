@@ -15,7 +15,8 @@ import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
 import { Updater } from './services/updater'
 import { ReplayService } from './services/replays'
-import { migrateLegacy } from './services/migrate'
+import { migrateLegacy, legacyLocalIds } from './services/migrate'
+import { MatchSync } from './services/matchSync'
 import { registerIpc } from './ipc'
 
 // 录像播放走自定义协议 replay://local/<文件名>：支持 Range 请求，拖进度条只读需要的那一段
@@ -39,6 +40,7 @@ export interface Services {
   bans: BanService
   updater: Updater
   replays: ReplayService
+  sync: MatchSync
   send: <T>(channel: string, payload?: T) => void
   session: () => SessionState
   queryRoster: (opts?: { prev?: boolean; refresh?: boolean }) => void
@@ -152,6 +154,19 @@ function startServices(): Services {
   const tracker = new Tracker(db)
   const client = new BatraceClient({ db, delayMs: () => Number(config.get('apiDelayMs')) || 1200 })
   const bans = new BanService(client, db)
+  // 本机账号：日志里认出来的 + 老数据里记过的
+  const localIds = (): string[] => {
+    const snap = parser.snapshot()
+    const ids = new Set(legacyLocalIds(db))
+    if (snap.localName) {
+      for (const m of [snap.current, ...parser.archived]) {
+        for (const pl of m?.players || []) if (pl.name === snap.localName) ids.add(pl.id)
+      }
+    }
+    return [...ids]
+  }
+  const sync = new MatchSync(client, db, tracker, localIds)
+
   const replays = new ReplayService(config, db, {
     status: (st) => send('replay:status', st),
     changed: () => send('replay:changed'),
@@ -195,6 +210,13 @@ function startServices(): Services {
 
   watcher.start()
   replays.registerProtocol()
+  // 启动后探一次 BATrace（一个很小的请求），否则顶栏一直显示「待请求」
+  setTimeout(() => void client.probe().then(() => send('app:status', null)), 3000)
+  // 每小时同步一次本机最近对局，对局档案会自己长起来（每个账号 1 个请求）
+  if (config.get('matchSyncEnabled')) {
+    setTimeout(() => void sync.run().catch(() => undefined), 20000)
+    sync.start()
+  }
   // 封禁名单：启动后等一会查一次（其余时候手动刷新），查到熟人被封就提示
   if (config.get('banCheckOnStart')) {
     setTimeout(() => {
@@ -208,7 +230,7 @@ function startServices(): Services {
         .catch(() => undefined)
     }, 10000)
   }
-  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, replays, send, session, queryRoster }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, replays, sync, send, session, queryRoster }
 }
 
 app.on('second-instance', () => {
@@ -236,6 +258,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  services?.sync.stop()
   services?.replays.abort() // 录到一半退出：先把 ffmpeg 停掉
   services?.watcher.stop()
   services?.db.close()

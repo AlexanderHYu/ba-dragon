@@ -24,6 +24,8 @@ type Timeline = MatchReport['timeline']
 export default function Player({ item, onClose }: { item: ReplayItem; onClose: () => void }): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null)
   const bar = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [full, setFull] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [cur, setCur] = useState(0)
   const [dur, setDur] = useState(0)
@@ -37,6 +39,12 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
   const src = 'replay://local/' + encodeURIComponent(item.id)
 
   // 兵力曲线：拿不到就当没有（自定义局、BATrace 还没同步、没网都可能），不报错也不重试
+  useEffect(() => {
+    const onChange = (): void => setFull(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
   useEffect(() => {
     let alive = true
     setTl(null)
@@ -118,16 +126,27 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
     v.currentTime = ratioAt(clientX) * v.duration
   }
 
+  // 全屏：整个播放器一起进全屏，控制条和兵力曲线都还在
+  const toggleFull = (): void => {
+    const el = boxRef.current
+    if (!el) return
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void el.requestFullscreen().catch(() => undefined)
+  }
+
   const played = dur > 0 ? Math.min(1, cur / dur) * 100 : 0
   const hoverVals = curve && hover ? curve.rows.map((row) => row[hover.i] ?? 0) : null
 
   return (
-    <div className="bplayer">
+    <div className={'bplayer' + (full ? ' full' : '')} ref={boxRef}>
       <div className="bplayer-head">
         <b>{item.map || '录像'}</b>
         <span className="dim">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
         <span className="grow" />
         <button onClick={() => void window.BA.openReplayFolder(item.id)}>定位文件</button>
+        <button onClick={toggleFull} title="全屏（Esc 或再点一次退出）">
+          {full ? '⤢ 退出全屏' : '⛶ 全屏'}
+        </button>
         <button onClick={onClose}>✕</button>
       </div>
 
@@ -244,6 +263,9 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
           ))}
         </span>
         <span className="grow" />
+        <button className="bplayer-full" onClick={toggleFull} title="全屏（Esc 退出）">
+          {full ? '⤢' : '⛶'}
+        </button>
         <span className="bplayer-vol">
           <button onClick={() => setVol(vol > 0 ? 0 : 1)}>{vol > 0 ? '🔊' : '🔇'}</button>
           <input

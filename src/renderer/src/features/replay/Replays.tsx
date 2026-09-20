@@ -1,6 +1,7 @@
 // 行车记录仪：开关、录哪块屏、画质，以及本地录像列表。
 // 录制是自动的——进对局开录，打完合成存盘，这里只管设置和查看。
 import { useEffect, useState } from 'react'
+import Pager, { pageSlice } from '../../components/Pager'
 import type { DisplayChoice, ReplayItem } from '@shared/ipc'
 import { useStore } from '../../store'
 import Player from './Player'
@@ -24,6 +25,9 @@ export default function Replays(): React.JSX.Element {
   const [logs, setLogs] = useState<string[]>([])
   /** 正在播的那一条（点列表某一行就在卡片里开播放器） */
   const [playing, setPlaying] = useState<ReplayItem | null>(null)
+  const [page, setPage] = useState(0)
+
+  const { items: shown, page: cur } = pageSlice(list, page, 5)
 
   const reload = (): void => {
     void window.BA.listReplays().then((l) => {
@@ -160,7 +164,7 @@ export default function Replays(): React.JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {list.map((r) => (
+          {shown.map((r) => (
             <tr
               key={r.id}
               className={'replay-row' + (playing?.id === r.id ? ' active' : '')}
@@ -193,6 +197,7 @@ export default function Replays(): React.JSX.Element {
           )}
         </tbody>
       </table>
+      <Pager page={cur} pageSize={5} total={list.length} onPage={setPage} />
 
       <div className="row" style={{ marginTop: 8 }}>
         <button
