@@ -63,7 +63,8 @@ export const WANTED_COMBAT = new Set([
   'UnitAbilitiesJson',
   'SquadMembersJson',
   'SensorsJson',
-  'MobilityJson'
+  'MobilityJson',
+  'SpecializationAvailabilitiesJson'
 ])
 
 const ASSET_NODE = 'globalgamemanagers.assets'

@@ -28,7 +28,8 @@ export function buildCombat(r: RawTables): CombatData {
       n(u.MaxStress),
       n(u.Stealth),
       n(u.CategoryType),
-      n(u.Role)
+      n(u.Role),
+      n(u.CountryId)
     ] as CUnit
   }
 
@@ -125,7 +126,12 @@ export function buildCombat(r: RawTables): CombatData {
       n(a.DispersionVerticalRadius),
       n(a.MinimalRange),
       n(a.CriticMultiplier),
-      n(a.IgnoreCover)
+      n(a.IgnoreCover),
+      b(a.NoDamageFalloff),
+      n(a.Seeker),
+      n(a.DispersionMinimal),
+      n(a.LoftAngle),
+      n(a.LoftHeight)
     ] as CAmmo
   }
 
@@ -199,6 +205,19 @@ export function buildCombat(r: RawTables): CombatData {
     ;(unitOptions[m.unitId] ||= []).push([m.name, list])
   }
 
+  // 哪个单位能出现在哪个专精里（筛选用）
+  const unitSpecs: Record<number, number[]> = {}
+  for (const x of row('SpecializationAvailabilitiesJson')) {
+    const uid = n(x.UnitId)
+    const sid = n(x.SpecializationId)
+    if (!uid || !sid) continue
+    ;(unitSpecs[uid] ||= []).push(sid)
+  }
+  const specs: Record<number, [string, number]> = {}
+  for (const x of row('SpecializationsJson')) specs[n(x.Id)] = [s(x.Name), n(x.CountryId)]
+  const countries: Record<number, string> = {}
+  for (const x of row('CountriesJson')) countries[n(x.Id)] = s(x.Name)
+
   const sensors: Record<number, [string, number, number, number]> = {}
   for (const x of row('SensorsJson')) {
     sensors[n(x.Id)] = [s(x.Name), n(x.OpticsGround), n(x.OpticsLowAltitude), n(x.OpticsHighAltitude)]
@@ -236,6 +255,9 @@ export function buildCombat(r: RawTables): CombatData {
     options,
     squad,
     unitOptions,
+    unitSpecs,
+    specs,
+    countries,
     sensors,
     mobility
   }

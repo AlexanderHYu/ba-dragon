@@ -1,19 +1,20 @@
-// 配装计算器：选一个攻击单位、一个目标，看每件武器每种弹药打上去是什么结果。
-// 数据来自游戏自带的表；哪些是直读、哪些是推算，表格和下面的说明里都标了。
+// 配装计算器：选攻击单位、目标、距离，剩下的自己算——
+// 哪件武器会用哪种弹、打不打得中、穿不穿得动、几发几秒打死、溅射能盖多远。
 import { useEffect, useMemo, useState } from 'react'
 import { COMBAT, type CombatData } from '@shared/game/combat'
 import {
   CLASS_NAME,
   FACE_NAME,
   aoeCurve,
-  canTarget,
-  hitChance,
+  apsAgainst,
+  engage,
+  guidedHit,
+  isGuided,
   lethalRadius,
   profileOf,
-  shotAt,
   type AmmoProfile,
+  type Engagement,
   type Facing,
-  type Falloff,
   type UnitProfile
 } from '@shared/combat/model'
 import UnitPicker, { defaultOpts } from './UnitPicker'
@@ -21,11 +22,11 @@ import AoeChart from './AoeChart'
 import './calc.css'
 
 const FACES: Facing[] = ['front', 'side', 'rear', 'top']
+const pct = (x: number): string => Math.round(x * 100) + '%'
 
 export default function Calculator(): React.JSX.Element {
   /** 主进程给的那份（本机解过就是最新的），没拿到之前先用打包进来的 */
   const [data, setData] = useState<CombatData>(COMBAT)
-  // 默认拿两辆主战坦克对打，配装按游戏的默认件选好
   const [attacker, setAttacker] = useState<{ unit: number; opts: number[] }>(() => ({
     unit: 191,
     opts: defaultOpts(COMBAT, 191)
@@ -36,9 +37,9 @@ export default function Calculator(): React.JSX.Element {
   }))
   const [dist, setDist] = useState(500)
   const [facing, setFacing] = useState<Facing>('front')
-  const [falloff, setFalloff] = useState<Falloff>('linear')
-  const [decoy, setDecoy] = useState(true)
-  const [onlyUsable, setOnlyUsable] = useState(true)
+  const [flares, setFlares] = useState(1)
+  const [stress, setStress] = useState(1)
+  const [open, setOpen] = useState<number | null>(null)
 
   useEffect(() => {
     void window.BA.getCombatData().then((d) => {
@@ -53,28 +54,25 @@ export default function Calculator(): React.JSX.Element {
 
   const A = useMemo(() => profileOf(attacker.unit, attacker.opts, data), [attacker, data])
   const T = useMemo(() => profileOf(target.unit, target.opts, data), [target, data])
-
-  const rows = useMemo(() => {
-    if (!A || !T) return []
-    const out: { w: (typeof A.weapons)[number]; a: AmmoProfile; r: ReturnType<typeof shotAt> }[] = []
-    for (const w of A.weapons) {
-      for (const a of w.ammo) {
-        const r = shotAt(w, a, T, dist, facing)
-        if (onlyUsable && !r.usable) continue
-        out.push({ w, a, r })
-      }
-    }
-    return out.sort((x, y) => y.r.dps - x.r.dps || y.r.dmg - x.r.dmg)
-  }, [A, T, dist, facing, onlyUsable])
+  const opts = useMemo(() => ({ flares, stress }), [flares, stress])
+  const list = useMemo(() => (A && T ? engage(A, T, dist, facing, opts) : []), [A, T, dist, facing, opts])
 
   const maxRange = useMemo(
     () => Math.max(700, ...(A?.weapons.flatMap((w) => w.ammo.map((a) => Math.max(a.range, a.lowAlt, a.highAlt))) || [])),
     [A]
   )
 
-  const aoeAmmo = useMemo(() => rows.filter((x) => x.a.aoe > 0).map((x) => x.a), [rows])
+  // 有溅射的那几种弹，画曲线用
+  const aoeList = useMemo(() => {
+    const out: AmmoProfile[] = []
+    for (const e of list) {
+      for (const x of e.all) if (x.ammo.aoe > 0 && !out.some((a) => a.id === x.ammo.id)) out.push(x.ammo)
+    }
+    return out
+  }, [list])
   const [aoePick, setAoePick] = useState(0)
-  const aoe = aoeAmmo[Math.min(aoePick, aoeAmmo.length - 1)]
+  const aoe = aoeList[Math.min(aoePick, aoeList.length - 1)]
+  const anyGuided = list.some((e) => e.best && isGuided(e.best))
 
   return (
     <div className="calc">
@@ -83,19 +81,12 @@ export default function Calculator(): React.JSX.Element {
           <span className="ico">🧮</span>
           配装计算器
           <span className="dim">
-            数据来自游戏自带的单位表
-            {data.meta?.updatedAt ? '（' + data.meta.updatedAt + '）' : ''}
+            按游戏本体的算法算{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}
           </span>
         </h2>
 
         <div className="calc-pickers">
-          <UnitPicker
-            title="攻击方"
-            data={data}
-            value={attacker}
-            onChange={setAttacker}
-            profile={A}
-          />
+          <UnitPicker title="攻击方" data={data} value={attacker} onChange={setAttacker} profile={A} />
           <UnitPicker title="目标" data={data} value={target} onChange={setTarget} profile={T} />
         </div>
 
@@ -119,75 +110,84 @@ export default function Calculator(): React.JSX.Element {
               </button>
             ))}
           </div>
-          <label className="calc-check">
-            <input type="checkbox" checked={onlyUsable} onChange={(e) => setOnlyUsable(e.target.checked)} />
-            只看能打这类目标的弹药
-          </label>
         </div>
+        {anyGuided && (
+          <div className="calc-controls">
+            <label className="calc-range">
+              目标放了 <b>{flares}</b> 发干扰弹
+              <input
+                type="range"
+                min={0}
+                max={4}
+                step={1}
+                value={flares}
+                onChange={(e) => setFlares(Number(e.target.value))}
+              />
+            </label>
+            <label className="calc-range">
+              射手状态 <b>{pct(stress)}</b>
+              <input
+                type="range"
+                min={0.3}
+                max={1}
+                step={0.05}
+                value={stress}
+                onChange={(e) => setStress(Number(e.target.value))}
+              />
+              <span className="dim">被压制会降命中</span>
+            </label>
+          </div>
+        )}
       </div>
 
       {A && T && (
         <>
           <div className="card">
             <h2>
-              打上去什么样
+              {A.name} 打 {T.name}
               <span className="dim">
-                {A.name} → {T.name}（{CLASS_NAME[T.klass]}，HP {T.hp}
-                {T.klass === 'inf' ? '，护甲 ' + T.infArmor : '，' + FACE_NAME[facing] + '动能 ' + T.kin[FACES.indexOf(facing)] + ' / 破甲 ' + T.heat[FACES.indexOf(facing)]}）
+                {CLASS_NAME[T.klass]} · HP {T.hp} ·{' '}
+                {T.klass === 'inf'
+                  ? '护甲 ' + T.infArmor
+                  : FACE_NAME[facing] +
+                    ' 动能 ' +
+                    T.kin[FACES.indexOf(facing)] +
+                    ' / 破甲 ' +
+                    T.heat[FACES.indexOf(facing)]}
               </span>
             </h2>
+
             <div className="calc-scroll">
               <table className="t calc-table">
                 <thead>
                   <tr>
                     <th>武器</th>
-                    <th>弹药</th>
-                    <th className="num" title="这个距离上的穿深（近距穿深按射程线性掉到远距穿深）">穿深</th>
-                    <th className="num" title="目标这一面的装甲（破甲弹看破甲装甲，动能弹看动能装甲）">装甲</th>
-                    <th className="num">单发伤害</th>
-                    <th className="num" title="打死要几发（血量 ÷ 单发伤害）">几发</th>
+                    <th>会用哪种弹</th>
+                    <th className="num" title="非制导按散布和目标投影面积算；制导 = 基础命中 × ECM × 干扰弹 × 状态">
+                      命中率
+                    </th>
+                    <th className="num" title="这个距离上的穿深 vs 目标这一面的装甲">穿深/装甲</th>
+                    <th className="num">打中掉多少血</th>
+                    <th className="num" title="命中 × 直击 + 未命中 × 溅射">一发期望</th>
+                    <th className="num">打死要几发</th>
                     <th className="num" title="含瞄准和装填">几秒</th>
-                    <th className="num" title="持续输出：单发伤害 ÷ 平均每发耗时，班组按人数乘">每秒</th>
-                    <th className="num" title="压制条打满要几发">压满</th>
+                    <th className="num" title="期望伤害 ÷ 每发耗时，班组按人数乘">每秒</th>
                     <th className="num">射程</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ w, a, r }) => (
-                    <tr key={w.id + ':' + a.id} className={r.through ? '' : 'calc-nopen'}>
-                      <td>
-                        {w.name}
-                        {w.count > 1 && <span className="dim"> ×{w.count}</span>}
-                      </td>
-                      <td>
-                        {a.name}
-                        <span className="calc-tags">
-                          {a.armorType === 1 ? <i className="tag kin">动能</i> : a.armorType === 2 ? <i className="tag heat">破甲</i> : null}
-                          {a.aoe > 0 && <i className="tag aoe">AOE {a.aoe}m</i>}
-                          {a.topAttack && <i className="tag">顶攻</i>}
-                          {a.laser && <i className="tag">激光</i>}
-                          {a.intercept && <i className="tag warn">可被 APS 拦</i>}
-                          {!r.usable && <i className="tag dimtag">不打这类</i>}
-                        </span>
-                      </td>
-                      <td className="num">{r.pen}</td>
-                      <td className="num">{r.armor}</td>
-                      <td className="num">
-                        {r.through ? r.dmg : <span className="lit-bad">打不穿</span>}
-                      </td>
-                      <td className="num">{r.shots ?? '—'}</td>
-                      <td className="num">{r.seconds ?? '—'}</td>
-                      <td className="num">{r.dps || '—'}</td>
-                      <td className="num dim">{r.stressShots ?? '—'}</td>
-                      <td className={'num' + (r.inRange ? '' : ' lit-bad')}>
-                        {Math.round(T.klass === 'plane' ? a.highAlt || a.range : T.klass === 'heli' ? a.lowAlt || a.range : a.range)}
-                      </td>
-                    </tr>
+                  {list.map((e, i) => (
+                    <Row
+                      key={e.weapon.id + ':' + i}
+                      e={e}
+                      open={open === i}
+                      onToggle={() => setOpen(open === i ? null : i)}
+                    />
                   ))}
-                  {!rows.length && (
+                  {!list.length && (
                     <tr>
                       <td colSpan={10} className="dim">
-                        这个单位没有能打这类目标的武器（把上面的勾去掉可以看全部）
+                        这个单位没有武器
                       </td>
                     </tr>
                   )}
@@ -195,24 +195,25 @@ export default function Calculator(): React.JSX.Element {
               </table>
             </div>
             <div className="dim calc-note">
-              穿深 ≥ 装甲才算打穿（游戏的数值就是照这个调的：M829A4 穿深 840 对 M1A2 正面 850 打不动）。
-              「几秒」是从开火算起：瞄准 + 后面每发按弹匣节奏（点射间隔、装填）平摊。
+              每件武器用哪种弹是自动挑的（能打这类目标、够得着、期望伤害最高的那个）；点一行看这把武器的全部弹种。
+              命中率、穿深衰减、溅射衰减都是照游戏本体的算法算的；「游戏具体怎么挑弹种」和「目标外壳半径怎么算」
+              这两处游戏没给，是我们自己定的规则。
             </div>
           </div>
 
           <div className="cols">
             <div className="card">
-              <h2>导弹打得中吗</h2>
-              <MissilePanel target={T} rows={rows} decoy={decoy} onDecoy={setDecoy} />
+              <h2>干扰与拦截</h2>
+              <Missiles target={T} list={list} flares={flares} stress={stress} />
             </div>
 
             <div className="card">
               <h2>
-                AOE 伤害 · 随距离
-                {aoeAmmo.length > 1 && (
+                溅射 · 随距离
+                {aoeList.length > 1 && (
                   <select value={aoePick} onChange={(e) => setAoePick(Number(e.target.value))}>
-                    {aoeAmmo.map((a, i) => (
-                      <option key={a.id + ':' + i} value={i}>
+                    {aoeList.map((a, i) => (
+                      <option key={a.id} value={i}>
                         {a.name}
                       </option>
                     ))}
@@ -221,40 +222,23 @@ export default function Calculator(): React.JSX.Element {
               </h2>
               {aoe ? (
                 <>
-                  <AoeChart curve={aoeCurve(aoe, falloff)} hp={T.hp} radius={aoe.aoe} overpressure={aoe.overpressure} />
+                  <AoeChart curve={aoeCurve(aoe, T)} hp={T.hp} bounds={T.bounds} radius={aoe.aoe} />
                   <div className="calc-aoe-info">
                     <span>
-                      中心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{aoe.aoe} m</b>
-                      {aoe.overpressure > 0 && (
-                        <>
-                          {' · '}超压 <b>{aoe.overpressure} m</b>（这圈里按满伤算）
-                        </>
-                      )}
+                      爆心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{aoe.aoe} m</b>
+                      {aoe.noFalloff && <>（这种弹不衰减，圈里一律满伤）</>}
                     </span>
                     <span>
-                      打死 {T.name}（{T.hp} HP）要落在 <b>{lethalRadius(aoe, T.hp, falloff) ?? '—'} m</b> 以内
+                      落点离 {T.name} 中心 <b>{lethalRadius(aoe, T) ?? '—'} m</b> 以内能一发带走（{T.hp} HP）
                     </span>
-                    <span className="calc-falloff">
-                      衰减模型
-                      {(
-                        [
-                          ['linear', '线性'],
-                          ['quadratic', '平方']
-                        ] as const
-                      ).map(([k, label]) => (
-                        <button key={k} className={falloff === k ? 'primary' : ''} onClick={() => setFalloff(k)}>
-                          {label}
-                        </button>
-                      ))}
+                    <span className="dim">
+                      距离是从目标外壳算的：{T.name} 外壳半径 {T.bounds} m，所以大目标更容易被溅到；
+                      引擎只处理爆心 100 m 以内的单位。
                     </span>
-                  </div>
-                  <div className="dim calc-note">
-                    ⚠ 游戏只给了「AOE 半径」和中心伤害，<b>没给衰减曲线</b>，所以这条线是推的：线性 = 到边缘线性降到 0，
-                    平方 = 降得更快（更接近爆炸的实际衰减）。半径和中心伤害是真值。
                   </div>
                 </>
               ) : (
-                <div className="empty">这一组里没有 AOE 弹药</div>
+                <div className="empty">这一组里没有溅射弹药</div>
               )}
             </div>
           </div>
@@ -264,55 +248,164 @@ export default function Calculator(): React.JSX.Element {
   )
 }
 
-function MissilePanel({
+function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: () => void }): React.JSX.Element {
+  const r = e.result
+  const a = e.best
+  return (
+    <>
+      <tr className={'calc-row' + (open ? ' open' : '')} onClick={onToggle} title="点一下看这把武器的全部弹种">
+        <td>
+          {e.weapon.name}
+          {e.weapon.count > 1 && <span className="dim"> ×{e.weapon.count}</span>}
+        </td>
+        <td>
+          {a ? (
+            <>
+              {a.name}
+              <span className="calc-tags">
+                {isGuided(a) ? <i className="tag">制导</i> : null}
+                {a.armorType === 1 ? (
+                  <i className="tag kin">动能</i>
+                ) : a.armorType === 2 ? (
+                  <i className="tag heat">破甲</i>
+                ) : null}
+                {a.aoe > 0 && <i className="tag aoe">溅射 {a.aoe}m</i>}
+                {a.topAttack && <i className="tag">顶攻</i>}
+                {a.intercept && <i className="tag warn">可被拦</i>}
+              </span>
+            </>
+          ) : (
+            <span className="dim">打不了（够不着，或者这类目标不用它）</span>
+          )}
+        </td>
+        <td className="num">{r ? pct(r.hit) : '—'}</td>
+        <td className="num">{r ? r.pen + ' / ' + r.armor : '—'}</td>
+        <td className="num">{r ? r.through ? r.dmg : <span className="lit-bad">打不穿</span> : '—'}</td>
+        <td className="num">{r ? r.expected : '—'}</td>
+        <td className="num">{r?.shots ?? '—'}</td>
+        <td className="num">{r?.seconds ?? '—'}</td>
+        <td className="num">{r?.dps || '—'}</td>
+        <td className="num">{r ? Math.round(r.range) : '—'}</td>
+      </tr>
+      {open && (
+        <tr className="calc-alt-row">
+          <td colSpan={10}>
+            <div className="calc-alt">
+              <div className="calc-alt-head">{e.weapon.name} 带的全部弹种</div>
+              <table className="t">
+                <thead>
+                  <tr>
+                    <th>弹药</th>
+                    <th className="num">带弹</th>
+                    <th className="num">命中</th>
+                    <th className="num">穿深/装甲</th>
+                    <th className="num">直击</th>
+                    <th className="num">溅射</th>
+                    <th className="num">一发期望</th>
+                    <th className="num">每秒</th>
+                    <th className="num">射程</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {e.all.map(({ ammo, result }) => (
+                    <tr
+                      key={ammo.id}
+                      className={ammo.id === e.best?.id ? 'calc-alt-me' : result.usable ? '' : 'calc-nopen'}
+                    >
+                      <td>
+                        {ammo.name}
+                        {!result.usable && <span className="dim"> · 不用于这类目标</span>}
+                        {!result.inRange && <span className="lit-bad"> · 够不着</span>}
+                      </td>
+                      <td className="num dim">{ammo.qty || '—'}</td>
+                      <td className="num">{pct(result.hit)}</td>
+                      <td className="num">
+                        {result.pen} / {result.armor}
+                      </td>
+                      <td className="num">{result.through ? result.dmg : '—'}</td>
+                      <td className="num">{ammo.aoe > 0 ? result.splash : '—'}</td>
+                      <td className="num">{result.expected}</td>
+                      <td className="num">{result.dps || '—'}</td>
+                      <td className="num">{Math.round(result.range)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function Missiles({
   target,
-  rows,
-  decoy,
-  onDecoy
+  list,
+  flares,
+  stress
 }: {
   target: UnitProfile
-  rows: { a: AmmoProfile }[]
-  decoy: boolean
-  onDecoy: (v: boolean) => void
+  list: Engagement[]
+  flares: number
+  stress: number
 }): React.JSX.Element {
-  const missiles = rows.filter((x) => x.a.intercept || x.a.laser || x.a.dispH <= 1.2)
-  const sample = missiles[0]?.a
-  const h = sample ? hitChance(sample, target, decoy) : null
+  const guided = list.map((e) => e.best).filter((a): a is AmmoProfile => !!a && isGuided(a))
+  const sample = guided[0]
+  const h = sample ? guidedHit(sample, target, { flares, stress }) : null
+  const aps = sample ? apsAgainst(sample, target) : null
   const ab = target.abilities
   return (
     <div className="stack">
+      {h ? (
+        <div className="calc-formula">
+          <span>
+            基础 <b>{pct(h.accuracy)}</b>
+          </span>
+          <span>×</span>
+          <span>
+            ECM <b>{h.ecm === 1 ? '无' : h.ecm}</b>
+          </span>
+          <span>×</span>
+          <span>
+            干扰弹 <b>{h.cm === 1 ? '无' : Math.round(h.cm * 1000) / 1000}</b>
+          </span>
+          <span>×</span>
+          <span>
+            状态 <b>{pct(h.stress)}</b>
+          </span>
+          <span>=</span>
+          <span className={h.total < 0.6 ? 'lit-bad' : 'lit-ok'}>
+            <b>{pct(h.total)}</b>
+          </span>
+        </div>
+      ) : (
+        <div className="dim">这一组里没有制导弹药，命中率只看散布和目标大小。</div>
+      )}
+
       <div className="kv">
         <div>
           <b>{ab.ecm === 1 ? '无' : '×' + ab.ecm}</b>
-          <span>目标的 ECM</span>
+          <span>目标 ECM</span>
         </div>
         <div>
-          <b>{ab.decoy ? '×' + ab.decoy.mul : '无'}</b>
-          <span>诱饵（{ab.decoy ? ab.decoy.qty + ' 发，每次 ' + ab.decoy.duration + ' 秒' : '没有'}）</span>
-        </div>
-        <div>
-          <b className={h && h.total < 1 ? 'lit-bad' : ''}>{h ? Math.round(h.total * 100) + '%' : '—'}</b>
-          <span>命中率（相对没有干扰时）</span>
+          <b>{ab.decoy ? ab.decoy.qty + ' 发' : '无'}</b>
+          <span>干扰弹{ab.decoy ? '（每发 ×' + ab.decoy.mul + '，持续 ' + ab.decoy.duration + ' 秒）' : ''}</span>
         </div>
         <div>
           <b>{ab.aps ? ab.aps.qty + ' 发' : '无'}</b>
-          <span>APS 拦截次数{ab.aps ? '（冷却 ' + ab.aps.cooldown + ' 秒）' : ''}</span>
+          <span>APS 拦截{ab.aps ? '（冷却 ' + ab.aps.cooldown + ' 秒）' : ''}</span>
+        </div>
+        <div>
+          <b>{aps?.saturate ?? '—'}</b>
+          <span>齐射几发能穿过 APS</span>
         </div>
       </div>
-      <label className="calc-check">
-        <input type="checkbox" checked={decoy} onChange={(e) => onDecoy(e.target.checked)} />
-        目标正在放诱饵（铝箔条 / 热焰弹）
-      </label>
-      {ab.aps && (
-        <div className="dim calc-note">
-          APS 只拦得住标了「可被 APS 拦」的弹药（导弹、火箭弹之类）；动能弹、炸弹拦不住。
-          一共 {ab.aps.qty} 发，每拦一次冷却 {ab.aps.cooldown} 秒——
-          所以<b>同时打过去几发，或者打完它的拦截次数，就能穿过去</b>。
-        </div>
-      )}
+
       <div className="dim calc-note">
-        ECM 和诱饵在游戏数据里就是直接乘命中率的，所以这里的百分比 = ECM × 诱饵。
-        基础命中率（多远、什么姿态下打得中）游戏没写进数据，这里不猜。
+        干扰弹按发数指数衰减：放 n 发就是 <code>((1 − 弹药抗干扰) × 干扰弹乘数)ⁿ</code>，所以连放两发比一发狠得多。
+        APS 只拦得住标了「可被拦」的弹药（导弹、反坦克火箭之类），动能弹和炸弹拦不住；
+        拦截次数用完、或者还在 6 秒冷却里，后面的就直接进来了。
       </div>
     </div>
   )

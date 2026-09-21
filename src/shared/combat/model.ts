@@ -1,36 +1,26 @@
 // ================= 配装计算器的算法 =================
-// 数据全部来自游戏自带的表（见 docs/game-db.md）。这里分两类：
+// 数据来自游戏自带的表，公式来自对 GameAssembly.dll 的反编译审计（见 docs/game-db.md）：
 //
-//   【直读】伤害、穿深、装甲、射速、射程、AOE 半径、ECM/诱饵/APS 的参数——游戏里怎么写的就怎么用。
-//   【推算】穿甲判定、打死要几发几秒、AOE 随距离怎么衰减、枪炮的命中率——
-//           游戏没把公式写进数据里，这些是按数值推出来的模型，界面上都标了「推算」。
+//   · 非制导命中率 = CalculateWeaponHitChance：散布随距离放大，再按目标投影面积算概率
+//   · 制导命中率   = CalculateMissileHitChance：基础命中 × ECM × 干扰弹 × 压制
+//   · AOE 衰减     = ShellHitSystem.DealAOEDamage：按到目标外壳的距离线性衰减
+//   · 穿甲判定     = 穿深 ≥ 对应面装甲（数值就是照这个调的：M829A4 穿深 840 对 M1A2 正面 850 打不动）
 //
-// 推算部分的依据：
-//   · 穿深 840 的 M829A4 对 M1A2 SEP v3 正面 850 打不动，侧面 120 随便穿——
-//     数值是照着「穿深 ≥ 装甲才有伤害」调的，所以按这个判定。
-//   · 穿深从近距到「地面射程」线性掉（两个值一样的导弹就不掉）。
-//   · AOE 没有衰减曲线，只有半径，所以给两种常见模型让人自己选。
-import {
-  A,
-  B,
-  COMBAT,
-  M,
-  U,
-  W,
-  type CAmmo,
-  type CombatData,
-  type CWeapon
-} from '../game/combat'
+// 还没有权威来源、由我们自己定的只有两处，界面上都标了「推算」：
+//   · 游戏自动选弹种的具体规则（方法名叫 SelectBestShellForTarget，但代码没拿到）
+//   · 目标外壳半径怎么从长宽高算
+import { A, B, COMBAT, M, U, W, type CAmmo, type CombatData, type CWeapon } from '../game/combat'
 
 export type Facing = 'front' | 'side' | 'rear' | 'top'
 export type UnitClass = 'inf' | 'armor' | 'light' | 'heli' | 'plane'
-/** AOE 怎么随距离衰减——游戏没给，这是两种常见写法 */
-export type Falloff = 'linear' | 'quadratic'
+
+const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x))
+const r2 = (x: number): number => Math.round(x * 100) / 100
+const r3 = (x: number): number => Math.round(x * 1000) / 1000
 
 export interface AmmoProfile {
   id: number
   name: string
-  /** 携带量 */
   qty: number
   dmg: number
   stress: number
@@ -48,15 +38,25 @@ export interface AmmoProfile {
   topAttack: boolean
   intercept: boolean
   laser: boolean
+  /** 非制导：水平散布半径（米）；制导：基础命中率 */
   dispH: number
+  /** 非制导：垂直散布半径（米）；制导：抗干扰（0 = 完全被干扰弹影响） */
   dispV: number
+  /** 散布的最小比例：距离 0 时散布也有这么大 */
+  dispMin: number
   minRange: number
+  /** 伤害不随距离衰减（AOE 范围内一律满伤） */
+  noFalloff: boolean
+  /** 导引头类型，0 = 无制导 */
+  seeker: number
+  /** 抛射角：反坦克导弹里 36° 那一组就是攻顶的（标枪、地狱火、长钉…） */
+  loftAngle: number
+  loftHeight: number
 }
 
 export interface WeaponProfile {
   id: number
   name: string
-  /** 班组里几个人拿着这把（车辆固定 1） */
   count: number
   mag: number
   reload: number
@@ -67,13 +67,11 @@ export interface WeaponProfile {
   onMove: boolean
   radar: boolean
   ammo: AmmoProfile[]
-  /** 从哪个炮塔来的（车辆）或哪个班组位（步兵） */
   from: string
 }
 
 export interface Abilities {
   aps: { name: string; qty: number; cooldown: number; coverage: number } | null
-  /** 来袭导弹命中率乘数，1 = 没有 ECM */
   ecm: number
   decoy: { qty: number; mul: number; duration: number; cooldown: number } | null
   smoke: boolean
@@ -82,20 +80,19 @@ export interface Abilities {
 }
 
 export interface UnitProfile {
-  /** 选了配装之后实际生效的单位（步兵换班组是整个换单位） */
   unitId: number
   baseUnitId: number
   name: string
   cost: number
   klass: UnitClass
   hp: number
-  /** 动能装甲 前/侧/后/顶 */
   kin: [number, number, number, number]
   heat: [number, number, number, number]
-  /** 步兵护甲值（步兵没有四面装甲） */
   infArmor: number
   maxStress: number
   size: { len: number; wid: number; hei: number }
+  /** 目标外壳半径：AOE 是从外壳算距离的，大目标更容易被溅到 */
+  bounds: number
   weapons: WeaponProfile[]
   abilities: Abilities
   sensor: { name: string; ground: number; lowAlt: number; highAlt: number } | null
@@ -103,14 +100,7 @@ export interface UnitProfile {
 }
 
 const FACE_IDX: Record<Facing, number> = { front: 0, side: 1, rear: 2, top: 3 }
-
-export const FACE_NAME: Record<Facing, string> = {
-  front: '正面',
-  side: '侧面',
-  rear: '背面',
-  top: '顶部'
-}
-
+export const FACE_NAME: Record<Facing, string> = { front: '正面', side: '侧面', rear: '背面', top: '顶部' }
 export const CLASS_NAME: Record<UnitClass, string> = {
   inf: '步兵',
   armor: '装甲',
@@ -118,8 +108,22 @@ export const CLASS_NAME: Record<UnitClass, string> = {
   heli: '直升机',
   plane: '飞机'
 }
+/** 卡组分类，也是单位选择器里的分组 */
+export const CAT_NAME: Record<number, string> = {
+  0: '侦察',
+  1: '步兵',
+  2: '装甲',
+  3: '支援',
+  4: '后勤',
+  5: '直升机',
+  6: '空军'
+}
 
-/** 目标类型位图里的位（拿真实弹药对着验的：斯汀格 24 = 直升机+飞机，AMRAAM 16 = 只打飞机） */
+/**
+ * 目标类型位图。游戏的枚举里有 Infantry / Vehicles / Helicopters / Aircrafts / Projectiles，
+ * 具体位值没拿到，这几位是拿真实弹药对出来的：
+ * 斯汀格 24 = 直升机 + 飞机，AMRAAM 16 = 只打飞机，穿甲弹 36 里没有步兵位。
+ */
 const MASK = { inf: 1, light: 2, armor: 4, heli: 8, plane: 16 }
 
 function classOf(cat: number, kinFront: number): UnitClass {
@@ -129,7 +133,9 @@ function classOf(cat: number, kinFront: number): UnitClass {
   return kinFront >= 50 ? 'armor' : 'light'
 }
 
-/** 这发弹药能不能锁这类目标（AOE 弹药落地就炸，不受这个限制） */
+export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
+
+/** 这发弹药会不会用在这类目标上（有 AOE 的落地就炸，不受位图限制） */
 export function canTarget(a: AmmoProfile, k: UnitClass): boolean {
   if (a.aoe > 0) return true
   const m = a.targetMask
@@ -137,12 +143,12 @@ export function canTarget(a: AmmoProfile, k: UnitClass): boolean {
   return !!(m & MASK[k])
 }
 
-/** 一套配装下这个单位长什么样 */
+// ---------- 配装 → 单位 ----------
+
 export function profileOf(unitId: number, optionIds: number[] = [], data: CombatData = COMBAT): UnitProfile | null {
   const base = data.units[unitId]
   if (!base) return null
 
-  // 配装可能整个换掉单位（步兵的班组变体），也可能换装甲、换炮塔、加能力
   let eff = unitId
   let armorId = 0
   let sensorId = 0
@@ -166,11 +172,9 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
   ]
   const klass = classOf(u[U.cat], armor[A.kf])
 
-  // ---- 武器 ----
   const weapons: WeaponProfile[] = []
   const squad = data.squad[eff]
   if (squad?.length) {
-    // 步兵：一个班里每个人的主武器 + 特殊武器，按武器聚合
     const count = new Map<number, number>()
     for (const [primary, special] of squad) {
       if (primary) count.set(primary, (count.get(primary) || 0) + 1)
@@ -181,8 +185,6 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (w) weapons.push(w)
     }
   } else {
-    // 车辆/飞机：炮塔上挂的武器。同一个「类别 + 槽位」只留一个炮塔：
-    // 配装选了就用选的，没选就用默认的那个
     const mounts = data.turrets[eff] || []
     const picked = new Map<string, number>()
     for (const [tid, order, cls, isDefault] of mounts) {
@@ -191,7 +193,6 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (chosen) picked.set(key, tid)
       else if (!picked.has(key) && isDefault) picked.set(key, tid)
     }
-    // 配装指定了但不在这个单位的炮塔表里（换了型号）也要算上
     for (const tid of Object.values(slotTurret)) {
       if (![...picked.values()].includes(tid) && data.turretWeapons[tid]) picked.set('opt#' + tid, tid)
     }
@@ -203,7 +204,6 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     }
   }
 
-  // ---- 能力 ----
   const abilityIds = [...(data.unitAbilities[eff] || []), ...extraAbilities]
   const ab: Abilities = { aps: null, ecm: 1, decoy: null, smoke: false, laser: false, radar: false }
   for (const id of abilityIds) {
@@ -220,6 +220,8 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
 
   const sens = data.sensors[sensorId]
   const mob = data.mobility[mobilityId]
+  const len = u[U.len] || 4
+  const wid = u[U.wid] || 3
   return {
     unitId: eff,
     baseUnitId: unitId,
@@ -231,7 +233,9 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     heat: [armor[A.hf], armor[A.hs], armor[A.hr], armor[A.ht]],
     infArmor: armor[A.inf],
     maxStress: u[U.stress] || 1000,
-    size: { len: u[U.len], wid: u[U.wid], hei: u[U.hei] },
+    size: { len, wid, hei: u[U.hei] || 2 },
+    // 外壳半径：拿长宽当一个矩形，取它的外接圆半径（游戏用的是碰撞体，这里只能这么近似）
+    bounds: r2(Math.sqrt(len * len + wid * wid) / 2),
     weapons: weapons.sort((a, c) => topDamage(c) - topDamage(a)),
     abilities: ab,
     sensor: sens ? { name: sens[0], ground: sens[1], lowAlt: sens[2], highAlt: sens[3] } : null,
@@ -274,12 +278,20 @@ function weaponProfile(
       aoe: a[M.aoe],
       aoeStress: a[M.aoeStress],
       overpressure: a[M.overpressure],
-      topAttack: !!a[M.topAttack],
+      // 攻顶有两种写法：显式的标志（TOW-2B、集束弹、机炮扫射），
+      // 或者抛射角 36° 那一组反坦克导弹（标枪、地狱火、JAGM、长钉）——它们是拉高再扎下来的。
+      // 抛射高度大的是空空弹和巡航导弹的飞行剖面，不算攻顶。
+      topAttack: !!a[M.topAttack] || (a[M.loftAngle] >= 30 && a[M.loftHeight] <= 10),
       intercept: !!a[M.intercept],
       laser: !!a[M.laser],
       dispH: a[M.dispH],
       dispV: a[M.dispV],
-      minRange: a[M.minRange]
+      dispMin: a[M.dispMin],
+      minRange: a[M.minRange],
+      noFalloff: !!a[M.noFalloff],
+      seeker: a[M.seeker],
+      loftAngle: a[M.loftAngle],
+      loftHeight: a[M.loftHeight]
     })
   }
   if (!ammo.length) return null
@@ -300,45 +312,147 @@ function weaponProfile(
   }
 }
 
-// ---------- 打起来什么样 ----------
+// ---------- 命中率 ----------
 
-/** 穿深随距离掉：近距穿深 → 地面射程处的穿深，中间按线性（两个值一样就是不掉） */
+/**
+ * 非制导武器的命中率（游戏的 CalculateWeaponHitChance）：
+ *   散布比例 = clamp(最小散布 + (1 - 最小散布) × clamp(距离 / 地面射程, 0, 1), 0, 1)
+ *   命中率   = clamp(min(H, min(长, 宽)) × min(V, 高) / (H × V), 0, 1)
+ * 其中 H、V 是按上面的比例放大后的水平/垂直散布半径。散布为 0 时直接算命中。
+ */
+export function unguidedHit(a: AmmoProfile, target: UnitProfile, dist: number): number {
+  const ref = a.range || 1
+  const scale = clamp(a.dispMin + (1 - a.dispMin) * clamp(dist / ref, 0, 1), 0, 1)
+  const H = a.dispH * scale
+  const V = a.dispV * scale
+  if (H <= 0 || V <= 0) return 1
+  const w = Math.min(H, Math.min(target.size.len, target.size.wid))
+  const h = Math.min(V, target.size.hei)
+  return clamp((w * h) / (H * V), 0, 1)
+}
+
+export interface GuidedHit {
+  /** 弹药自己的基础命中率 */
+  accuracy: number
+  /** 目标 ECM */
+  ecm: number
+  /** 干扰弹效果（放了几发就乘几次） */
+  cm: number
+  /** 射手被压制的影响，界面上可以调 */
+  stress: number
+  total: number
+  /** 抗干扰：1 = 完全不怕干扰弹 */
+  resist: number
+}
+
+/**
+ * 制导弹药的命中率（游戏的 CalculateMissileHitChance）：
+ *   命中率 = 基础命中 × 目标ECM × 干扰弹效果 × 压制系数
+ *   干扰弹效果 = 没放就是 1，放了 n 发就是 ((1 - 抗干扰) × 干扰弹乘数)^n
+ * 制导弹药把「散布」两个字段挪作他用：水平 = 基础命中，垂直 = 抗干扰。
+ */
+export function guidedHit(
+  a: AmmoProfile,
+  target: UnitProfile,
+  opts: { flares?: number; stress?: number } = {}
+): GuidedHit {
+  const accuracy = a.dispH || 1
+  const resist = a.dispV || 0
+  const ecm = target.abilities.ecm || 1
+  const n = Math.max(0, Math.round(opts.flares ?? (target.abilities.decoy ? 1 : 0)))
+  const mul = target.abilities.decoy?.mul ?? 1
+  const cm = n === 0 ? 1 : Math.pow((1 - resist) * mul, n)
+  const stress = opts.stress ?? 1
+  // 不在这里四舍五入，显示的时候再舍——连乘之后差一点点会看得出来
+  return { accuracy, ecm, cm, stress, total: accuracy * ecm * cm * stress, resist }
+}
+
+/** 不管制导不制导，给一个命中率 */
+export function hitChanceOf(
+  a: AmmoProfile,
+  target: UnitProfile,
+  dist: number,
+  opts: { flares?: number; stress?: number } = {}
+): number {
+  return isGuided(a) ? guidedHit(a, target, opts).total : unguidedHit(a, target, dist)
+}
+
+// ---------- AOE ----------
+
+/**
+ * AOE 衰减（游戏的 ShellHitSystem.DealAOEDamage）：
+ *   d = clamp(爆点到目标中心的距离 − 目标外壳半径, 0, 100)
+ *   系数 = d ≥ 半径 ? 0 : (伤害不衰减 ? 1 : clamp(1 − d / 半径, 0, 1))
+ */
+export function aoeFactor(a: AmmoProfile, distFromCenter: number, boundsRadius: number, radius = a.aoe): number {
+  if (radius <= 0) return 0
+  const raw = distFromCenter - boundsRadius
+  // 游戏把 d 夹在 [0, 100]。夹上限是因为引擎只会去查爆点周围一圈里的单位，
+  // 再远的根本不参与计算，所以这里超过 100 米直接当没伤害。
+  if (raw > 100) return 0
+  const d = clamp(raw, 0, 100)
+  if (d >= radius) return 0
+  if (a.noFalloff) return 1
+  return clamp(1 - d / radius, 0, 1)
+}
+
+/** 画曲线用：从爆心到半径外一点，每一步的伤害 */
+export function aoeCurve(a: AmmoProfile, target: UnitProfile, steps = 48): { d: number; dmg: number }[] {
+  const R = a.aoe
+  if (R <= 0) return []
+  const max = R + target.bounds
+  const out: { d: number; dmg: number }[] = []
+  for (let i = 0; i <= steps; i++) {
+    const d = (max * i) / steps
+    out.push({ d: r2(d), dmg: r2(a.dmg * aoeFactor(a, d, target.bounds)) })
+  }
+  return out
+}
+
+/** 落点离目标中心多远还能炸死它 */
+export function lethalRadius(a: AmmoProfile, target: UnitProfile): number | null {
+  if (a.aoe <= 0 || a.dmg < target.hp) return null
+  if (a.noFalloff) return r2(a.aoe + target.bounds)
+  // 1 - d/R = hp/dmg  →  d = R(1 - hp/dmg)，再夹到引擎的 100 米上限
+  const d = Math.min(100, a.aoe * (1 - target.hp / a.dmg))
+  return r2(d + target.bounds)
+}
+
+/** 打偏了溅射还能剩多少：在散布范围里均匀取点，平均一下 */
+export function splashExpected(a: AmmoProfile, target: UnitProfile, dist: number, samples = 24): number {
+  if (a.aoe <= 0) return 0
+  const ref = a.range || 1
+  const scale = clamp(a.dispMin + (1 - a.dispMin) * clamp(dist / ref, 0, 1), 0, 1)
+  const R = Math.max(a.dispH, a.dispV) * scale
+  if (R <= 0) return a.dmg
+  let sum = 0
+  for (let i = 1; i <= samples; i++) {
+    // 面积均匀：半径按 sqrt 分布
+    const r = R * Math.sqrt(i / samples)
+    sum += a.dmg * aoeFactor(a, r, target.bounds)
+  }
+  return r2(sum / samples)
+}
+
+// ---------- 穿甲和结果 ----------
+
 export function penAt(a: AmmoProfile, dist: number): number {
   if (a.penFar === a.penMin || a.range <= 0) return a.penMin
-  const t = Math.min(1, Math.max(0, dist / a.range))
+  const t = clamp(dist / a.range, 0, 1)
   return Math.round(a.penMin + (a.penFar - a.penMin) * t)
 }
 
-/** 这一面的装甲值（步兵用护甲值，没有面的概念） */
 export function armorAt(target: UnitProfile, a: AmmoProfile, facing: Facing): number {
   if (target.klass === 'inf') return target.infArmor
   const i = a.topAttack ? FACE_IDX.top : FACE_IDX[facing]
   return a.armorType === 1 ? target.kin[i] : a.armorType === 2 ? target.heat[i] : Math.min(target.kin[i], target.heat[i])
 }
 
-export interface ShotResult {
-  /** 这个距离上的穿深 */
-  pen: number
-  armor: number
-  /** 穿得动吗 */
-  through: boolean
-  /** 一发多少伤害（穿不动就是 0） */
-  dmg: number
-  /** 打死要几发 */
-  shots: number | null
-  /** 打死要多少秒（从开火算起，含瞄准和装填） */
-  seconds: number | null
-  /** 持续输出（每秒伤害），一个班几个人拿着就乘几 */
-  dps: number
-  /** 压制条打满要几发 */
-  stressShots: number | null
-  /** 够不够得着 */
-  inRange: boolean
-  /** 这发弹药会不会用在这类目标上 */
-  usable: boolean
+export function rangeFor(a: AmmoProfile, target: UnitProfile): number {
+  return target.klass === 'plane' ? a.highAlt || a.range : target.klass === 'heli' ? a.lowAlt || a.range : a.range
 }
 
-/** 打一个弹匣（含装填）平均每发要多久 */
+/** 打一发平均占多少时间（弹匣打完 + 装填 + 瞄准，摊到每一发） */
 export function cycleTime(w: WeaponProfile): number {
   const bursts = Math.max(1, Math.ceil(w.mag / w.burst))
   const inBurst = (w.burst - 1) * w.dtShot
@@ -346,84 +460,115 @@ export function cycleTime(w: WeaponProfile): number {
   return total / w.mag
 }
 
+export interface ShotResult {
+  pen: number
+  armor: number
+  through: boolean
+  /** 打中了掉多少血 */
+  dmg: number
+  /** 命中率 */
+  hit: number
+  guided: boolean
+  /** 打偏时溅射还能造成多少（没有 AOE 就是 0） */
+  splash: number
+  /** 一次射击的期望伤害 = 命中 × 直击 + 未命中 × 溅射 */
+  expected: number
+  /** 按期望伤害算，打死要几发 */
+  shots: number | null
+  seconds: number | null
+  /** 期望每秒伤害（班组按人数乘） */
+  dps: number
+  stressShots: number | null
+  inRange: boolean
+  usable: boolean
+  range: number
+}
+
 export function shotAt(
   w: WeaponProfile,
   a: AmmoProfile,
   target: UnitProfile,
   dist: number,
-  facing: Facing
+  facing: Facing,
+  opts: { flares?: number; stress?: number } = {}
 ): ShotResult {
   const pen = penAt(a, dist)
   const armor = armorAt(target, a, facing)
   const through = pen >= armor
   const dmg = through ? a.dmg : 0
+  const hit = hitChanceOf(a, target, dist, opts)
+  // 溅射也要先过穿甲判定：不然「打不穿的 HE 照样炸死坦克」，那反应装甲就没意义了
+  const splash = through && a.aoe > 0 ? splashExpected(a, target, dist) : 0
+  const expected = r2(hit * dmg + (1 - hit) * splash)
   const per = cycleTime(w)
-  const reach = target.klass === 'plane' ? a.highAlt || a.range : target.klass === 'heli' ? a.lowAlt || a.range : a.range
-  const inRange = dist >= a.minRange && dist <= reach
-  const usable = canTarget(a, target.klass)
-  const shots = dmg > 0 ? Math.ceil(target.hp / dmg) : null
+  const range = rangeFor(a, target)
+  const shots = expected > 0 ? Math.ceil(target.hp / expected) : null
   return {
     pen,
     armor,
     through,
     dmg,
+    hit: r3(hit),
+    guided: isGuided(a),
+    splash,
+    expected,
     shots,
-    // 第一发要先瞄准，后面按弹匣节奏：打 n 发的时间 ≈ 瞄准 + (n-1) × 每发
     seconds: shots == null ? null : Math.round((w.aim + (shots - 1) * per) * 10) / 10,
-    dps: Math.round(((dmg * w.count) / per) * 100) / 100,
+    dps: r2((expected * w.count) / per),
     stressShots: a.stress > 0 ? Math.ceil(target.maxStress / a.stress) : null,
-    inRange,
-    usable
+    inRange: dist >= a.minRange && dist <= range,
+    usable: canTarget(a, target.klass),
+    range
   }
 }
 
-/** AOE：不同距离上的伤害。游戏没给衰减曲线，所以给两种模型。 */
-export function aoeCurve(a: AmmoProfile, falloff: Falloff = 'linear', steps = 40): { d: number; dmg: number }[] {
-  const R = a.aoe
-  if (R <= 0) return []
-  const out: { d: number; dmg: number }[] = []
-  for (let i = 0; i <= steps; i++) {
-    const d = (R * i) / steps
-    let f: number
-    if (d <= a.overpressure) f = 1
-    else {
-      const x = Math.min(1, Math.max(0, d / R))
-      f = falloff === 'linear' ? 1 - x : (1 - x) * (1 - x)
-    }
-    out.push({ d: Math.round(d * 10) / 10, dmg: Math.round(a.dmg * f * 100) / 100 })
-  }
-  return out
+export interface Engagement {
+  weapon: WeaponProfile
+  /** 游戏会拿哪一种弹打（推算：能打这类目标、够得着、期望伤害最高的那个） */
+  best: AmmoProfile | null
+  result: ShotResult | null
+  /** 这把武器所有能用的弹药，按期望伤害排 */
+  all: { ammo: AmmoProfile; result: ShotResult }[]
 }
 
-/** 多远之内能把目标炸死（按选的衰减模型反解） */
-export function lethalRadius(a: AmmoProfile, hp: number, falloff: Falloff = 'linear'): number | null {
-  if (a.aoe <= 0 || a.dmg < hp) return a.dmg >= hp ? 0 : null
-  const need = hp / a.dmg
-  const x = falloff === 'linear' ? 1 - need : 1 - Math.sqrt(need)
-  return Math.max(a.overpressure, Math.round(a.aoe * x * 10) / 10)
+/**
+ * 每件武器挑一种弹。游戏里这件事叫 SelectBestShellForTarget，具体规则没拿到，
+ * 这里按「能打这类目标 + 够得着 + 期望伤害最高（打得穿的优先）」来选。
+ */
+export function engage(
+  attacker: UnitProfile,
+  target: UnitProfile,
+  dist: number,
+  facing: Facing,
+  opts: { flares?: number; stress?: number } = {}
+): Engagement[] {
+  return attacker.weapons.map((w) => {
+    const all = w.ammo
+      .map((ammo) => ({ ammo, result: shotAt(w, ammo, target, dist, facing, opts) }))
+      .sort((x, y) => {
+        const ok = (r: { result: ShotResult }): number => (r.result.usable && r.result.inRange ? 1 : 0)
+        if (ok(x) !== ok(y)) return ok(y) - ok(x)
+        if (x.result.through !== y.result.through) return x.result.through ? -1 : 1
+        return y.result.dps - x.result.dps
+      })
+    const top = all[0]
+    const good = top && top.result.usable && top.result.inRange ? top : null
+    return { weapon: w, best: good?.ammo || null, result: good?.result || null, all }
+  })
 }
 
-export interface HitChance {
-  /** ECM 乘数 */
-  ecm: number
-  /** 诱饵乘数（只在诱饵有效的那几秒里） */
-  decoy: number
-  /** 两个乘上去 */
-  total: number
-  /** 能不能被 APS 拦 */
+// ---------- APS ----------
+
+export interface ApsInfo {
+  /** 这发弹药能不能被拦 */
   interceptable: boolean
   aps: { name: string; qty: number; cooldown: number } | null
+  /** 一起打过去几发能穿过去（拦截次数 + 1） */
+  saturate: number | null
 }
 
-/** 导弹打上去的机会：ECM 和诱饵都是直接乘命中率的（游戏数据里就是这么写的） */
-export function hitChance(a: AmmoProfile, target: UnitProfile, useDecoy = true): HitChance {
-  const ecm = target.abilities.ecm || 1
-  const decoy = useDecoy && target.abilities.decoy ? target.abilities.decoy.mul : 1
-  return {
-    ecm,
-    decoy,
-    total: Math.round(ecm * decoy * 1000) / 1000,
-    interceptable: a.intercept,
-    aps: a.intercept && target.abilities.aps ? target.abilities.aps : null
-  }
+export function apsAgainst(a: AmmoProfile, target: UnitProfile): ApsInfo {
+  const aps = target.abilities.aps
+  if (!a.intercept || !aps) return { interceptable: a.intercept, aps: null, saturate: null }
+  return { interceptable: true, aps, saturate: aps.qty + 1 }
 }

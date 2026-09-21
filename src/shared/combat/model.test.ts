@@ -4,14 +4,19 @@ import { describe, expect, it } from 'vitest'
 import { COMBAT, type CombatData } from '../game/combat'
 import {
   aoeCurve,
+  aoeFactor,
+  apsAgainst,
   armorAt,
   canTarget,
   cycleTime,
-  hitChance,
+  engage,
+  guidedHit,
+  isGuided,
   lethalRadius,
   penAt,
   profileOf,
   shotAt,
+  unguidedHit,
   type AmmoProfile
 } from './model'
 
@@ -19,9 +24,9 @@ import {
 const DATA: CombatData = {
   meta: { updatedAt: '2026-09-21', stamp: 'test' },
   units: {
-    1: ['测试坦克', 200, 7, 3.4, 2.3, 1000, 1, 2, 0],
-    2: ['测试步兵', 60, 4, 4, 2, 1000, 0.6, 1, 0],
-    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0]
+    1: ['测试坦克', 200, 7, 3.4, 2.3, 1000, 1, 2, 0, 2],
+    2: ['测试步兵', 60, 4, 4, 2, 1000, 0.6, 1, 0, 1],
+    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0, 1]
   },
   armors: {
     10: [17, 800, 150, 100, 60, 1300, 500, 200, 100, 0], // 坦克
@@ -53,13 +58,15 @@ const DATA: CombatData = {
     '3:204': [[304, 6]]
   },
   ammo: {
-    // [名字, 伤害, 压制, 穿近, 穿远, 地面射程, 低空, 高空, 目标位图, 装甲类型, AOE, AOE压制, 超压, 顶攻, 可拦, 激光, 散布H, V, 最小射程, 暴击, 无视掩体]
-    300: ['尾翼稳定脱壳穿甲弹', 10, 120, 800, 500, 700, 0, 0, 36, 1, 0, 0, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0],
-    301: ['破甲弹', 11.5, 120, 400, 400, 700, 0, 0, 39, 2, 9, 9, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0],
-    302: ['7.62 机枪弹', 0.75, 16, 20, 10, 300, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0],
-    303: ['5.56 步枪弹', 1.2, 12, 15, 7, 250, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0],
-    304: ['火箭弹', 8.5, 200, 500, 500, 250, 0, 0, 36, 2, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0],
-    305: ['大炸弹', 175, 500, 300, 300, 0, 0, 0, 1, 2, 175, 175, 15, 0, 0, 0, 65, 65, 0, 1, 0]
+    // [名字, 伤害, 压制, 穿近, 穿远, 地面射程, 低空, 高空, 目标位图, 装甲类型, AOE, AOE压制, 超压,
+    //  顶攻, 可拦, 激光, 散布H, V, 最小射程, 暴击, 无视掩体, 伤害不衰减, 导引头, 最小散布, 抛射角, 抛射高度]
+    300: ['尾翼稳定脱壳穿甲弹', 10, 120, 800, 500, 700, 0, 0, 36, 1, 0, 0, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0],
+    301: ['破甲弹', 11.5, 120, 400, 400, 700, 0, 0, 39, 2, 9, 9, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0],
+    302: ['7.62 机枪弹', 0.75, 16, 20, 10, 300, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0],
+    303: ['5.56 步枪弹', 1.2, 12, 15, 7, 250, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0],
+    // 制导：散布两个字段是「基础命中 / 抗干扰」
+    304: ['反坦克导弹', 8.5, 200, 500, 500, 250, 0, 0, 36, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 100, 0, 0, 0],
+    305: ['大炸弹', 175, 500, 300, 300, 0, 0, 0, 1, 2, 175, 175, 15, 0, 0, 0, 65, 65, 0, 1, 0, 0, 0, 0, 0, 0]
   },
   abilities: {
     // [名字, APS, 拦截数, 冷却, 覆盖, ECM, 诱饵, 诱饵数, 诱饵乘数, 持续, 冷却, 烟雾, 激光, 雷达]
@@ -87,6 +94,9 @@ const DATA: CombatData = {
     ]
   },
   unitOptions: {},
+  unitSpecs: {},
+  specs: {},
+  countries: { 1: '俄罗斯', 2: '美国' },
   sensors: {},
   mobility: {}
 }
@@ -121,6 +131,11 @@ const ammo = (id: number, over: Partial<AmmoProfile> = {}): AmmoProfile => {
     dispH: a[16],
     dispV: a[17],
     minRange: a[18],
+    noFalloff: !!a[21],
+    seeker: a[22],
+    dispMin: a[23],
+    loftAngle: a[24],
+    loftHeight: a[25],
     ...over
   }
 }
@@ -218,58 +233,136 @@ describe('穿深和伤害', () => {
   })
 })
 
-describe('AOE', () => {
-  it('中心满伤，到半径边缘归零', () => {
-    const c = aoeCurve(ammo(305), 'linear')
-    expect(c[0].dmg).toBe(175)
-    expect(c[c.length - 1].dmg).toBe(0)
-    // 超压半径里按满伤算
-    expect(aoeCurve(ammo(305), 'linear').find((p) => p.d <= 15)?.dmg).toBe(175)
+describe('命中率 · 非制导（游戏的 CalculateWeaponHitChance）', () => {
+  it('距离 0 时散布为 0，必中', () => {
+    expect(unguidedHit(ammo(300), tank()!, 0)).toBe(1)
   })
 
-  it('平方衰减掉得比线性快', () => {
-    const half = (f: 'linear' | 'quadratic'): number => {
-      const c = aoeCurve(ammo(305), f)
-      return c[Math.floor(c.length / 2)].dmg
-    }
-    expect(half('quadratic')).toBeLessThan(half('linear'))
+  it('距离越远散布越大，命中率越低', () => {
+    const t = inf()! // 4×4×2
+    // 散布大到超过目标尺寸才看得出差别
+    const spread = ammo(302, { dispH: 20, dispV: 10, range: 500 })
+    const near = unguidedHit(spread, t, 100)
+    const far = unguidedHit(spread, t, 300)
+    expect(near).toBeGreaterThan(far)
+    expect(far).toBeGreaterThan(0)
+    expect(far).toBeLessThan(1)
   })
 
-  it('致死半径：多远之内能带走', () => {
-    // 175 伤害打 17 血：线性模型下 (1 - 17/175) × 175 ≈ 158 米
-    expect(lethalRadius(ammo(305), 17, 'linear')).toBeGreaterThan(150)
-    // 平方模型下小得多
-    expect(lethalRadius(ammo(305), 17, 'quadratic')!).toBeLessThan(
-      lethalRadius(ammo(305), 17, 'linear')!
-    )
-    // 伤害本来就不够就不可能炸死
-    expect(lethalRadius(ammo(304), 17, 'linear')).toBeNull()
+  it('目标越大越好打', () => {
+    const small = { ...inf()!, size: { len: 1, wid: 1, hei: 1 } }
+    const big = inf()!
+    expect(unguidedHit(ammo(302), big, 300)).toBeGreaterThan(unguidedHit(ammo(302), small, 300))
+  })
+
+  it('目标比散布还大就是必中', () => {
+    // 坦克炮散布 1.8×1.5 米，坦克 7×3.4×2.3 米：min(H,宽)=H、min(V,高)=V → 1
+    expect(unguidedHit(ammo(300), tank()!, 700)).toBe(1)
   })
 })
 
-describe('导弹打得中吗', () => {
-  it('ECM 和诱饵直接乘', () => {
-    const t = profileOf(1, [], DATA)! // 自带 Shtora ×0.7
-    expect(hitChance(ammo(304), t).total).toBeCloseTo(0.7, 3)
-    const withDecoy = profileOf(1, [902], DATA)!
-    withDecoy.abilities.decoy = { qty: 25, mul: 0.85, duration: 3, cooldown: 1 }
-    expect(hitChance(ammo(304), withDecoy).total).toBeCloseTo(0.595, 3)
-    // 不放诱饵就只剩 ECM
-    expect(hitChance(ammo(304), withDecoy, false).total).toBeCloseTo(0.7, 3)
+describe('命中率 · 制导（游戏的 CalculateMissileHitChance）', () => {
+  it('导引头 > 0 才算制导，散布两个字段改成命中率和抗干扰', () => {
+    expect(isGuided(ammo(304))).toBe(true)
+    expect(isGuided(ammo(300))).toBe(false)
+    const h = guidedHit(ammo(304), profileOf(2, [], DATA)!, { flares: 0 })
+    expect(h.accuracy).toBe(1)
+    expect(h.resist).toBe(0)
+    expect(h.total).toBe(1)
   })
 
-  it('只有标了可拦截的弹药才受 APS 影响', () => {
+  it('ECM 直接乘', () => {
+    const t = profileOf(1, [], DATA)! // 自带 Shtora ×0.7
+    expect(guidedHit(ammo(304), t, { flares: 0 }).total).toBeCloseTo(0.7, 3)
+  })
+
+  it('干扰弹按发数指数衰减：((1-抗干扰) × 乘数)^n', () => {
+    const t = profileOf(2, [], DATA)!
+    t.abilities.decoy = { qty: 25, mul: 0.85, duration: 3, cooldown: 1 }
+    expect(guidedHit(ammo(304), t, { flares: 1 }).total).toBeCloseTo(0.85, 3)
+    expect(guidedHit(ammo(304), t, { flares: 2 }).total).toBeCloseTo(0.7225, 3)
+    expect(guidedHit(ammo(304), t, { flares: 0 }).total).toBe(1)
+    // 抗干扰 0.5 的导弹只被削一半
+    const hard = ammo(304, { dispV: 0.5 })
+    expect(guidedHit(hard, t, { flares: 1 }).total).toBeCloseTo(0.425, 3)
+  })
+
+  it('射手被压制也是直接乘', () => {
+    const t = profileOf(2, [], DATA)!
+    expect(guidedHit(ammo(304), t, { flares: 0, stress: 0.6 }).total).toBeCloseTo(0.6, 3)
+  })
+})
+
+describe('AOE（游戏的 DealAOEDamage）', () => {
+  it('距离从目标外壳算起，不是中心', () => {
+    const t = tank()! // 外壳半径 ≈ 3.9
+    // 落在外壳上 = 满伤
+    expect(aoeFactor(ammo(305), t.bounds, t.bounds)).toBe(1)
+    // 中心到爆点 = 外壳 + 半径 → 刚好出圈
+    expect(aoeFactor(ammo(305), t.bounds + 175, t.bounds)).toBe(0)
+  })
+
+  it('线性衰减：一半半径处剩一半伤害', () => {
+    const t = tank()!
+    expect(aoeFactor(ammo(305), t.bounds + 87.5, t.bounds)).toBeCloseTo(0.5, 2)
+  })
+
+  it('标了「伤害不衰减」的在半径内一律满伤', () => {
+    const t = tank()!
+    const flat = ammo(305, { noFalloff: true })
+    expect(aoeFactor(flat, t.bounds + 100, t.bounds)).toBe(1)
+  })
+
+  it('距离超过 100 米一律没伤害（游戏里夹到 100）', () => {
+    const t = tank()!
+    expect(aoeFactor(ammo(305), t.bounds + 120, t.bounds)).toBe(0)
+  })
+
+  it('曲线从满伤降到 0，致死半径算得出来', () => {
+    const t = tank()!
+    const c = aoeCurve(ammo(305), t)
+    expect(c[0].dmg).toBe(175)
+    expect(c[c.length - 1].dmg).toBe(0)
+    // 175 伤害打 17 血：d = 175 × (1 − 17/175) ≈ 158，但游戏夹到 100
+    expect(lethalRadius(ammo(305), t)).toBeCloseTo(100 + t.bounds, 1)
+    // 伤害不够就炸不死
+    expect(lethalRadius(ammo(301), t)).toBeNull()
+  })
+})
+
+describe('APS', () => {
+  it('只有标了可拦截的弹药才受影响，拦截次数 +1 发就能穿过去', () => {
     const t = profileOf(1, [902], DATA)!
-    expect(hitChance(ammo(304), t).aps?.qty).toBe(4) // 火箭弹可拦
-    expect(hitChance(ammo(300), t).aps).toBeNull() // 穿甲弹拦不住
+    expect(apsAgainst(ammo(304), t).saturate).toBe(5) // Trophy 拦 4 发
+    expect(apsAgainst(ammo(300), t).aps).toBeNull() // 穿甲弹拦不住
+  })
+})
+
+describe('自动选弹种', () => {
+  it('打坦克侧面挑穿甲弹，打步兵挑能打步兵的那种', () => {
+    const tankP = tank()!
+    const infP = inf()!
+    const vsTank = engage(tankP, tankP, 300, 'side')
+    const gun = vsTank.find((e) => e.weapon.name === '120mm 炮')!
+    expect(gun.best?.name).toBe('尾翼稳定脱壳穿甲弹')
+    const vsInf = engage(tankP, infP, 200, 'front')
+    const gun2 = vsInf.find((e) => e.weapon.name === '120mm 炮')!
+    // 穿甲弹不打步兵，所以选不出它
+    expect(gun2.best?.name).not.toBe('尾翼稳定脱壳穿甲弹')
+  })
+
+  it('够不着的武器选不出弹药', () => {
+    const tankP = tank()!
+    const far = engage(tankP, tankP, 900, 'side')
+    expect(far.every((e) => e.best === null)).toBe(true)
   })
 })
 
 describe('拿软件自带的真数据兜一遍', () => {
   const ready = Object.keys(COMBAT.units || {}).length > 0
   it.runIf(ready)('主战坦克互打：正面打不穿、侧面两发死', () => {
-    const abrams = profileOf(191, [], COMBAT) // M1A2 SEP v3
-    const t90 = profileOf(238, [], COMBAT) // T-90M
+    const abrams = profileOf(191, [], COMBAT)
+    const t90 = profileOf(238, [], COMBAT)
     expect(abrams && t90).toBeTruthy()
     const gun = abrams!.weapons.find((w) => /120/.test(w.name))!
     const sabot = gun.ammo.find((a) => /APFSDS/i.test(a.name))!
@@ -279,12 +372,17 @@ describe('拿软件自带的真数据兜一遍', () => {
     expect(side.shots).toBe(2)
   })
 
-  it.runIf(ready)('每个单位都能算出侧面，不会抛异常', () => {
+  it.runIf(ready)('每个单位都能算出来，不会抛异常也不会出 NaN', () => {
     let ok = 0
     for (const id of Object.keys(COMBAT.units).slice(0, 200)) {
       const p = profileOf(Number(id), [], COMBAT)
       if (!p) continue
-      for (const w of p.weapons) for (const a of w.ammo) shotAt(w, a, p, 300, 'side')
+      for (const e of engage(p, p, 300, 'side')) {
+        for (const x of e.all) {
+          expect(Number.isFinite(x.result.hit)).toBe(true)
+          expect(Number.isFinite(x.result.dps)).toBe(true)
+        }
+      }
       ok++
     }
     expect(ok).toBeGreaterThan(100)

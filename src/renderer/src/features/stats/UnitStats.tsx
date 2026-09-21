@@ -33,14 +33,14 @@ const COLS: Col[] = [
   ['killsPerSortie', '击杀/次', (u) => u.killsPerSortie, (u) => (u.killsPerSortie || 0).toFixed(1)],
   ['killsPer1k', '击杀/1000花费', (u) => u.killsPer1k, (u) => (u.killsPer1k ?? 0).toFixed(2)],
   ['dmg', '总伤害', (u) => u.dmg, (u) => num(u.dmg)],
-  ['matches', '局数', (u) => u.matches, (u) => String(u.matches), '在几局里出现过'],
-  ['users', '用过的人', (u) => u.users, (u) => String(u.users)]
+  ['matches', '局数', (u) => u.matches, (u) => String(u.matches), '在几局里出现过']
 ]
 
 export default function UnitStats(): React.JSX.Element {
   const [res, setRes] = useState<UnitStatsResult | null>(null)
   const [maps, setMaps] = useState<{ id: number; name: string; matches: number }[]>([])
-  const [f, setF] = useState<UnitStatsFilter>({ who: 'all', minDeployed: 5 })
+  // 默认只看自己出的兵——别人的配装参考价值有限，而且样本混在一起不好比
+  const [f, setF] = useState<UnitStatsFilter>({ who: 'me', minDeployed: 3 })
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'dmgPer100', dir: -1 })
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
@@ -103,9 +103,9 @@ export default function UnitStats(): React.JSX.Element {
             </option>
           ))}
         </select>
-        <select value={f.who || 'all'} onChange={(e) => patch({ who: e.target.value as UnitStatsFilter['who'] })}>
+        <select value={f.who || 'me'} onChange={(e) => patch({ who: e.target.value as UnitStatsFilter['who'] })}>
+          <option value="me">只看我出的兵</option>
           <option value="all">所有人</option>
-          <option value="me">只看我</option>
           <option value="others">只看别人</option>
         </select>
         <select value={f.result || ''} onChange={(e) => patch({ result: (e.target.value || null) as UnitStatsFilter['result'] })}>
@@ -114,7 +114,7 @@ export default function UnitStats(): React.JSX.Element {
           <option value="lose">只看输的那一方</option>
         </select>
         <select value={String(f.minDeployed ?? 5)} onChange={(e) => patch({ minDeployed: Number(e.target.value) })}>
-          {[1, 3, 5, 10, 20].map((n) => (
+          {[1, 2, 3, 5, 10, 20].map((n) => (
             <option key={n} value={n}>
               至少出动 {n} 次
             </option>

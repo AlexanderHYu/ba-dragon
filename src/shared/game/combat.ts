@@ -3,8 +3,8 @@
 // scripts/export-gamedata.mts 从游戏文件里导出来，游戏更新之后重新导一次。
 import raw from './combat.json'
 
-/** 单位：[名字, 价格, 长, 宽, 高, 最大压制, 隐蔽, 类别, 兵种角色] */
-export type CUnit = [string, number, number, number, number, number, number, number, number]
+/** 单位：[名字, 价格, 长, 宽, 高, 最大压制, 隐蔽, 类别, 兵种角色, 国家] */
+export type CUnit = [string, number, number, number, number, number, number, number, number, number]
 /** 装甲：[血量, 动能前, 动能侧, 动能后, 动能顶, 破甲前, 破甲侧, 破甲后, 破甲顶, 步兵护甲值] */
 export type CArmor = [number, number, number, number, number, number, number, number, number, number]
 /**
@@ -31,7 +31,11 @@ export type CWeapon = [
 /**
  * 弹药：[名字, 伤害, 压制伤害, 近距穿深, 地面距离穿深, 地面射程, 低空射程, 高空射程,
  *        目标类型位图, 针对装甲(0无/1动能/2破甲), 血量AOE半径, 压制AOE半径, 超压半径,
- *        顶部攻击, 可被拦截, 激光制导, 水平散布, 垂直散布, 最小射程, 暴击倍率, 无视掩体]
+ *        顶部攻击, 可被拦截, 激光制导, 水平散布, 垂直散布, 最小射程, 暴击倍率, 无视掩体,
+ *        伤害不衰减, 导引头类型（0 = 无制导）, 最小散布比例, 抛射角, 抛射高度]
+ *
+ * 注意：制导弹药（导引头 > 0 或激光制导）把「水平散布 / 垂直散布」两个字段
+ * 挪作他用——水平 = 基础命中率，垂直 = 抗干扰（见 docs/game-db.md）。
  */
 export type CAmmo = [
   string,
@@ -51,6 +55,11 @@ export type CAmmo = [
   0 | 1,
   0 | 1,
   number,
+  number,
+  number,
+  number,
+  number,
+  0 | 1,
   number,
   number,
   number,
@@ -115,6 +124,12 @@ export interface CombatData {
   squad: Record<number, [number, number, number][]>
   /** 单位有哪些配装槽位：[槽位名, [[选项id, 是不是默认], …]] */
   unitOptions: Record<number, [string, [number, 0 | 1][]][]>
+  /** 单位能出现在哪些专精里（做筛选用） */
+  unitSpecs: Record<number, number[]>
+  /** 专精：id → [名字, 国家] */
+  specs: Record<number, [string, number]>
+  /** 国家：id → 名字 */
+  countries: Record<number, string>
   /** 传感器：[名字, 对地, 低空, 高空] */
   sensors: Record<number, [string, number, number, number]>
   /** 机动：[名字, 公路, 越野, 倒车, 转向, 加速, 爬升, 滞空, 加力滞空, 两栖, 可空投] */
@@ -126,7 +141,7 @@ export const COMBAT = raw as unknown as CombatData
 export const hasCombat = (): boolean => Object.keys(COMBAT.units || {}).length > 0
 
 // ---------- 位置常量，别到处写魔法下标 ----------
-export const U = { name: 0, cost: 1, len: 2, wid: 3, hei: 4, stress: 5, stealth: 6, cat: 7, role: 8 } as const
+export const U = { name: 0, cost: 1, len: 2, wid: 3, hei: 4, stress: 5, stealth: 6, cat: 7, role: 8, country: 9 } as const
 export const A = { hp: 0, kf: 1, ks: 2, kr: 3, kt: 4, hf: 5, hs: 6, hr: 7, ht: 8, inf: 9 } as const
 export const W = {
   name: 0,
@@ -166,7 +181,12 @@ export const M = {
   dispV: 17,
   minRange: 18,
   crit: 19,
-  ignoreCover: 20
+  ignoreCover: 20,
+  noFalloff: 21,
+  seeker: 22,
+  dispMin: 23,
+  loftAngle: 24,
+  loftHeight: 25
 } as const
 export const B = {
   name: 0,

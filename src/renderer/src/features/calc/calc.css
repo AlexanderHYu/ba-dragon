@@ -201,3 +201,131 @@ table.calc-table thead th {
   align-items: center;
   margin-top: 2px;
 }
+
+/* ---------- 单位浏览器 ---------- */
+.ub-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.ub {
+  background: var(--card);
+  border: 1px solid var(--line-hi);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: min(1000px, 96vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+}
+.ub-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ub-head input {
+  flex: 1;
+  max-width: 320px;
+}
+.ub-head .grow {
+  flex: 1;
+}
+.ub-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.ub-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.ub-row > .dim {
+  width: 34px;
+}
+.ub-row button {
+  font-size: 11.5px;
+  padding: 2px 8px;
+}
+.ub-list {
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+button.ub-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+button.ub-item:hover,
+button.ub-item.on {
+  background: var(--accent-soft);
+}
+.ub-name {
+  flex: 1;
+}
+.ub-cat {
+  font-size: 11px;
+}
+.ub-cost {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+/* ---------- 结果表 ---------- */
+.calc-row {
+  cursor: pointer;
+}
+.calc-row:hover > td {
+  background: var(--row-hover);
+}
+.calc-row.open > td {
+  background: var(--accent-soft);
+}
+.calc-alt-row > td {
+  padding: 0 !important;
+}
+.calc-alt {
+  background: var(--card-2);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px 10px;
+}
+.calc-alt-head {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.calc-alt-me > td {
+  background: var(--accent-soft);
+}
+.calc-formula {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  background: var(--card-2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
