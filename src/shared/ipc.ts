@@ -220,6 +220,9 @@ export interface IpcMap {
   'match:sync': [void, { added: number; accounts: number } | { error: string }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   /** 游戏自带单位库：状态 / 重新读一遍 */
+  /** 单位效能：档案里所有对局的出兵记录按「单位 + 配装」聚合 */
+  'stats:units': [UnitStatsFilter | void, UnitStatsResult]
+  'stats:maps': [void, { id: number; name: string; matches: number }[]]
   'gamedb:status': [void, GameDbStatus]
   'gamedb:refresh': [void, GameDbStatus]
   /** 读一副卡组的内容（需要密钥） */
@@ -249,6 +252,57 @@ export interface DeckView {
       transportCost: number
     }[]
   }[]
+}
+
+/** 单位效能表：一行 = 一个「单位 + 配装」 */
+export interface UnitStatRow {
+  unitId: number
+  options: string
+  name: string
+  /** 挂了什么 */
+  loadout: string
+  roleName: string
+  /** 单价（含配装） */
+  cost: number
+  deployed: number
+  refunded: number
+  dead: number
+  deathRate: number | null
+  /** 阵亡的那些从出兵到死的秒数，中位 */
+  lifeMedian: number | null
+  dmg: number
+  kills: number
+  /** 每 100 点花费打出多少伤害 */
+  dmgPer100: number | null
+  /** 每 1000 点花费打出多少击杀 */
+  killsPer1k: number | null
+  dmgPerSortie: number
+  killsPerSortie: number
+  /** 出现在几局里 */
+  matches: number
+  /** 多少个不同的人用过 */
+  users: number
+}
+
+export interface UnitStatsFilter {
+  mapId?: number | null
+  /** me = 只看本机账号，others = 只看别人，all/不给 = 都算 */
+  who?: 'all' | 'me' | 'others'
+  result?: 'win' | 'lose' | null
+  rankedOnly?: boolean
+  sinceDays?: number
+  /** 出动次数少于这个数的不显示（样本太小别下结论） */
+  minDeployed?: number
+}
+
+export interface UnitStatsResult {
+  rows: UnitStatRow[]
+  /** 统计了几局、几条出兵记录 */
+  matches: number
+  records: number
+  /** 其中有多少条在价目表里查不到 */
+  unpriced: number
+  priced: 'local' | 'bundled' | 'none'
 }
 
 /** 游戏单位库的状态 */

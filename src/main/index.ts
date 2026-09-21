@@ -15,6 +15,7 @@ import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
 import { Updater } from './services/updater'
 import { GameDbService } from './services/gameDb'
+import { Analytics } from './services/analytics'
 import { ReplayService } from './services/replays'
 import { migrateLegacy, legacyLocalIds } from './services/migrate'
 import { MatchSync } from './services/matchSync'
@@ -41,6 +42,7 @@ export interface Services {
   bans: BanService
   updater: Updater
   gamedb: GameDbService
+  stats: Analytics
   replays: ReplayService
   sync: MatchSync
   send: <T>(channel: string, payload?: T) => void
@@ -194,6 +196,7 @@ function startServices(): Services {
     return [...ids]
   }
   const sync = new MatchSync(client, db, tracker, localIds)
+  const stats = new Analytics(db, gamedb, localIds)
 
   const replays = new ReplayService(
     config,
@@ -292,7 +295,7 @@ function startServices(): Services {
         .catch(() => undefined)
     }, 10000)
   }
-  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, gamedb, replays, sync, send, session, queryRoster }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, gamedb, stats, replays, sync, send, session, queryRoster }
 }
 
 app.on('second-instance', () => {

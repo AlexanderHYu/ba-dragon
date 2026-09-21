@@ -1,6 +1,6 @@
 // 预加载：界面只能通过这里跟主进程说话（contextIsolation 开着，没有 nodeIntegration）。
 import { contextBridge, ipcRenderer } from 'electron'
-import type { EventMap, IpcMap } from '@shared/ipc'
+import type { EventMap, IpcMap, UnitStatsFilter } from '@shared/ipc'
 
 const invoke = <K extends keyof IpcMap>(ch: K, arg?: IpcMap[K][0]): Promise<IpcMap[K][1]> =>
   ipcRenderer.invoke(ch, arg)
@@ -46,6 +46,8 @@ const api = {
   syncMatches: () => invoke('match:sync'),
 
   getVersion: () => invoke('app:version'),
+  unitStats: (f?: UnitStatsFilter) => invoke('stats:units', f),
+  statsMaps: () => invoke('stats:maps'),
   getGameDb: () => invoke('gamedb:status'),
   refreshGameDb: () => invoke('gamedb:refresh'),
   getUpdateInfo: () => invoke('update:get'),

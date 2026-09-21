@@ -36,6 +36,9 @@ export default function TopBar(): React.JSX.Element {
       <button className={page.name === 'home' ? 'primary' : ''} onClick={() => setPage({ name: 'home' })}>
         🏠 主界面
       </button>
+      <button className={page.name === 'stats' ? 'primary' : ''} onClick={() => setPage({ name: 'stats' })}>
+        📊 单位效能
+      </button>
       <button className={page.name === 'settings' ? 'primary' : ''} onClick={() => setPage({ name: 'settings' })}>
         ⚙ 设置
       </button>

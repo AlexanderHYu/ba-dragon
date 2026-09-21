@@ -5,6 +5,7 @@ import UpdateBanner from './components/UpdateBanner'
 import Toasts from './components/Toasts'
 import Home from './features/home/Home'
 import Settings from './features/settings/Settings'
+import UnitStats from './features/stats/UnitStats'
 import ReportPage from './features/report/ReportPage'
 
 export default function App(): React.JSX.Element {
@@ -47,6 +48,7 @@ export default function App(): React.JSX.Element {
         <UpdateBanner />
         {page.name === 'home' && <Home onOpenReport={(fid) => setPage({ name: 'report', fid })} />}
         {page.name === 'report' && <ReportPage fid={page.fid} onBack={() => setPage({ name: 'home' })} />}
+        {page.name === 'stats' && <UnitStats />}
         {page.name === 'settings' && <Settings />}
       </div>
       <Toasts />

@@ -282,6 +282,8 @@ export function registerIpc(s: Services): void {
     ...s.gamedb.status(),
     hasKey: String(s.config.get('gameKey') || '').trim().length === 32
   })
+  on('stats:units', (f) => s.stats.unitStats(f || {}))
+  on('stats:maps', () => s.stats.maps())
   on('gamedb:status', () => gamedbStatus())
   on('gamedb:refresh', () => {
     s.gamedb.load(true)
