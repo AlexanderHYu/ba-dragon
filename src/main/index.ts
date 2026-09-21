@@ -129,6 +129,19 @@ function startServices(): Services {
     if (type === 'matchEnd') {
       const m = data as { fid?: string | null; map?: string }
       replays?.stopForMatch(m?.fid ?? null, m?.map || '')
+      // BATrace 出数据比打完慢一两分钟（实测 90 秒），所以等一会儿再抓这一局：
+      // 对局档案马上就有，录像文件名里缺的地图/队伍也顺手补上
+      if (!watcher.isHistorical()) {
+        setTimeout(
+          () => {
+            void sync
+              .run()
+              .catch(() => undefined)
+              .then(() => replays?.backfillMeta())
+          },
+          2 * 60 * 1000
+        )
+      }
     }
     if (watcher.isHistorical()) return
     if (type === 'matchStart') {
@@ -166,11 +179,16 @@ function startServices(): Services {
   }
   const sync = new MatchSync(client, db, tracker, localIds)
 
-  const replays = new ReplayService(config, db, {
-    status: (st) => send('replay:status', st),
-    changed: () => send('replay:changed'),
-    log: (line) => send('replay:log', line)
-  })
+  const replays = new ReplayService(
+    config,
+    db,
+    {
+      status: (st) => send('replay:status', st),
+      changed: () => send('replay:changed'),
+      log: (line) => send('replay:log', line)
+    },
+    localIds
+  )
   // 不在对局了还在录（崩溃退出、日志漏了结束行）：每 30 秒兜一次
   setInterval(() => replays.watchdog(!!parser.snapshot().current), 30000)
 

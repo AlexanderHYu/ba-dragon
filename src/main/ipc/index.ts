@@ -218,7 +218,9 @@ export function registerIpc(s: Services): void {
 
   on('match:sync', async () => {
     try {
-      return await s.sync.run()
+      const r = await s.sync.run()
+      s.replays?.backfillMeta()
+      return r
     } catch (e) {
       return { error: String((e as Error)?.message || e) }
     }

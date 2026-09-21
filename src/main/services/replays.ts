@@ -36,7 +36,9 @@ export class ReplayService {
   constructor(
     private config: Config,
     private db: Db,
-    private emit: { status: (s: RecorderStatus & { error?: string }) => void; changed: () => void; log: (s: string) => void }
+    private emit: { status: (s: RecorderStatus & { error?: string }) => void; changed: () => void; log: (s: string) => void },
+    /** 本机账号，用来确定录像文件名里的「谁录的」 */
+    private localIds: () => string[] = () => []
   ) {
     this.recorder = new FfmpegRecorder({
       onStatus: (s) => this.emit.status(s),
@@ -134,8 +136,11 @@ export class ReplayService {
       const dir = this.dir()
       mkdirSync(dir, { recursive: true })
       const meta = this.metaFor(r.fid)
+      // 只要有 fid 就按 fid 命名。对局刚打完时 BATrace 那边还没出数据（实测慢一分多钟），
+      // 本地库里查不到是谁、哪张图——那几段留空就是了，名字里的 fid 才是要紧的，
+      // 少了它这份录像在对局档案里就对不上号。剩下的等数据到了由 backfillMeta() 补。
       const name =
-        /^\d+$/.test(String(r.fid)) && meta.uploaderId
+        /^\d+$/.test(String(r.fid))
           ? (encodeReplayKey({
               fid: r.fid,
               uploaderId: meta.uploaderId,
@@ -173,14 +178,83 @@ export class ReplayService {
     }
   }
 
+  /**
+   * 补名字：存盘时对局数据还没抓回来的那些录像（文件名里只有 fid，地图/队伍/名字是空的），
+   * 数据到了以后重命名一次，对局档案和播放器就能正常显示了。返回补了几个。
+   */
+  backfillMeta(): number {
+    const dir = this.dir()
+    let n = 0
+    for (const r of localReplayList(dir)) {
+      if (r.uploaderId) continue
+      // nofid_<存盘时间>.mp4：1.0.1 及以前，存盘时对局数据还没到就会丢掉 fid。
+      // 用存盘时间去认那一局，认不准就不动。
+      const fid = /^\d+$/.test(String(r.fid)) ? r.fid : this.guessFid(r.createdAt)
+      if (!fid) continue
+      const meta = this.metaFor(fid)
+      if (!meta.uploaderId) continue
+      const name = encodeReplayKey({
+        fid,
+        uploaderId: meta.uploaderId,
+        uploaderName: meta.uploaderName,
+        teamId: meta.teamId,
+        mapId: meta.mapId,
+        ts: r.createdAt || Date.now()
+      })
+        .split('/')
+        .pop() as string
+      if (name === r.id) continue
+      try {
+        renameSync(r.localPath, join(dir, name))
+        this.log('补名字: ' + r.id + ' → ' + name)
+        n++
+      } catch {
+        /* 文件被占用/已删掉就跳过，下次再补 */
+      }
+    }
+    if (n) this.emit.changed()
+    return n
+  }
+
+  /**
+   * 按存盘时间认对局：本地库里结束时间在前后 5 分钟内、且本机账号打过的那一局。
+   * 正好只有一局才算数，有两局对得上就宁可不认。
+   */
+  private guessFid(ts: number): string | null {
+    if (!ts) return null
+    const mine = this.localIds()
+    if (!mine.length) return null
+    const W = 5 * 60 * 1000
+    const rows = this.db.all<{ fid: string; start_time: number; duration_sec: number }>(
+      `SELECT m.fid, m.start_time, m.duration_sec FROM match m
+       JOIN match_player mp ON mp.fid = m.fid AND mp.pid IN (${mine.map(() => '?').join(',')})
+       WHERE m.start_time BETWEEN ? AND ?`,
+      [...mine, ts - 4 * 3600 * 1000, ts + W]
+    )
+    const hit = rows.filter((m) => Math.abs(m.start_time + (m.duration_sec || 0) * 1000 - ts) <= W)
+    return hit.length === 1 ? hit[0].fid : null
+  }
+
   /** 录像文件名里带的对局信息：本机是谁、哪一队、哪张图（本地库里查） */
   private metaFor(fid: string): { uploaderId: string; uploaderName: string; teamId: number | null; mapId: number | null } {
-    const row = this.db.get<{ pid: string; name: string; team: number }>(
-      `SELECT mp.pid, mp.name, mp.team FROM match_player mp
+    // 「谁录的」当然是本机账号。以前是 LIMIT 1 随便取一行，取到别人身上
+    // 文件名里的队伍就是错的
+    const mine = this.localIds()
+    const row =
+      (mine.length
+        ? this.db.get<{ pid: string; name: string; team: number }>(
+            'SELECT pid, name, team FROM match_player WHERE fid = ? AND pid IN (' +
+              mine.map(() => '?').join(',') +
+              ') LIMIT 1',
+            [fid, ...mine]
+          )
+        : null) ||
+      this.db.get<{ pid: string; name: string; team: number }>(
+        `SELECT mp.pid, mp.name, mp.team FROM match_player mp
        JOIN player p ON p.pid = mp.pid
        WHERE mp.fid = ? LIMIT 1`,
-      [fid]
-    )
+        [fid]
+      )
     const m = this.db.get<{ map_id: number | null }>('SELECT map_id FROM match WHERE fid = ?', [fid])
     return {
       uploaderId: row?.pid || '',
