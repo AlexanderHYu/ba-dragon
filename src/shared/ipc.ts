@@ -125,6 +125,8 @@ export interface Settings {
   /** 游戏根目录；日志目录从它推 */
   gameDir: string
   logDir: string
+  /** 读游戏自带单位库的密钥（32 位，空 = 不启用） */
+  gameKey: string
   pollMs: number
   apiDelayMs: number
   autoQueryCurrentMatch: boolean
@@ -217,10 +219,49 @@ export interface IpcMap {
   'replay:selectDir': [void, string | null]
   'match:sync': [void, { added: number; accounts: number } | { error: string }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
+  /** 游戏自带单位库：状态 / 重新读一遍 */
+  'gamedb:status': [void, GameDbStatus]
+  'gamedb:refresh': [void, GameDbStatus]
+  /** 读一副卡组的内容（需要密钥） */
+  'deck:read': [string, DeckView | { error: string }]
   'update:get': [void, UpdateInfo | null]
   /** 手动点「检查更新」：查完把结果直接返回，没有新版本就是 null */
   'update:check': [void, UpdateInfo | null]
   'update:install': [void, boolean]
+}
+
+export interface DeckView {
+  name: string
+  country: string
+  specs: string[]
+  /** 一共多少张卡 */
+  cards: number
+  cats: {
+    key: string
+    label: string
+    items: {
+      unitId: number
+      name: string
+      loadout: string
+      cost: number
+      count: number
+      transport: string | null
+      transportCost: number
+    }[]
+  }[]
+}
+
+/** 游戏自带单位库的状态 */
+export interface GameDbStatus {
+  /** 读出来了没有 */
+  ready: boolean
+  units: number
+  options: number
+  /** 游戏资源包的大小:修改时间，游戏更新了这个会变 */
+  stamp: string | null
+  error: string | null
+  /** 设置里填没填密钥 */
+  hasKey: boolean
 }
 
 export interface UpdateInfo {

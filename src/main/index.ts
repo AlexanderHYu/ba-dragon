@@ -1,7 +1,7 @@
 // ================= 主进程 =================
 // 只负责搭台子：建窗口、起服务、把 IPC 接上。具体逻辑都在 services/ 里。
 import { app, BrowserWindow, protocol, shell } from 'electron'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { LogParser } from '@shared/log'
 import type { SessionState } from '@shared/ipc'
 import { Config } from './services/config'
@@ -14,6 +14,7 @@ import { DeckService } from './services/decks'
 import { Tracker } from './services/tracker'
 import { BanService } from './services/bans'
 import { Updater } from './services/updater'
+import { GameDbService } from './services/gameDb'
 import { ReplayService } from './services/replays'
 import { migrateLegacy, legacyLocalIds } from './services/migrate'
 import { MatchSync } from './services/matchSync'
@@ -39,6 +40,7 @@ export interface Services {
   tracker: Tracker
   bans: BanService
   updater: Updater
+  gamedb: GameDbService
   replays: ReplayService
   sync: MatchSync
   send: <T>(channel: string, payload?: T) => void
@@ -162,7 +164,22 @@ function startServices(): Services {
     }
   })
 
-  const decks = new DeckService(dataDir)
+  // 游戏自带的单位库：配装真名 + 精确花费。没填密钥就一直是「没读到」，功能自动退回估算
+  const gamedb = new GameDbService(
+    db,
+    // 老版设置里只有日志目录（…roken_arrow\GameLogs），游戏根目录就是它的上一级
+    () => String(config.get('gameDir') || '') || dirname(String(config.get('logDir') || '')),
+    () => String(config.get('gameKey') || '')
+  )
+  setTimeout(() => {
+    try {
+      gamedb.load()
+    } catch {
+      /* 读不出来不影响其它功能 */
+    }
+  }, 1500)
+
+  const decks = new DeckService(dataDir, () => String(config.get('gameKey') || ''))
   const tracker = new Tracker(db)
   const client = new BatraceClient({ db, delayMs: () => Number(config.get('apiDelayMs')) || 1200 })
   const bans = new BanService(client, db)
@@ -276,7 +293,7 @@ function startServices(): Services {
         .catch(() => undefined)
     }, 10000)
   }
-  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, replays, sync, send, session, queryRoster }
+  return { config, db, parser, watcher, client, players, query, decks, tracker, bans, updater, gamedb, replays, sync, send, session, queryRoster }
 }
 
 app.on('second-instance', () => {

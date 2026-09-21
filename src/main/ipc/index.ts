@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { app, dialog, ipcMain, shell } from 'electron'
 import { analyzeMatch } from '@shared/dragon'
 import { buildMatchReport } from '@shared/match'
-import type { ArchiveItem, IpcMap, PlayerCard, Settings } from '@shared/ipc'
+import type { ArchiveItem, GameDbStatus, IpcMap, PlayerCard, Settings } from '@shared/ipc'
 import type { Services } from '../index'
 import { detectLogDir, resolveGameDir } from '../services/config'
 import { mapName } from '../services/players'
@@ -21,6 +21,14 @@ export function registerIpc(s: Services): void {
     const before = s.config.all()
     const next = s.config.set(patch as Partial<Settings>)
     if (before.logDir !== next.logDir || before.pollMs !== next.pollMs) s.watcher.restart()
+    // 换了密钥或游戏目录就重新读一遍游戏自带的单位库
+    if (before.gameKey !== next.gameKey || before.gameDir !== next.gameDir) {
+      try {
+        s.gamedb.load(before.gameKey !== next.gameKey)
+      } catch {
+        /* 读不出来上层会显示原因 */
+      }
+    }
     return next
   })
   // 选游戏根目录就行（…\\steamapps\\common\\broken_arrow），日志目录自己推
@@ -108,7 +116,7 @@ export function registerIpc(s: Services): void {
       if (!mi?.Data || !Object.keys(mi.Data).length) return { error: 'notYet' }
       const review = analyzeMatch(mi, fid)
       const ids = localIds?.length ? localIds : localPlayerIds(s)
-      const report = buildMatchReport(mi, { fid, review, localIds: ids, mapName })
+      const report = buildMatchReport(mi, { fid, review, localIds: ids, mapName, game: s.gamedb.priceTable() || undefined })
       saveMatch(s, fid, mi, report)
       s.tracker.recordMatch(
         fid,
@@ -234,6 +242,11 @@ export function registerIpc(s: Services): void {
     decks: s.decks.list(),
     backups: s.decks.backups()
   }))
+  on('deck:read', (name) => {
+    const raw = s.decks.readDeck(name)
+    if (raw && typeof raw === 'object' && 'error' in raw) return raw as { error: string }
+    return s.gamedb.describeDeck(raw, name)
+  })
   on('deck:backup', (arg) => s.decks.backup(arg?.name, arg?.only))
   on('deck:restore', ({ name, overwrite }) => s.decks.restore(name, { overwrite }))
   on('deck:deleteDecks', (names) => s.decks.deleteDecks(names || []))
@@ -256,6 +269,15 @@ export function registerIpc(s: Services): void {
   on('app:version', () => {
     const u = s.updater.latest()
     return { current: app.getVersion(), latest: u?.version || app.getVersion(), hasUpdate: !!u }
+  })
+  const gamedbStatus = (): GameDbStatus => ({
+    ...s.gamedb.status(),
+    hasKey: String(s.config.get('gameKey') || '').trim().length === 32
+  })
+  on('gamedb:status', () => gamedbStatus())
+  on('gamedb:refresh', () => {
+    s.gamedb.load(true)
+    return gamedbStatus()
   })
   on('update:get', () => s.updater.latest())
   on('update:check', async () => {

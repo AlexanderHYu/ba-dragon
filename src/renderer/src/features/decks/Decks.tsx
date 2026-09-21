@@ -1,7 +1,7 @@
 // 卡组工具：左边「前线卡组」（游戏目录里的 .dek），右边「后勤仓库」（备份出来的 .zip）。
 // 两边都是多选列表，选中后批量备份／部署／删除。删除有确认框。
 import { useCallback, useEffect, useState } from 'react'
-import type { BackupFile, DeckFile } from '@shared/ipc'
+import type { BackupFile, DeckFile, DeckView } from '@shared/ipc'
 import './decks.css'
 
 interface DeckData {
@@ -46,12 +46,15 @@ function PickList({
   rows,
   sel,
   onChange,
-  empty
+  empty,
+  onPeek
 }: {
   rows: Row[]
   sel: string[]
   onChange: (next: string[]) => void
   empty: string
+  /** 给了就在每行右边放个「看内容」的按钮 */
+  onPeek?: (name: string) => void
 }): React.JSX.Element {
   return (
     <div className="deck-list" role="listbox" aria-multiselectable="true">
@@ -75,10 +78,64 @@ function PickList({
               <span className="deck-name">{r.name}</span>
               {r.badge && <span className="deck-badge">{r.badge}</span>}
               <span className="deck-sub">{r.sub}</span>
+              {onPeek && (
+                <button
+                  className="deck-peek"
+                  title="看看这副卡组里有什么"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onPeek(r.name)
+                  }}
+                >
+                  👁
+                </button>
+              )}
             </div>
           )
         })
       )}
+    </div>
+  )
+}
+
+/** 一副卡组的内容：分类 → 每张卡（真名 + 挂载 + 单价 + 张数 + 运输车） */
+function DeckContent({ view, onClose }: { view: DeckView; onClose: () => void }): React.JSX.Element {
+  return (
+    <div className="deck-view">
+      <div className="deck-view-head">
+        <b>{view.name}</b>
+        <span className="dim">
+          {[view.country, ...view.specs].filter(Boolean).join(' · ')}
+          {' · '}
+          {view.cards} 张卡
+        </span>
+        <span className="grow" />
+        <button onClick={onClose}>✕</button>
+      </div>
+      {view.cats.map((c) => (
+        <div key={c.key} className="deck-cat">
+          <div className="deck-cat-head">
+            {c.label}
+            <span className="dim">{c.items.length} 种</span>
+          </div>
+          {c.items.map((it, i) => (
+            <div key={c.key + i} className="deck-card">
+              <span className="deck-card-name">
+                {it.name}
+                {it.count > 1 && <span className="dim"> ×{it.count}</span>}
+                {!!it.loadout && <div className="dim deck-card-load">{it.loadout}</div>}
+                {it.transport && (
+                  <div className="dim deck-card-load">
+                    🚚 {it.transport}
+                    {it.transportCost ? '（' + it.transportCost + '）' : ''}
+                  </div>
+                )}
+              </span>
+              <span className="deck-card-cost">{it.cost}</span>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -89,6 +146,9 @@ export default function Decks(): React.JSX.Element {
   const [back, setBack] = useState<string[]>([])
   const [msg, setMsg] = useState<Res | null>(null)
   const [busy, setBusy] = useState(false)
+  /** 正在看内容的那副卡组 */
+  const [view, setView] = useState<DeckView | null>(null)
+  const [viewErr, setViewErr] = useState<string | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
     const d = await window.BA.listDecks()
@@ -202,7 +262,29 @@ export default function Decks(): React.JSX.Element {
               </button>
             </div>
 
-            <PickList rows={frontRows} sel={front} onChange={setFront} empty="前线目录里没有卡组" />
+            <PickList
+              rows={frontRows}
+              sel={front}
+              onChange={setFront}
+              empty="前线目录里没有卡组"
+              onPeek={async (name) => {
+                setView(null)
+                setViewErr(null)
+                const r = await window.BA.readDeck(name)
+                if ('error' in r) {
+                  setViewErr(
+                    r.error === 'noKey'
+                      ? '要先在「设置 → 游戏数据」里填上游戏密钥，才能看卡组内容'
+                      : r.error === 'noGameDb'
+                        ? '游戏自带的单位表还没读出来，去「设置 → 游戏数据」看看'
+                        : r.error
+                  )
+                } else setView(r)
+              }}
+            />
+
+            {viewErr && <div className="lit-bad deck-tip">{viewErr}</div>}
+            {view && <DeckContent view={view} onClose={() => setView(null)} />}
 
             <div className="deck-actions">
               <button

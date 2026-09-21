@@ -433,3 +433,13 @@
     display: none;
   }
 }
+
+/* 单位表里名字下面那行挂载（读到游戏数据才有） */
+.rp .rp-loadout {
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 1px;
+  max-width: 260px;
+  white-space: normal;
+  line-height: 1.35;
+}

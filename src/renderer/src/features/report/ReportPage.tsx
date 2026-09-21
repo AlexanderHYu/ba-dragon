@@ -628,7 +628,16 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
   )
 
   const cols: [string, string, (u: (typeof list)[0]) => React.ReactNode, string?][] = [
-    ['name', '单位', (u) => <b>{u.name}</b>],
+    [
+      'name',
+      '单位',
+      (u) => (
+        <>
+          <b>{u.name}</b>
+          {!!u.loadout && <div className="rp-loadout dim">{u.loadout}</div>}
+        </>
+      )
+    ],
     ['roleName', '兵种', (u) => <span className="dim">{u.roleName}</span>],
     ['team', '队伍', (u) => <span className={'t' + u.team}>{teamName(u.team)}</span>],
     [
@@ -653,7 +662,12 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
       ),
       '出动次数，飞机按架次算；括号里是其中返航/回收的（回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费）'
     ],
-    ['cost', '单价', (u) => num(u.cost)],
+    [
+      'cost',
+      '单价',
+      (u) => num(u.cost),
+      r.priced === 'game' ? '单位基础价 + 配装加价（读的游戏自带价目表，精确值）' : '按官方出兵总数等比例摊出来的估算'
+    ],
     [
       'deathRate',
       '死亡率',
@@ -695,6 +709,9 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
           出兵 = 出动次数，飞机按架次算，返航后再出算两次；使用率 = 出动价值（出兵 × 单价）占本队的比例；死亡率 =
           阵亡 ÷ 出兵；回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费；击杀分/花费越高越赚；
           单位的击杀分是把这个人的总击杀分按各单位击杀数分下去的估算
+          {r.priced === 'game'
+            ? '；单价读的是游戏自带的价目表，含配装，精确到个位'
+            : '；单价是按官方出兵总数等比例摊出来的估算（在设置里填上游戏密钥就能变精确）'}
         </span>
       </div>
       <div className="rp-scroll">

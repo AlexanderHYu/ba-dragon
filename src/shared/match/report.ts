@@ -48,10 +48,12 @@ export interface ReportUnit {
   /** 配装（OptionIds 排序后拼起来） */
   options: string
   name: string
+  /** 挂了什么（有游戏数据时才有），如「2xKh29ML · 4xS13 · 2xR73」 */
+  loadout: string
   role: RoleKey | null
   roleName: string
   team: number
-  /** 估算单价（含配装） */
+  /** 单价（含配装）。有游戏数据时是精确值，没有就是估算 */
   cost: number
   /** 出动价值：架次 × 单价（返航的也算，使用率用这个） */
   value: number
@@ -170,6 +172,8 @@ export interface MatchReport {
   teams: ReportTeam[]
   players: ReportPlayer[]
   units: ReportUnit[]
+  /** 花费是怎么来的：game = 读了游戏自带的价目表（精确），estimate = 按官方总数等比例摊（估算） */
+  priced: 'game' | 'estimate'
   timeline: {
     minutes: number
     spawn: number[][]
@@ -199,6 +203,7 @@ interface UnitAgg {
   lost: number
   destr: number
   price: number
+  loadout: string
 }
 
 export interface ReportOpts {
@@ -215,6 +220,41 @@ export interface ReportOpts {
    * 但至少能把 Airborne 和 Airborne NGWS 的数据分开看。对拍老版时传 false。
    */
   groupByLoadout?: boolean
+  /**
+   * 游戏自带的价目表（从玩家自己的游戏文件里读出来的）。给了就用精确单价和配装真名，
+   * 没给就沿用「按官方总数等比例摊」的估算。
+   */
+  game?: GamePrices
+}
+
+/** 游戏价目表：单位 id → [名字, 基础价]；配装 id → [加价, 改名, 名字后缀, 显示名] */
+export interface GamePrices {
+  units: Record<number, [string, number]>
+  options: Record<number, [number, string | null, string | null, string]>
+}
+
+/** 单位 + 一串配装 → 真名、精确单价、挂载明细。有一项查不到就返回 null（宁可退回估算） */
+export function loadoutOf(
+  game: GamePrices | undefined,
+  id: number,
+  optionIds?: number[]
+): { name: string; cost: number; loadout: string } | null {
+  if (!game) return null
+  const u = game.units[id]
+  if (!u) return null
+  let name = u[0]
+  let cost = u[1]
+  const tail: string[] = []
+  const parts: string[] = []
+  for (const oid of optionIds || []) {
+    const o = game.options[Number(oid)]
+    if (!o) return null
+    cost += o[0]
+    if (o[1]) name = o[1]
+    if (o[2]) tail.push(o[2])
+    if (o[3]) parts.push(o[3])
+  }
+  return { name: name + tail.join(''), cost, loadout: parts.join(' · ') }
 }
 
 /** 配装签名：OptionIds 排序后拼起来 */
@@ -227,10 +267,16 @@ function optionsKey(ids?: number[]): string {
  * 同一个单位出现了多种配装就给名字加上「配装 A / B」，按出兵次数排，出得多的是 A。
  * 只出现一种配装的单位名字不动。
  */
+/**
+ * 同一个单位的多套配装加个「配装 A / B」的后缀。
+ * 有游戏数据时很多配装本来就有自己的名字（M1296 Dragoon、Ka-50Sh Akula），
+ * 只给名字仍然一样的那几套编号——飞机常见，改的只是挂载。
+ */
 function labelLoadouts(units: ReportUnit[]): void {
   const byUnit = new Map<string, ReportUnit[]>()
   for (const u of units) {
-    const k = u.team + ':' + u.id
+    // 名字和挂载都一样才需要编号区分（有游戏数据时多数配装本来就各有各的名字）
+    const k = u.team + ':' + u.id + '|' + u.name + '|' + u.loadout
     const list = byUnit.get(k)
     if (list) list.push(u)
     else byUnit.set(k, [u])
@@ -257,6 +303,8 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
   const winner = review.winnerTeam != null ? review.winnerTeam : null
 
   // ---------- 玩家 ----------
+  // 只要有一个人的出兵记录在价目表里查不全，整份复盘都退回估算口径
+  let priced: 'game' | 'estimate' = opts.game ? 'game' : 'estimate'
   const unitAgg = new Map<string, UnitAgg>()
   const timeline = [0, 1].map(() => ({
     spawn: new Array<number>(minutes).fill(0),
@@ -272,19 +320,42 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     const rv = revById[id]
     const m = metrics[id]
     const units = Object.values(p.UnitData || {})
+    // 先看这个人的每一条出兵记录能不能在游戏价目表里查到。全查得到就用精确价，
+    // 差一条都退回估算——半精确半估算的数字最难解释。
+    const loads = new Map<string, { name: string; cost: number; loadout: string } | null>()
+    const loadFor = (u: (typeof units)[number]): { name: string; cost: number; loadout: string } | null => {
+      const k = u.Id + '|' + optionsKey(u.OptionIds)
+      if (!loads.has(k)) loads.set(k, loadoutOf(opts.game, u.Id, u.OptionIds))
+      return loads.get(k) || null
+    }
+    const exact = !!opts.game && units.every((u) => !!loadFor(u))
+    if (!exact) priced = 'estimate'
     // 缩放系数：官方出兵/损失总数 ÷ 按基础价格算的总数
     let baseDeployed = 0
     let baseLost = 0
+    let exactLost = 0
     for (const u of units) {
-      const c = um[u.Id]?.[1] || 0
+      const c = exact ? loadFor(u)!.cost : um[u.Id]?.[1] || 0
       if (!u.WasRefunded) baseDeployed += c
-      if (u.DeathTime) baseLost += c
+      if (u.DeathTime) {
+        baseLost += c
+        if (exact) exactLost += c
+      }
     }
-    const kSpawn =
-      baseDeployed > 0 && num(p.TotalSpawnedUnitScore) > 0
+    const kSpawn = exact
+      ? 1
+      : baseDeployed > 0 && num(p.TotalSpawnedUnitScore) > 0
         ? Math.max(0.5, (num(p.TotalSpawnedUnitScore) - num(p.TotalRefundedUnitScore)) / baseDeployed)
         : 1
-    const kLoss = baseLost > 0 && num(p.LossesScore) > 0 ? num(p.LossesScore) / baseLost : kSpawn
+    // 损失：官方的损失分偶尔比按价钱加起来少一点（95 场里有 4 场，差 1~3%），
+    // 所以精确价也做一次整体缩放，保证这个人的损失总额还是和官方对得上
+    const kLoss = exact
+      ? exactLost > 0 && num(p.LossesScore) > 0
+        ? num(p.LossesScore) / exactLost
+        : 1
+      : baseLost > 0 && num(p.LossesScore) > 0
+        ? num(p.LossesScore) / baseLost
+        : kSpawn
     // 这个人平均每次击杀值多少击杀分（分配单位击杀分用）
     const unitKills = units.reduce((s, u) => s + num(u.KilledCount), 0)
     const dPerKill = unitKills > 0 ? num(p.DestructionScore) / unitKills : 0
@@ -297,8 +368,10 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     const mine = new Map<string, UnitAgg>()
     for (const u of units) {
       const e: UnitEntry = um[u.Id] || [null, 0, '单位#' + u.Id, 0, -1]
-      const cost = (e[1] || 0) * kSpawn // 估算的实际价格（含配装）
-      const lossCost = (e[1] || 0) * kLoss
+      const gl = exact ? loadFor(u) : null
+      const base = gl ? gl.cost : e[1] || 0
+      const cost = gl ? gl.cost : base * kSpawn
+      const lossCost = base * kLoss
       const refunded = !!u.WasRefunded
       const dead = !!u.DeathTime
       const life = dead && u.SpawnTime ? Math.max(0, num(u.DeathTime) - num(u.SpawnTime)) : null
@@ -322,7 +395,8 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
         [unitAgg, team + ':' + u.Id + '|' + optKey]
       ] as [Map<string, UnitAgg>, string][]) {
         const a: UnitAgg = map.get(key) || {
-          id: u.Id, options: optKey, name: e[2], role: e[0], country: e[3], team,
+          id: u.Id, options: optKey, name: gl ? gl.name : e[2], loadout: gl ? gl.loadout : '',
+          role: e[0], country: e[3], team,
           count: 0, refunded: 0, dead: 0, dmg: 0, kills: 0, lives: [],
           users: new Set<string>(), spent: 0, lost: 0, destr: 0, price: cost
         }
@@ -477,6 +551,7 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     teams,
     players,
     units,
+    priced,
     timeline: { minutes, spawn: timeline.map((t) => t.spawn), loss: timeline.map((t) => t.loss), field, events },
     insights: []
   }
@@ -491,6 +566,7 @@ function finishUnit(a: UnitAgg): ReportUnit {
     id: a.id,
     options: a.options,
     name: a.name,
+    loadout: a.loadout,
     role: a.role,
     roleName: ROLE_NAME[String(a.role)] || ROLE_NAME.null,
     team: a.team,

@@ -24,6 +24,7 @@ const api = {
   listArchive: () => invoke('archive:list'),
 
   listDecks: () => invoke('deck:list'),
+  readDeck: (name: string) => invoke('deck:read', name),
   backupDecks: (only?: string[], name?: string) => invoke('deck:backup', { only, name }),
   restoreDecks: (name: string, overwrite?: boolean) => invoke('deck:restore', { name, overwrite }),
   deleteDecks: (names: string[]) => invoke('deck:deleteDecks', names),
@@ -45,6 +46,8 @@ const api = {
   syncMatches: () => invoke('match:sync'),
 
   getVersion: () => invoke('app:version'),
+  getGameDb: () => invoke('gamedb:status'),
+  refreshGameDb: () => invoke('gamedb:refresh'),
   getUpdateInfo: () => invoke('update:get'),
   checkUpdate: () => invoke('update:check'),
   installUpdate: () => invoke('update:install'),

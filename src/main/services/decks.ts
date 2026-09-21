@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync,
 import { basename, join } from 'node:path'
 import { homedir } from 'node:os'
 import { zipCreate, zipExtract } from '@shared/zip'
+import { decodeDeckFile } from './gameDb'
 
 const GAME_DIR = join(homedir(), 'AppData', 'LocalLow', 'SteelBalalaikaStudio', 'BrokenArrow')
 
@@ -38,8 +39,27 @@ export class DeckService {
   readonly decksDir = join(GAME_DIR, 'Decks')
   readonly backupDir: string
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    /** 读卡组内容要用的密钥（和游戏单位库同一把），空 = 只能备份还原，看不了内容 */
+    private key: () => string = () => ''
+  ) {
     this.backupDir = join(dataDir, 'deck-backups')
+  }
+
+  /** 读一副卡组的内容。.dek 是加密的 JSON，没密钥就看不了。 */
+  readDeck(name: string): unknown | { error: string } {
+    const file = safeName(name)
+    if (!file) return { error: '文件名不合法' }
+    const key = (this.key() || '').trim()
+    if (key.length !== 32) return { error: 'noKey' }
+    const p = join(this.decksDir, file)
+    if (!existsSync(p)) return { error: '找不到这副卡组' }
+    try {
+      return decodeDeckFile(readFileSync(p), key)
+    } catch (e) {
+      return { error: '解不开：' + String((e as Error)?.message || e) }
+    }
   }
 
   found(): boolean {

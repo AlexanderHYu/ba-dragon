@@ -1,6 +1,7 @@
 // 设置：对着 4.0.3 那份设置来的——游戏目录、外观、查询、同步、录像管理、关于。
 // 设置文件和 4.0.x 是同一个 settings.json，两个版本能共存。
 import { useEffect, useState } from 'react'
+import type { GameDbStatus } from '@shared/ipc'
 import { useStore } from '../../store'
 import Switch from '../../components/Switch'
 
@@ -12,9 +13,12 @@ export default function Settings(): React.JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
   const [replayCount, setReplayCount] = useState<number | null>(null)
   const [upMsg, setUpMsg] = useState<string | null>(null)
+  const [gdb, setGdb] = useState<GameDbStatus | null>(null)
+  const [keyText, setKeyText] = useState<string | null>(null)
 
   useEffect(() => {
     void window.BA.listReplays().then((l) => setReplayCount(l.length))
+    void window.BA.getGameDb().then(setGdb)
   }, [])
 
   if (!config) {
@@ -69,6 +73,59 @@ export default function Settings(): React.JSX.Element {
             选断箭的安装目录就行（…\steamapps\common\broken_arrow），日志目录自己推。
             {status?.logDir ? '　当前日志目录：' + status.logDir : ''}
             {status?.watching ? '　✅ 正在监听' : status?.logFound ? '　等游戏写日志' : ''}
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>🧩 游戏数据（配装名字 / 精确花费）</h2>
+        <div className="stack">
+          <div className="dim">
+            游戏自己带着一张单位表（单位、配装、价格），是加密的。填上密钥之后，复盘里的配装会显示真名
+            （「配装 A」→「M1A1 FEP Trophy」），花费也从估算变成精确值；卡组工具还能直接看卡组里带了什么。
+            <b>密钥不随软件发布</b>——它是游戏自己的东西，而且每次游戏更新都可能变，要自己填。不填不影响其它功能。
+          </div>
+          <div className="row wrap">
+            <input
+              value={keyText ?? String(config.gameKey || '')}
+              placeholder="32 位密钥，留空就是不启用"
+              spellCheck={false}
+              onChange={(e) => setKeyText(e.target.value)}
+              style={{ flex: 1, minWidth: 280, fontFamily: 'ui-monospace, Consolas, monospace' }}
+            />
+            <button
+              className="primary"
+              disabled={busy === 'gamekey' || keyText == null || keyText === String(config.gameKey || '')}
+              onClick={async () => {
+                setBusy('gamekey')
+                await patch({ gameKey: (keyText || '').trim() })
+                setGdb(await window.BA.getGameDb())
+                setKeyText(null)
+                setBusy(null)
+              }}
+            >
+              {busy === 'gamekey' ? '读取中…' : '保存并读取'}
+            </button>
+            <button
+              disabled={busy === 'gamekey' || !gdb?.hasKey}
+              onClick={async () => {
+                setBusy('gamekey')
+                setGdb(await window.BA.refreshGameDb())
+                setBusy(null)
+              }}
+              title="游戏更新之后点一下"
+            >
+              ↻ 重新读取
+            </button>
+          </div>
+          <div className={gdb?.ready ? 'lit-ok' : gdb?.error ? 'lit-bad' : 'dim'}>
+            {gdb?.ready
+              ? '✅ 已读到 ' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
+              : gdb?.error
+                ? '读不出来：' + gdb.error
+                : gdb?.hasKey
+                  ? '还没读，点一下「重新读取」'
+                  : '没填密钥，复盘里的花费还是估算值'}
           </div>
         </div>
       </div>

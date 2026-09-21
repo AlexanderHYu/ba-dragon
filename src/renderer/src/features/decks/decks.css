@@ -193,3 +193,65 @@ button.deck-mini:hover:not(:disabled) {
   padding: 5px 8px;
   word-break: break-all;
 }
+
+/* ---------- 看卡组内容（要填了游戏密钥才有） ---------- */
+.deck-peek {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.65;
+}
+.deck-item:hover .deck-peek {
+  opacity: 1;
+}
+
+.deck-view {
+  margin-top: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.deck-view-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.deck-view-head .grow {
+  flex: 1;
+}
+.deck-cat {
+  margin-bottom: 10px;
+}
+.deck-cat-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+.deck-card {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 2px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-soft, transparent);
+}
+.deck-card-name {
+  flex: 1;
+}
+.deck-card-load {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.deck-card-cost {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
