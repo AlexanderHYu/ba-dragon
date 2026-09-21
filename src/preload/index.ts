@@ -48,6 +48,7 @@ const api = {
   getVersion: () => invoke('app:version'),
   unitStats: (f?: UnitStatsFilter) => invoke('stats:units', f),
   statsMaps: () => invoke('stats:maps'),
+  getCombatData: () => invoke('combat:data'),
   getGameDb: () => invoke('gamedb:status'),
   refreshGameDb: () => invoke('gamedb:refresh'),
   getUpdateInfo: () => invoke('update:get'),

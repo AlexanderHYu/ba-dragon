@@ -15,6 +15,8 @@ import { UnityFsArchive, type FsNode } from './unityfs'
 import type { Db } from './db'
 import type { DeckView } from '@shared/ipc'
 import { BUNDLED, hasBundled, type GameData } from '@shared/game'
+import { COMBAT, hasCombat, type CombatData } from '@shared/game/combat'
+import { buildCombat } from './combatBuild'
 
 /** 编译数据库里 24 张表的顺序，少一张都对不上 */
 const FIELDS = [
@@ -44,8 +46,25 @@ const FIELDS = [
   'TransportAvailabilitiesJson'
 ] as const
 
-/** 我们只解这几张，其余的跳过（省时间也省内存） */
+/** 价目表（配装名字 + 单价）要的几张 */
 const WANTED = new Set(['Units', 'ModificationsJson', 'OptionsJson', 'SpecializationsJson', 'CountriesJson'])
+/** 配装计算器还要这些：武器、弹药、装甲、炮塔、班组、能力 */
+export const WANTED_COMBAT = new Set([
+  ...WANTED,
+  'ArmorsJson',
+  'UnitArmorsJson',
+  'TurretsJson',
+  'TurretUnitsJson',
+  'TurretWeaponsJson',
+  'WeaponsJson',
+  'WeaponAmmunitionsJson',
+  'AmmunitionsJson',
+  'AbilitiesJson',
+  'UnitAbilitiesJson',
+  'SquadMembersJson',
+  'SensorsJson',
+  'MobilityJson'
+])
 
 const ASSET_NODE = 'globalgamemanagers.assets'
 const OBJ_NAME = 'DataBaseCompiled'
@@ -210,8 +229,14 @@ interface RawCountry {
   Name: string
 }
 
-/** 从游戏目录里把单位表读出来。key 不对 / 游戏换了格式都会抛错。 */
-export function extractTables(gameDir: string, key: string): GameTables {
+/** 解出来的原始表（字段名和游戏里一样） */
+export interface RawTables {
+  stamp: string
+  t: Record<string, Record<string, unknown>[]>
+}
+
+/** 从游戏目录里把表读出来。key 不对 / 游戏换了格式都会抛错。 */
+export function extractRaw(gameDir: string, key: string, wanted: Set<string> = WANTED): RawTables {
   const archive = gameDir.replace(/[\\/]+$/, '') + '/BrokenArrow_Data/data.unity3d'
   const fs = new UnityFsArchive(archive)
   try {
@@ -223,15 +248,15 @@ export function extractTables(gameDir: string, key: string): GameTables {
     if (!hits.length) hits = fs.findFromEnd(node, pattern, 2)
     if (!hits.length) throw new Error('资源里找不到 ' + OBJ_NAME + '，游戏的存法可能变了')
 
-    let best: GameTables | null = null
+    let best: RawTables | null = null
     for (const hit of hits) {
-      let tables: GameTables
+      let tables: RawTables
       try {
-        tables = readOne(fs, node, hit, key)
+        tables = readOne(fs, node, hit, key, wanted)
       } catch {
         continue // 这个对象读不出来就试下一个
       }
-      if (!best || tables.units.length > best.units.length) best = tables
+      if (!best || (tables.t.Units?.length || 0) > (best.t.Units?.length || 0)) best = tables
     }
     if (!best) throw new Error('数据库解不开，密钥可能不对（游戏更新后会换）')
     return best
@@ -240,7 +265,7 @@ export function extractTables(gameDir: string, key: string): GameTables {
   }
 }
 
-function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: string): GameTables {
+function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: string, wanted: Set<string>): RawTables {
   const cur = new Cursor(fs, node, nameOffset)
   let [name, off] = cur.string(0)
   if (name.toString('ascii') !== OBJ_NAME) throw new Error('对象名对不上')
@@ -248,16 +273,21 @@ function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: stri
   for (const field of FIELDS) {
     const [data, next] = cur.string(off)
     off = next
-    if (WANTED.has(field)) raw[field] = decryptJson(data, key)
+    if (wanted.has(field)) raw[field] = decryptJson(data, key)
   }
-  const units = (raw.Units as RawUnit[]) || []
-  const mods = (raw.ModificationsJson as RawMod[]) || []
-  const options = (raw.OptionsJson as RawOption[]) || []
-  const specs = (raw.SpecializationsJson as RawSpec[]) || []
-  const countries = (raw.CountriesJson as RawCountry[]) || []
+  return { stamp: fs.stamp(), t: raw as Record<string, Record<string, unknown>[]> }
+}
+
+/** 原始表 → 我们自己的结构 */
+export function rawToTables(r: RawTables): GameTables {
+  const units = (r.t.Units as unknown as RawUnit[]) || []
+  const mods = (r.t.ModificationsJson as unknown as RawMod[]) || []
+  const options = (r.t.OptionsJson as unknown as RawOption[]) || []
+  const specs = (r.t.SpecializationsJson as unknown as RawSpec[]) || []
+  const countries = (r.t.CountriesJson as unknown as RawCountry[]) || []
   const modUnit = new Map(mods.map((m) => [m.Id, m.UnitId]))
   return {
-    stamp: fs.stamp(),
+    stamp: r.stamp,
     units: units.map((u) => ({
       id: u.Id,
       name: (u.HUDName || u.Name || '').trim(),
@@ -276,20 +306,15 @@ function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: stri
       replace: o.ReplaceUnitName || null,
       concat: o.ConcatenateWithUnitName || null
     })),
-    slots: mods.map((m) => ({
-      id: m.Id,
-      unitId: m.UnitId,
-      name: m.Name || '',
-      order: Number(m.Order) || 0
-    })),
-    specs: specs.map((x) => ({
-      id: x.Id,
-      countryId: x.CountryId,
-      name: x.Name || '',
-      maxSlots: Number(x.MaxSlots) || 0
-    })),
+    slots: mods.map((m) => ({ id: m.Id, unitId: m.UnitId, name: m.Name || '', order: Number(m.Order) || 0 })),
+    specs: specs.map((x) => ({ id: x.Id, countryId: x.CountryId, name: x.Name || '', maxSlots: Number(x.MaxSlots) || 0 })),
     countries: countries.map((c) => ({ id: c.Id, name: c.Name || '' }))
   }
+}
+
+/** 一步到位：解出来并拼成单位表 */
+export function extractTables(gameDir: string, key: string): GameTables {
+  return rawToTables(extractRaw(gameDir, key))
 }
 
 // ---------- 给上层用的服务 ----------
@@ -382,6 +407,8 @@ export function tablesToData(t: GameTables): GameData {
 export class GameDbService {
   /** 本机实时解出来的那份（填了密钥才有）。没有就退回软件自带的 data.json。 */
   private local: GameData | null = null
+  /** 配装计算器那份（武器/弹药/装甲），同样是本地优先 */
+  private localCombat: CombatData | null = null
   /** 上一次出错的原因，界面上显示 */
   lastError: string | null = null
 
@@ -401,6 +428,12 @@ export class GameDbService {
   data(): GameData | null {
     if (this.local) return this.local
     return hasBundled() ? BUNDLED : null
+  }
+
+  /** 当前生效的战斗数据（配装计算器用） */
+  combat(): CombatData | null {
+    if (this.localCombat) return this.localCombat
+    return hasCombat() ? COMBAT : null
   }
 
   status(): {
@@ -437,6 +470,7 @@ export class GameDbService {
     const cached = this.readCache()
     if (!cached) return false
     this.local = cached
+    this.localCombat = this.readCombatCache()
     return true
   }
 
@@ -459,6 +493,7 @@ export class GameDbService {
     const key = (this.key() || '').trim()
     if (!key) {
       this.local = null
+      this.localCombat = null
       this.lastError = null // 没填密钥不算错，自带的那份还在
       return false
     }
@@ -484,18 +519,25 @@ export class GameDbService {
       const cached = this.readCache()
       if (cached && cached.meta.stamp === stamp) {
         this.local = cached
+        this.localCombat = this.readCombatCache()
         this.lastError = null
         return true
       }
     }
     try {
-      const data = tablesToData(extractTables(dir, key))
+      // 一次解开，既出价目表也出战斗数据
+      const raw = extractRaw(dir, key, WANTED_COMBAT)
+      const data = tablesToData(rawToTables(raw))
+      const combat = buildCombat(raw)
       this.writeCache(data)
+      this.writeCombatCache(combat)
       this.local = data
+      this.localCombat = combat
       this.lastError = null
       return true
     } catch (e) {
       this.local = null
+      this.localCombat = null
       this.lastError = String((e as Error)?.message || e)
       return false
     }
@@ -516,6 +558,24 @@ export class GameDbService {
       this.db.setMeta('gameDb', JSON.stringify(d))
     } catch {
       /* 缓存写不进去就下次再解一遍 */
+    }
+  }
+
+  private readCombatCache(): CombatData | null {
+    try {
+      const raw = this.db.meta('gameCombat')
+      const d = raw ? (JSON.parse(raw) as CombatData) : null
+      return d?.units && d.meta ? d : null
+    } catch {
+      return null
+    }
+  }
+
+  private writeCombatCache(d: CombatData): void {
+    try {
+      this.db.setMeta('gameCombat', JSON.stringify(d))
+    } catch {
+      /* 同上 */
     }
   }
 

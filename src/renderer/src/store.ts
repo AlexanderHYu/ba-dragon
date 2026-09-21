@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import type { AppStatus, PlayerCard, QueryState, SessionState, Settings } from '@shared/ipc'
 
 /** 主界面 / 复盘整页 / 设置 */
-export type Page = { name: 'home' } | { name: 'report'; fid: string } | { name: 'stats' } | { name: 'settings' }
+export type Page = { name: 'home' } | { name: 'report'; fid: string } | { name: 'stats' } | { name: 'calc' } | { name: 'settings' }
 
 interface State {
   config: Settings | null

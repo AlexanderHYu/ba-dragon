@@ -223,6 +223,8 @@ export interface IpcMap {
   /** 单位效能：档案里所有对局的出兵记录按「单位 + 配装」聚合 */
   'stats:units': [UnitStatsFilter | void, UnitStatsResult]
   'stats:maps': [void, { id: number; name: string; matches: number }[]]
+  /** 配装计算器用的那份数据（武器/弹药/装甲/班组），本机解过就给本机那份 */
+  'combat:data': [void, unknown]
   'gamedb:status': [void, GameDbStatus]
   'gamedb:refresh': [void, GameDbStatus]
   /** 读一副卡组的内容（需要密钥） */

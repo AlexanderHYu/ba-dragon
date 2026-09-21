@@ -284,6 +284,7 @@ export function registerIpc(s: Services): void {
   })
   on('stats:units', (f) => s.stats.unitStats(f || {}))
   on('stats:maps', () => s.stats.maps())
+  on('combat:data', () => s.gamedb.combat())
   on('gamedb:status', () => gamedbStatus())
   on('gamedb:refresh', () => {
     s.gamedb.load(true)
