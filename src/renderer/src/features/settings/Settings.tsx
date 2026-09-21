@@ -81,9 +81,11 @@ export default function Settings(): React.JSX.Element {
         <h2>🧩 游戏数据（配装名字 / 精确花费）</h2>
         <div className="stack">
           <div className="dim">
-            游戏自己带着一张单位表（单位、配装、价格），是加密的。填上密钥之后，复盘里的配装会显示真名
-            （「配装 A」→「M1A1 FEP Trophy」），花费也从估算变成精确值；卡组工具还能直接看卡组里带了什么。
-            <b>密钥不随软件发布</b>——它是游戏自己的东西，而且每次游戏更新都可能变，要自己填。不填不影响其它功能。
+            复盘里的配装真名（「配装 A」→「M1A1 FEP Trophy」）和精确花费，来自游戏自带的一张单位表。
+            <b>软件里已经带了一份</b>，不用管也能用，只是游戏更新之后可能比游戏里旧一点。
+            填上密钥就会从你本机的游戏文件里实时解一份最新的（只在本机读，不上传），
+            另外<b>看卡组内容也需要密钥</b>——.dek 文件本身是加密的。
+            密钥是游戏自己的东西、每次更新都可能变，所以不随软件发布。
           </div>
           <div className="row wrap">
             <input
@@ -99,7 +101,8 @@ export default function Settings(): React.JSX.Element {
               onClick={async () => {
                 setBusy('gamekey')
                 await patch({ gameKey: (keyText || '').trim() })
-                setGdb(await window.BA.getGameDb())
+                // 解密是重活，只在这儿和下面那个按钮做，平时开软件只读缓存
+                setGdb(await window.BA.refreshGameDb())
                 setKeyText(null)
                 setBusy(null)
               }}
@@ -118,14 +121,22 @@ export default function Settings(): React.JSX.Element {
               ↻ 重新读取
             </button>
           </div>
-          <div className={gdb?.ready ? 'lit-ok' : gdb?.error ? 'lit-bad' : 'dim'}>
-            {gdb?.ready
-              ? '✅ 已读到 ' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
-              : gdb?.error
-                ? '读不出来：' + gdb.error
-                : gdb?.hasKey
-                  ? '还没读，点一下「重新读取」'
-                  : '没填密钥，复盘里的花费还是估算值'}
+          <div className={gdb?.source === 'local' ? 'lit-ok' : gdb?.error ? 'lit-bad' : 'dim'}>
+            {gdb?.error
+              ? '读不出来：' + gdb.error + '（先用着软件自带的那份）'
+              : gdb?.source === 'local'
+                ? '✅ 用的是你本机解出来的：' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
+                : gdb?.source === 'bundled'
+                  ? '用的是软件自带的那份（' +
+                    (gdb.updatedAt || '未知日期') +
+                    ' 导出，' +
+                    gdb.units +
+                    ' 个单位）。游戏更新后可能略旧，填上密钥就能换成你本机最新的'
+                  : '没有单位表，复盘里的花费是估算值'}
+            {gdb?.stale && '　⚠ 游戏更新过了，点「重新读取」解一遍新的'}
+          </div>
+          <div className="dim" style={{ fontSize: 11.5 }}>
+            解一次存一次，平时开软件直接用存下来的，不会每次都解。游戏更新之后自己点一下就行。
           </div>
         </div>
       </div>

@@ -171,13 +171,12 @@ function startServices(): Services {
     () => String(config.get('gameDir') || '') || dirname(String(config.get('logDir') || '')),
     () => String(config.get('gameKey') || '')
   )
-  setTimeout(() => {
-    try {
-      gamedb.load()
-    } catch {
-      /* 读不出来不影响其它功能 */
-    }
-  }, 1500)
+  // 开机只读缓存，不去解游戏文件（解密只在设置里手动点）
+  try {
+    gamedb.loadCached()
+  } catch {
+    /* 缓存坏了就当没有，界面上还能手动重读 */
+  }
 
   const decks = new DeckService(dataDir, () => String(config.get('gameKey') || ''))
   const tracker = new Tracker(db)

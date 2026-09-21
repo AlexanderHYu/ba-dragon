@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "dist": "npm run build && electron-builder --win --publish never",
     "smoke": "electron-vite build && node scripts/smoke.mjs",
-    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.mjs"
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "export-gamedata": "vite-node -c vitest.config.ts scripts/export-gamedata.mts --"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

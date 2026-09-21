@@ -4,6 +4,7 @@
 import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { loadoutOf, type GamePrices } from './report'
+import { BUNDLED } from '../game'
 
 /** 造一张小价目表：M1A1 FEP（260）+ TUSK（20）+ Trophy（70，名字后面接 " Trophy"） */
 const TABLE: GamePrices = {
@@ -47,5 +48,32 @@ describe('配装的名字和价钱', () => {
     expect(loadoutOf(TABLE, 54, [119, 123456])).toBeNull()
     expect(loadoutOf(TABLE, 777, [])).toBeNull()
     expect(loadoutOf(undefined, 54, [119])).toBeNull()
+  })
+})
+
+describe('软件自带的那份单位表', () => {
+  it('不是空的，而且记着是哪天导出的', () => {
+    expect(Object.keys(BUNDLED.units).length).toBeGreaterThan(300)
+    expect(Object.keys(BUNDLED.options).length).toBeGreaterThan(1000)
+    expect(BUNDLED.meta.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(BUNDLED.meta.stamp).toBeTruthy()
+  })
+
+  it('每个单位都有名字和不为负的价钱', () => {
+    const bad = Object.entries(BUNDLED.units).filter(([, u]) => !u[0] || !(u[1] >= 0))
+    expect(bad.slice(0, 5)).toEqual([])
+  })
+
+  it('拿它就能算出带配装的名字和价钱', () => {
+    // 找一个会把单位改名的配装（比如 Stryker ICV 换炮塔变 M1296 Dragoon）
+    const hit = Object.entries(BUNDLED.options).find(([, o]) => !!o[1])
+    expect(hit).toBeTruthy()
+    const [oid] = hit as [string, [number, string | null, string | null, string]]
+    const unitId = Number(
+      Object.keys(BUNDLED.units).find((id) => loadoutOf(BUNDLED, Number(id), [Number(oid)]) !== null)
+    )
+    const r = loadoutOf(BUNDLED, unitId, [Number(oid)])
+    expect(r?.name).toBe((BUNDLED.options[Number(oid)] as [number, string | null, string | null, string])[1])
+    expect(r?.cost).toBeGreaterThan(0)
   })
 })

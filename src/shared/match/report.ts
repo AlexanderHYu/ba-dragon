@@ -172,8 +172,13 @@ export interface MatchReport {
   teams: ReportTeam[]
   players: ReportPlayer[]
   units: ReportUnit[]
-  /** 花费是怎么来的：game = 读了游戏自带的价目表（精确），estimate = 按官方总数等比例摊（估算） */
-  priced: 'game' | 'estimate'
+  /**
+   * 花费是怎么来的：
+   * local = 用了玩家本机实时解出来的游戏单位表（精确），
+   * bundled = 用了软件自带的那份（精确，但游戏更新后可能略旧），
+   * estimate = 没有单位表，按官方总数等比例摊（估算）
+   */
+  priced: 'local' | 'bundled' | 'estimate'
   timeline: {
     minutes: number
     spawn: number[][]
@@ -225,6 +230,8 @@ export interface ReportOpts {
    * 没给就沿用「按官方总数等比例摊」的估算。
    */
   game?: GamePrices
+  /** 上面那张表是哪来的，只影响复盘里的措辞 */
+  gameSource?: 'local' | 'bundled'
 }
 
 /** 游戏价目表：单位 id → [名字, 基础价]；配装 id → [加价, 改名, 名字后缀, 显示名] */
@@ -304,7 +311,7 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
 
   // ---------- 玩家 ----------
   // 只要有一个人的出兵记录在价目表里查不全，整份复盘都退回估算口径
-  let priced: 'game' | 'estimate' = opts.game ? 'game' : 'estimate'
+  let priced: 'local' | 'bundled' | 'estimate' = opts.game ? opts.gameSource || 'local' : 'estimate'
   const unitAgg = new Map<string, UnitAgg>()
   const timeline = [0, 1].map(() => ({
     spawn: new Array<number>(minutes).fill(0),

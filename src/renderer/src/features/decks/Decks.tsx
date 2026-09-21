@@ -274,7 +274,7 @@ export default function Decks(): React.JSX.Element {
                 if ('error' in r) {
                   setViewErr(
                     r.error === 'noKey'
-                      ? '要先在「设置 → 游戏数据」里填上游戏密钥，才能看卡组内容'
+                      ? '卡组文件本身是加密的，要在「设置 → 游戏数据」里填上密钥才能看内容（复盘里的配装名字和花费不用填）'
                       : r.error === 'noGameDb'
                         ? '游戏自带的单位表还没读出来，去「设置 → 游戏数据」看看'
                         : r.error

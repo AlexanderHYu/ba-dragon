@@ -251,14 +251,18 @@ export interface DeckView {
   }[]
 }
 
-/** 游戏自带单位库的状态 */
+/** 游戏单位库的状态 */
 export interface GameDbStatus {
-  /** 读出来了没有 */
-  ready: boolean
+  /** 用的是哪一份：local = 本机实时解的，bundled = 软件自带的，none = 都没有 */
+  source: 'local' | 'bundled' | 'none'
   units: number
   options: number
-  /** 游戏资源包的大小:修改时间，游戏更新了这个会变 */
+  /** 这份数据是哪天导出来的 */
+  updatedAt: string | null
+  /** 导出时游戏资源包的大小:修改时间，游戏更新了这个会变 */
   stamp: string | null
+  /** 本机解出来的那份比游戏旧了（游戏更新过），提示重新读一次 */
+  stale: boolean
   error: string | null
   /** 设置里填没填密钥 */
   hasKey: boolean

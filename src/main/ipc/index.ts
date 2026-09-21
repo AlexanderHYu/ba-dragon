@@ -21,12 +21,12 @@ export function registerIpc(s: Services): void {
     const before = s.config.all()
     const next = s.config.set(patch as Partial<Settings>)
     if (before.logDir !== next.logDir || before.pollMs !== next.pollMs) s.watcher.restart()
-    // 换了密钥或游戏目录就重新读一遍游戏自带的单位库
-    if (before.gameKey !== next.gameKey || before.gameDir !== next.gameDir) {
+    // 换了密钥：先看有没有现成的缓存能用。真正的解密只在用户点「读取」时做
+    if (before.gameKey !== next.gameKey) {
       try {
-        s.gamedb.load(before.gameKey !== next.gameKey)
+        s.gamedb.loadCached()
       } catch {
-        /* 读不出来上层会显示原因 */
+        /* 没缓存就还是用软件自带的那份 */
       }
     }
     return next
@@ -116,7 +116,15 @@ export function registerIpc(s: Services): void {
       if (!mi?.Data || !Object.keys(mi.Data).length) return { error: 'notYet' }
       const review = analyzeMatch(mi, fid)
       const ids = localIds?.length ? localIds : localPlayerIds(s)
-      const report = buildMatchReport(mi, { fid, review, localIds: ids, mapName, game: s.gamedb.priceTable() || undefined })
+      const src = s.gamedb.source()
+      const report = buildMatchReport(mi, {
+        fid,
+        review,
+        localIds: ids,
+        mapName,
+        game: s.gamedb.priceTable() || undefined,
+        gameSource: src === 'none' ? undefined : src
+      })
       saveMatch(s, fid, mi, report)
       s.tracker.recordMatch(
         fid,

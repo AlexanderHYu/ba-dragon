@@ -10,9 +10,11 @@
 //
 // 加密用的密钥跟着游戏版本走，本仓库不带，由用户自己在设置里填。没填就退回老路子（估算）。
 import { createDecipheriv } from 'node:crypto'
+import { statSync } from 'node:fs'
 import { UnityFsArchive, type FsNode } from './unityfs'
 import type { Db } from './db'
 import type { DeckView } from '@shared/ipc'
+import { BUNDLED, hasBundled, type GameData } from '@shared/game'
 
 /** 编译数据库里 24 张表的顺序，少一张都对不上 */
 const FIELDS = [
@@ -360,10 +362,26 @@ const DECK_CATS: [string, string][] = [
   ['Aircrafts', '空军']
 ]
 
+/** 把解出来的整张表压成软件里用的那份精简数据 */
+export function tablesToData(t: GameTables): GameData {
+  const units: GameData['units'] = {}
+  for (const u of t.units) units[u.id] = [u.name, u.cost]
+  const byId = new Map(t.units.map((u) => [u.id, u]))
+  const options: GameData['options'] = {}
+  for (const o of t.options) {
+    const label = optionLabel(o, byId.get(o.unitId)?.name || '')
+    options[o.id] = [o.cost, o.replace, o.concat, isBlankOption(label) ? '' : label]
+  }
+  const countries: GameData['countries'] = {}
+  for (const c of t.countries) countries[c.id] = c.name
+  const specs: GameData['specs'] = {}
+  for (const x of t.specs) specs[x.id] = x.name
+  return { meta: { updatedAt: new Date().toISOString().slice(0, 10), stamp: t.stamp }, units, options, countries, specs }
+}
+
 export class GameDbService {
-  private tables: GameTables | null = null
-  private unitById = new Map<number, GameUnit>()
-  private optById = new Map<number, GameOption>()
+  /** 本机实时解出来的那份（填了密钥才有）。没有就退回软件自带的 data.json。 */
+  private local: GameData | null = null
   /** 上一次出错的原因，界面上显示 */
   lastError: string | null = null
 
@@ -373,32 +391,75 @@ export class GameDbService {
     private key: () => string
   ) {}
 
-  get ready(): boolean {
-    return !!this.tables
+  /** 现在用的是哪一份 */
+  source(): 'local' | 'bundled' | 'none' {
+    if (this.local) return 'local'
+    return hasBundled() ? 'bundled' : 'none'
+  }
+
+  /** 当前生效的单位表 */
+  data(): GameData | null {
+    if (this.local) return this.local
+    return hasBundled() ? BUNDLED : null
   }
 
   status(): {
-    ready: boolean
+    source: 'local' | 'bundled' | 'none'
     units: number
     options: number
+    updatedAt: string | null
     stamp: string | null
+    stale: boolean
     error: string | null
   } {
+    const d = this.data()
     return {
-      ready: this.ready,
-      units: this.tables?.units.length || 0,
-      options: this.tables?.options.length || 0,
-      stamp: this.tables?.stamp || null,
+      source: this.source(),
+      units: d ? Object.keys(d.units).length : 0,
+      options: d ? Object.keys(d.options).length : 0,
+      updatedAt: d?.meta.updatedAt || null,
+      stamp: d?.meta.stamp || null,
+      stale: this.stale(),
       error: this.lastError
     }
   }
 
-  /** 开软件时调一次：有缓存直接用，游戏更新了（归档大小/时间变了）就重新抓 */
+  /**
+   * 开软件时调这个：只认本地缓存，**不去解游戏文件**。
+   * 解密是件重活（要把几百 MB 的资源块解开），所以只在用户手动点按钮时做一次，
+   * 解完存起来，以后每次开软件直接用缓存。
+   */
+  loadCached(): boolean {
+    if ((this.key() || '').trim().length !== 32) {
+      this.local = null
+      return false
+    }
+    const cached = this.readCache()
+    if (!cached) return false
+    this.local = cached
+    return true
+  }
+
+  /** 缓存里那份是不是比游戏旧了（游戏更新过） */
+  stale(): boolean {
+    if (!this.local) return false
+    try {
+      const st = statSync(this.gameDir().replace(/[\/]+$/, '') + '/BrokenArrow_Data/data.unity3d')
+      return this.local.meta.stamp !== st.size + ':' + Math.round(st.mtimeMs)
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 真的去解一遍游戏文件（用户手动点「读取」才会走到这儿）。
+   * 除非 force，游戏没更新过就直接用缓存，不白解。
+   */
   load(force = false): boolean {
     const key = (this.key() || '').trim()
     if (!key) {
-      this.tables = null
-      this.lastError = null // 没填密钥不算错
+      this.local = null
+      this.lastError = null // 没填密钥不算错，自带的那份还在
       return false
     }
     if (key.length !== 32) {
@@ -412,7 +473,7 @@ export class GameDbService {
     }
     let stamp = ''
     try {
-      const fs = new UnityFsArchive(dir.replace(/[\\/]+$/, '') + '/BrokenArrow_Data/data.unity3d')
+      const fs = new UnityFsArchive(dir.replace(/[\/]+$/, '') + '/BrokenArrow_Data/data.unity3d')
       stamp = fs.stamp()
       fs.close()
     } catch (e) {
@@ -421,79 +482,59 @@ export class GameDbService {
     }
     if (!force) {
       const cached = this.readCache()
-      if (cached && cached.stamp === stamp) {
-        this.use(cached)
+      if (cached && cached.meta.stamp === stamp) {
+        this.local = cached
+        this.lastError = null
         return true
       }
     }
     try {
-      const t = extractTables(dir, key)
-      this.writeCache(t)
-      this.use(t)
+      const data = tablesToData(extractTables(dir, key))
+      this.writeCache(data)
+      this.local = data
       this.lastError = null
       return true
     } catch (e) {
-      this.tables = null
+      this.local = null
       this.lastError = String((e as Error)?.message || e)
       return false
     }
   }
 
-  private use(t: GameTables): void {
-    this.tables = t
-    this.unitById = new Map(t.units.map((u) => [u.id, u]))
-    this.optById = new Map(t.options.map((o) => [o.id, o]))
-  }
-
-  private readCache(): GameTables | null {
+  private readCache(): GameData | null {
     try {
       const raw = this.db.meta('gameDb')
-      return raw ? (JSON.parse(raw) as GameTables) : null
+      const d = raw ? (JSON.parse(raw) as GameData) : null
+      return d?.units && d.meta ? d : null
     } catch {
       return null
     }
   }
 
-  private writeCache(t: GameTables): void {
+  private writeCache(d: GameData): void {
     try {
-      this.db.setMeta('gameDb', JSON.stringify(t))
+      this.db.setMeta('gameDb', JSON.stringify(d))
     } catch {
-      /* 缓存写不进去就下次再抓 */
+      /* 缓存写不进去就下次再解一遍 */
     }
   }
 
-  spec(id: number): GameSpec | null {
-    return this.tables?.specs.find((x) => x.id === id) || null
-  }
-
-  country(id: number): string {
-    return this.tables?.countries.find((c) => c.id === id)?.name || ''
-  }
-
-  unit(id: number): GameUnit | null {
-    return this.unitById.get(id) || null
-  }
-
-  option(id: number): GameOption | null {
-    return this.optById.get(id) || null
-  }
-
-  /** 单位 + 一串配装 → 真名、精确单价、挂载明细。数据不全就返回 null，上层退回估算。 */
+  /** 单位 + 一串配装 → 真名、精确单价、挂载明细。有一项查不到就返回 null，上层退回估算。 */
   loadout(unitId: number, optionIds: number[] | undefined): Loadout | null {
-    const u = this.unitById.get(unitId)
-    if (!u) return null
-    let name = u.name
-    let cost = u.cost
+    const d = this.data()
+    const u = d?.units[unitId]
+    if (!d || !u) return null
+    let name = u[0]
+    let cost = u[1]
     const tail: string[] = []
     const parts: { label: string; cost: number }[] = []
     for (const id of optionIds || []) {
-      const o = this.optById.get(Number(id))
-      if (!o) return null // 有一个查不到就整套不作数，免得算出个半吊子价钱
-      cost += o.cost
-      if (o.replace) name = o.replace
-      if (o.concat) tail.push(o.concat)
-      const label = optionLabel(o, u.name)
-      if (!isBlankOption(label)) parts.push({ label, cost: o.cost })
+      const o = d.options[Number(id)]
+      if (!o) return null // 免得算出个半吊子价钱
+      cost += o[0]
+      if (o[1]) name = o[1]
+      if (o[2]) tail.push(o[2])
+      if (o[3]) parts.push({ label: o[3], cost: o[0] })
     }
     const full = name + tail.join('')
     // 有些选项的标签就是单位名本身（选型号的那种槽位），没必要再念一遍
@@ -506,7 +547,8 @@ export class GameDbService {
    * 分类 → 每张卡（单位真名、挂了什么、单价、几张、带什么运输车）。
    */
   describeDeck(raw: unknown, fileName: string): DeckView | { error: string } {
-    if (!this.tables) return { error: 'noGameDb' }
+    const data = this.data()
+    if (!data) return { error: 'noGameDb' }
     const d = raw as RawDeck
     const set = d?.set2 || {}
     const cats: DeckView['cats'] = []
@@ -542,26 +584,15 @@ export class GameDbService {
     }
     return {
       name: String(d?.name || fileName.replace(/\.dek$/i, '')),
-      country: this.country(Number(d?.country) || 0),
-      specs: [d?.spec1, d?.spec2].map((x) => (x ? this.spec(Number(x))?.name || '' : '')).filter(Boolean) as string[],
+      country: data.countries[Number(d?.country) || 0] || '',
+      specs: [d?.spec1, d?.spec2].map((x) => (x ? data.specs[Number(x)] || '' : '')).filter(Boolean) as string[],
       cards,
       cats
     }
   }
 
-  /** 导出给渲染进程/纯逻辑用的精简表：单位价 + 选项价和改名规则 */
-  priceTable(): {
-    units: Record<number, [string, number]>
-    options: Record<number, [number, string | null, string | null, string]>
-  } | null {
-    if (!this.tables) return null
-    const units: Record<number, [string, number]> = {}
-    for (const u of this.tables.units) units[u.id] = [u.name, u.cost]
-    const options: Record<number, [number, string | null, string | null, string]> = {}
-    for (const o of this.tables.options) {
-      const label = optionLabel(o, this.unitById.get(o.unitId)?.name || '')
-      options[o.id] = [o.cost, o.replace, o.concat, isBlankOption(label) ? '' : label]
-    }
-    return { units, options }
+  /** 给复盘用的价目表，就是当前生效的那份数据 */
+  priceTable(): GameData | null {
+    return this.data()
   }
 }
