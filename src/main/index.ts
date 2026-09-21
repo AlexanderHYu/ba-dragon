@@ -195,13 +195,42 @@ function startServices(): Services {
     queryTimer = setTimeout(() => queryRoster(), 2000)
   }
 
+  /**
+   * 我自己的 BATrace ID。
+   * 开战前的那几行日志（Incoming client、Room: Client）记的都是**别的**客户端，
+   * 没有自己，所以房间名单里会少一个人。这里用日志里的角色名把自己认出来补上。
+   */
+  function localPid(name: string | null): string | null {
+    if (!name) return null
+    const snap = parser.snapshot()
+    // 先看这次开软件以来打过的局：Player list 里有自己，名字对得上就是
+    for (const m of [snap.current, ...parser.archived]) {
+      const hit = m?.players?.find((p) => p.name === name)
+      if (hit?.id) return hit.id
+    }
+    // 再看本地库里记过的本机账号
+    const ids = localIds()
+    if (!ids.length) return null
+    const row = db.get<{ pid: string }>(
+      'SELECT pid FROM player WHERE name = ? AND pid IN (' + ids.map(() => '?').join(',') + ') LIMIT 1',
+      [name, ...ids]
+    )
+    return row?.pid || (ids.length === 1 ? ids[0] : null)
+  }
+
   function queryRoster(opts: { prev?: boolean; refresh?: boolean } = {}): void {
     const snap = parser.snapshot()
     const cur = snap.current
-    let roster = cur?.players?.length ? cur.players : []
+    let roster = cur?.players?.length ? [...cur.players] : []
     if (!roster.length) {
       // 还没开战：用大厅里的人（Incoming client 的 ID 就是 batrace ID）
       roster = Object.entries(snap.lobbyPlayers || {}).map(([id, name]) => ({ id, name, team: null }))
+    }
+    // 名单里没有自己就补上（对局开始后的 Player list 是带自己的，这时候就不用补）
+    const name = snap.localName
+    if (name && !roster.some((p) => p.name === name)) {
+      const me = localPid(name)
+      if (me && !roster.some((p) => p.id === me)) roster.push({ id: me, name, team: null })
     }
     if (!roster.length) return
     void query.run(roster, { fid: cur?.fid ?? null, localName: snap.localName, ...opts })

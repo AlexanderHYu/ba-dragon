@@ -378,6 +378,22 @@ a {
   color: var(--t1);
 }
 
+/* 名单里标出自己 */
+.prow.me {
+  background: var(--accent-soft);
+}
+.prow-me {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
 /* 玩家一行 */
 .prow {
   display: grid;

@@ -12,6 +12,7 @@ export default function CurrentMatch(): React.JSX.Element {
   const cur = session?.snapshot.current
   const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
   const cards = query.cards
+  const meName = session?.snapshot.localName
   const teamOf = (c: PlayerCard): string => c.team || '?'
   // [标题, 标题颜色, 名单, 是否通栏]。A 队在左、B 队在右（排位和自定义都能从日志里读到队伍，
   // 但要等对局开始；在房间里等的时候日志只有名字，分不出队）。
@@ -70,6 +71,7 @@ export default function CurrentMatch(): React.JSX.Element {
                   <PlayerRow
                     key={c.id}
                     card={c}
+                    me={!!meName && c.name === meName}
                     active={openPlayer === c.id}
                     onOpen={() => setOpenPlayer(c.id)}
                     onMenu={setMenu}

@@ -52,11 +52,14 @@ export function PlayerRowHead(): React.JSX.Element {
 export default function PlayerRow({
   card,
   active,
+  me,
   onOpen,
   onMenu
 }: {
   card: PlayerCard
   active?: boolean
+  /** 这一行是不是本机账号 */
+  me?: boolean
   onOpen: () => void
   /** 右键：调查羁绊 / 复制 ID / 去 BATrace */
   onMenu?: (m: MenuState) => void
@@ -71,7 +74,7 @@ export default function PlayerRow({
 
   return (
     <div
-      className={'prow' + (active ? ' active' : '')}
+      className={'prow' + (active ? ' active' : '') + (me ? ' me' : '')}
       onClick={onOpen}
       onContextMenu={
         onMenu
@@ -101,6 +104,7 @@ export default function PlayerRow({
       </div>
       <div className="name">
         {card.name || card.id}
+        {me && <span className="prow-me">我</span>}
         {loading && <span className="spin" style={{ marginLeft: 6 }} />}
         {card.infoState === 'error' && (
           <span className="dim" style={{ marginLeft: 6, fontWeight: 400 }}>
