@@ -172,6 +172,28 @@ tr.replay-row.active > td:first-child {
   stroke: var(--warn);
 }
 
+/* 损失最惨的那一分钟：整整一分钟，所以是一条带，左右两条边就是这一分钟的头和尾。
+   颜色跟着损失的那一队走（A 蓝 B 红）。 */
+.bplayer-curve .ev-band .band {
+  opacity: 0.16;
+}
+.bplayer-curve .ev-band .edge {
+  stroke-width: 1px;
+  stroke-dasharray: 3 2;
+}
+.bplayer-curve .ev-band.t0 .band {
+  fill: var(--t0);
+}
+.bplayer-curve .ev-band.t0 .edge {
+  stroke: var(--t0);
+}
+.bplayer-curve .ev-band.t1 .band {
+  fill: var(--t1);
+}
+.bplayer-curve .ev-band.t1 .edge {
+  stroke: var(--t1);
+}
+
 /* 已播放的部分：压一层，不挡曲线 */
 .bplayer-played {
   position: absolute;

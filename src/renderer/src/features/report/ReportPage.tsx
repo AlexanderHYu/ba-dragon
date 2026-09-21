@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import type { MatchReport, ReportPlayer, ReportTeam } from '@shared/match'
 import Mark from '../../components/Mark'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
+import Flag from '../../components/Flag'
 import { useStore } from '../../store'
 import './report.css'
 
@@ -43,7 +44,16 @@ const sec = (s: number | null | undefined): string => {
 const pct = (v: number | null | undefined): string => (v == null ? '—' : Math.round(v * 100) + '%')
 const teamName = (t: number): string => (t === 0 ? 'A 队' : 'B 队')
 /** 阵营：旗子 + 中文名（旗子比文字一眼就能认出来） */
-const facName = (f: ReportTeam['faction']): string => (f === 'RU' ? ' 🇷🇺 俄' : f === 'US' ? ' 🇺🇸 美' : '')
+/** 阵营：旗子 + 一个字。旗子是自己画的 SVG，Windows 上没有国旗 emoji 字形 */
+function Fac({ f }: { f: ReportTeam['faction'] }): React.JSX.Element | null {
+  if (f !== 'RU' && f !== 'US') return null
+  return (
+    <span className="fac">
+      <Flag code={f} />
+      {f === 'RU' ? '俄' : '美'}
+    </span>
+  )
+}
 
 // 标签顺序照老版：玩家在最前，默认就打开玩家页
 const TABS = [
@@ -182,7 +192,7 @@ function TeamSummary({ T }: { T: ReportTeam }): React.JSX.Element {
     <div className={'rp-sum-team t' + T.team}>
       <b className="rp-sum-name">
         {teamName(T.team)}
-        {facName(T.faction)}
+        <Fac f={T.faction} />
         {T.won ? ' 🏆' : ''}
       </b>
       <span className="dim">
@@ -423,7 +433,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
           <div className="card" key={t}>
             <h2 className={'t' + t}>
               {teamName(t)}
-              {facName(T.faction)}
+              <Fac f={T.faction} />
               {T.won == null ? null : (
                 <span className={T.won ? 'lit-ok' : 'lit-bad'} style={{ marginLeft: 6 }}>
                   {T.won ? '胜' : '负'}
@@ -757,12 +767,12 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
   // 每分钟净变化 = 这一分钟的兵力 − 上一分钟的兵力
   const slope = field.map((arr) => arr.map((v, i) => (i ? v - arr[i - 1] : 0)))
   const diff = field[0].map((v, i) => v - field[1][i])
-  const series: { rows: number[][]; colors: string[]; zero: boolean } =
+  const series: { rows: number[][]; colors: string[]; zero: boolean; split?: boolean } =
     mode === 'field'
       ? { rows: field, colors: ['var(--t0)', 'var(--t1)'], zero: false }
       : mode === 'slope'
         ? { rows: slope, colors: ['var(--t0)', 'var(--t1)'], zero: true }
-        : { rows: [diff], colors: ['var(--accent)'], zero: true }
+        : { rows: [diff], colors: ['var(--t0)'], zero: true, split: true }
 
   const flat = series.rows.flat()
   // 绝对兵力从数据最低点开始画（从 0 开始的话，几千点的底座会把变化压平）
@@ -809,10 +819,16 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
         ))}
         <span className="legend rp-chart-legend">
           {mode === 'diff' ? (
-            <span>
-              <i style={{ background: 'var(--accent)' }} />
-              A − B
-            </span>
+            <>
+              <span>
+                <i style={{ background: 'var(--t0)' }} />
+                {teamName(0)}占上风
+              </span>
+              <span>
+                <i style={{ background: 'var(--t1)' }} />
+                {teamName(1)}占上风
+              </span>
+            </>
           ) : (
             <>
               <span>
@@ -840,25 +856,60 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
           {series.zero && (
             <line x1={pad.l} y1={y(0)} x2={W - pad.r} y2={y(0)} stroke="var(--line-hi)" strokeWidth="1.5" />
           )}
-          {series.rows.map((row, i) => (
-            <g key={i}>
-              {series.zero && <path d={area(row)} fill={series.colors[i]} opacity="0.16" />}
-              <path d={path(row)} fill="none" stroke={series.colors[i]} strokeWidth="2" />
-            </g>
-          ))}
-          {events.map((e, i) => (
-            <g key={i}>
-              <line
-                x1={x(e.min)}
-                y1={pad.t}
-                x2={x(e.min)}
-                y2={H - pad.b}
-                stroke={e.type === 'leave' ? 'var(--bad)' : 'var(--warn)'}
-                strokeDasharray="2 3"
-              />
-              <title>{'第 ' + (e.min + 1) + ' 分钟 ' + teamName(e.team) + ' ' + e.text}</title>
-            </g>
-          ))}
+          {series.split ? (
+            // 兵力差：0 线以上 = A 队占上风（蓝），以下 = B 队占上风（红）
+            <>
+              <defs>
+                <clipPath id="rp-tl-up">
+                  <rect x={pad.l} y={pad.t} width={W - pad.l - pad.r} height={Math.max(0, y(0) - pad.t)} />
+                </clipPath>
+                <clipPath id="rp-tl-dn">
+                  <rect x={pad.l} y={y(0)} width={W - pad.l - pad.r} height={Math.max(0, H - pad.b - y(0))} />
+                </clipPath>
+              </defs>
+              {(
+                [
+                  ['rp-tl-up', 'var(--t0)'],
+                  ['rp-tl-dn', 'var(--t1)']
+                ] as const
+              ).map(([clip, color]) => (
+                <g key={clip} clipPath={'url(#' + clip + ')'}>
+                  <path d={area(series.rows[0])} fill={color} opacity="0.18" />
+                  <path d={path(series.rows[0])} fill="none" stroke={color} strokeWidth="2" />
+                </g>
+              ))}
+            </>
+          ) : (
+            series.rows.map((row, i) => (
+              <g key={i}>
+                {series.zero && <path d={area(row)} fill={series.colors[i]} opacity="0.16" />}
+                <path d={path(row)} fill="none" stroke={series.colors[i]} strokeWidth="2" />
+              </g>
+            ))
+          )}
+          {events.map((e, i) => {
+            const color = e.team === 1 ? 'var(--t1)' : 'var(--t0)'
+            // 「一分钟内损失 XXXX」指的是整个第 N 分钟，所以标成一条带，
+            // 左右两条虚线就是这一分钟的开始和结束；掉线是一个时刻，还是一条线。
+            if (e.type === 'spike') {
+              const x1 = x(e.min)
+              const x2 = x(Math.min(minutes - 1, e.min + 1))
+              return (
+                <g key={i}>
+                  <rect x={x1} y={pad.t} width={Math.max(1, x2 - x1)} height={H - pad.t - pad.b} fill={color} opacity="0.14" />
+                  <line x1={x1} y1={pad.t} x2={x1} y2={H - pad.b} stroke={color} strokeDasharray="2 3" />
+                  <line x1={x2} y1={pad.t} x2={x2} y2={H - pad.b} stroke={color} strokeDasharray="2 3" />
+                  <title>{'第 ' + (e.min + 1) + ' 分钟（整整一分钟）' + teamName(e.team) + ' ' + e.text}</title>
+                </g>
+              )
+            }
+            return (
+              <g key={i}>
+                <line x1={x(e.min)} y1={pad.t} x2={x(e.min)} y2={H - pad.b} stroke="var(--bad)" strokeDasharray="2 3" />
+                <title>{'第 ' + (e.min + 1) + ' 分钟 ' + teamName(e.team) + ' ' + e.text}</title>
+              </g>
+            )
+          })}
           {ticks.map((i) => (
             <text key={i} x={x(i)} y={H - 7} textAnchor="middle" fontSize="10" fill="var(--dim)">
               {i + 1}′

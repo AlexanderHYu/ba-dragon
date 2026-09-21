@@ -4,7 +4,7 @@
 // 对齐方式：录像是「进对局开录、打完停录」，和 BATrace 记的对局时长不一定分毫不差
 // （开录有一两秒延迟、结算画面也录进去了），所以曲线只能按**比例**铺满整条进度条，
 // 不做绝对时间对齐。界面上用小字说明这件事。
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReplayItem } from '@shared/ipc'
 import type { MatchReport } from '@shared/match'
 import './replay.css'
@@ -22,6 +22,7 @@ const clock = (s: number): string => {
 type Timeline = MatchReport['timeline']
 
 export default function Player({ item, onClose }: { item: ReplayItem; onClose: () => void }): React.JSX.Element {
+  const uid = useId().replace(/:/g, '')
   const video = useRef<HTMLVideoElement>(null)
   const bar = useRef<HTMLDivElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -222,28 +223,53 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       >
         {curve && (
           <svg className="bplayer-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {curve.events.map((ev, k) => (
-              <line
-                key={'e' + k}
-                x1={curve.x(Math.min(curve.n - 1, Math.max(0, ev.min)))}
-                x2={curve.x(Math.min(curve.n - 1, Math.max(0, ev.min)))}
-                y1="0"
-                y2="100"
-                className={'ev ' + ev.type}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            {curve.diffArea && (
-              <>
-                <line x1="0" y1="50" x2="100" y2="50" stroke="var(--line-hi)" strokeWidth="0.6" vectorEffect="non-scaling-stroke" />
-                <path d={curve.diffArea} fill="var(--accent)" opacity="0.18" />
-                <path
-                  d={curve.diffPath}
-                  fill="none"
-                  stroke="var(--accent)"
-                  strokeWidth="1.6"
+            {curve.events.map((ev, k) => {
+              const i = Math.min(curve.n - 1, Math.max(0, ev.min))
+              // 「一分钟内损失 XXXX」说的是**整个第 N 分钟**，不是某个瞬间，
+              // 所以画成一条带：左边是这一分钟的开头，右边是结尾。
+              if (ev.type === 'spike') {
+                const x1 = curve.x(i)
+                const x2 = Math.min(100, curve.x(Math.min(curve.n - 1, i + 1)))
+                return (
+                  <g key={'e' + k} className={'ev-band t' + ev.team}>
+                    <rect x={x1} y="0" width={Math.max(0.6, x2 - x1)} height="100" className="band" />
+                    <line x1={x1} x2={x1} y1="0" y2="100" className="edge" vectorEffect="non-scaling-stroke" />
+                    <line x1={x2} x2={x2} y1="0" y2="100" className="edge" vectorEffect="non-scaling-stroke" />
+                  </g>
+                )
+              }
+              return (
+                <line
+                  key={'e' + k}
+                  x1={curve.x(i)}
+                  x2={curve.x(i)}
+                  y1="0"
+                  y2="100"
+                  className={'ev ' + ev.type}
                   vectorEffect="non-scaling-stroke"
                 />
+              )
+            })}
+            {curve.diffArea && (
+              <>
+                <defs>
+                  {/* 上半 = A 队占上风，下半 = B 队占上风；同一条路径切两半上不同的色 */}
+                  <clipPath id={'up' + uid}>
+                    <rect x="0" y="0" width="100" height="50" />
+                  </clipPath>
+                  <clipPath id={'dn' + uid}>
+                    <rect x="0" y="50" width="100" height="50" />
+                  </clipPath>
+                </defs>
+                <line x1="0" y1="50" x2="100" y2="50" stroke="var(--line-hi)" strokeWidth="0.6" vectorEffect="non-scaling-stroke" />
+                <g clipPath={`url(#up${uid})`}>
+                  <path d={curve.diffArea} fill="var(--t0)" opacity="0.22" />
+                  <path d={curve.diffPath} fill="none" stroke="var(--t0)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+                </g>
+                <g clipPath={`url(#dn${uid})`}>
+                  <path d={curve.diffArea} fill="var(--t1)" opacity="0.22" />
+                  <path d={curve.diffPath} fill="none" stroke="var(--t1)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+                </g>
               </>
             )}
 
@@ -307,8 +333,15 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       </div>
 
       <div className="bplayer-note dim">
-        {curve ? '曲线 = 兵力差（在中线上方 = A 队占上风）；按比例对齐，可能有几秒误差' : '这一局没有对局数据，只有普通进度条'} · 空格播放/暂停，←
-        → ±5 秒
+        {curve ? (
+          <>
+            曲线 = 兵力差：<span className="t0">中线以上 = A 队占上风</span>，<span className="t1">以下 = B 队占上风</span>
+            ；竖着的色带 = 某一队损失最惨的那一分钟（带的左右两边就是这分钟的头尾）。按比例对齐，可能有几秒误差
+          </>
+        ) : (
+          '这一局没有对局数据，只有普通进度条'
+        )}{' '}
+        · 空格播放/暂停，← → ±5 秒
       </div>
     </div>
   )
