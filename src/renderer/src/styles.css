@@ -309,6 +309,16 @@ a {
 .cols.even {
   grid-template-columns: 1fr 1fr;
 }
+/* 并排的两张卡等高（档案 ↔ 行车记录仪）：卡片撑满，里面的表格区域吃掉多出来的高度，
+   翻页条和底部按钮就都落在同一条线上 */
+.cols.stretch {
+  align-items: stretch;
+}
+.cols.stretch > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 @media (max-width: 1050px) {
   .cols,
   .cols.even {

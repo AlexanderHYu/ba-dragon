@@ -16,8 +16,6 @@ export interface BackupFile {
   size: number
   mtime: number
   decks: number
-  /** 每局开始自动覆盖的那一个 */
-  auto: boolean
 }
 
 /** 调查羁绊 */
@@ -220,6 +218,8 @@ export interface IpcMap {
   'match:sync': [void, { added: number; accounts: number } | { error: string }]
   'app:version': [void, { current: string; latest: string; hasUpdate: boolean }]
   'update:get': [void, UpdateInfo | null]
+  /** 手动点「检查更新」：查完把结果直接返回，没有新版本就是 null */
+  'update:check': [void, UpdateInfo | null]
   'update:install': [void, boolean]
 }
 

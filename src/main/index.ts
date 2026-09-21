@@ -132,7 +132,6 @@ function startServices(): Services {
     }
     if (watcher.isHistorical()) return
     if (type === 'matchStart') {
-      decks.autoBackup() // 每局开始滚动备份一次卡组
       const m = data as { fid?: string | null; map?: string }
       replays?.startForMatch(m?.fid ?? null, m?.map || '')
     }

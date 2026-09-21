@@ -345,3 +345,52 @@ tr.replay-row.active > td:first-child {
 .bplayer-full {
   padding: 3px 9px;
 }
+
+
+/* ---------- 播放器占位 ---------- */
+/* 播放器一直占着这块地方：没在放的时候是个提示框，点一条录像就换成真的播放器，
+   位置和高度都不变，界面不会忽然弹出一块。 */
+.bplayer-slot {
+  margin-bottom: 12px;
+}
+.bplayer-slot .bplayer {
+  margin-bottom: 0;
+}
+
+.bplayer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  aspect-ratio: 16 / 9;
+  max-height: 34vh;
+  background: var(--bg-2);
+  border: 1px dashed var(--line-hi);
+  border-radius: var(--radius);
+  color: var(--dim);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 10px;
+}
+.bplayer-empty-ico {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-hi);
+  color: var(--text-2);
+  font-size: 15px;
+  padding-left: 3px;
+}
+
+/* 等高两栏里：录像列表吃掉剩下的高度，翻页条贴住底部 */
+.replay-wrap {
+  overflow: auto;
+}
+.cols.stretch .replay-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}

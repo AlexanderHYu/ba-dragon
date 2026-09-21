@@ -256,6 +256,10 @@ export function registerIpc(s: Services): void {
     return { current: app.getVersion(), latest: u?.version || app.getVersion(), hasUpdate: !!u }
   })
   on('update:get', () => s.updater.latest())
+  on('update:check', async () => {
+    await s.updater.check()
+    return s.updater.latest()
+  })
   on('update:install', () => s.updater.install())
 
   ipcMain.handle('shell:open', (_e, url: string) => {

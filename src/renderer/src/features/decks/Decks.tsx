@@ -163,8 +163,7 @@ export default function Decks(): React.JSX.Element {
   }))
   const backRows: Row[] = data.backups.map((b: BackupFile) => ({
     name: b.name,
-    sub: b.decks + ' 副 · ' + fmtSize(b.size) + ' · ' + fmtTime(b.mtime),
-    badge: b.auto ? '上一局' : undefined
+    sub: b.decks + ' 副 · ' + fmtSize(b.size) + ' · ' + fmtTime(b.mtime)
   }))
 
   return (
@@ -323,9 +322,6 @@ export default function Decks(): React.JSX.Element {
               >
                 🗑 删除所选
               </button>
-            </div>
-            <div className="deck-tip dim">
-              标「上一局」的包是每局开始自动覆盖的，不用手动管它——下一局一开就会被新的盖掉，别把它当长期存档。
             </div>
           </section>
         </div>

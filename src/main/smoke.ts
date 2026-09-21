@@ -230,6 +230,22 @@ export async function run(win: BrowserWindow): Promise<void> {
   } catch (e) {
     out.error = String((e as Error)?.message || e)
   }
+  // 临时量个尺寸、看个状态：BA_SMOKE_EVAL 里给一段表达式，结果原样带回来
+  if (process.env.BA_SMOKE_EVAL) {
+    try {
+      out.eval = await win.webContents.executeJavaScript(process.env.BA_SMOKE_EVAL)
+    } catch (e) {
+      out.eval = { error: String((e as Error)?.message || e) }
+    }
+    // 表达式里滚过页面/点过东西的话，再截一张看结果
+    if (process.env.BA_SMOKE_SHOT) {
+      await new Promise((r) => setTimeout(r, 400))
+      writeFileSync(
+        process.env.BA_SMOKE_SHOT.replace(/\.png$/, '') + '-eval.png',
+        (await win.webContents.capturePage()).toPNG()
+      )
+    }
+  }
   // 录像真机自测：开录几秒再停，看合成出来的 MP4 在不在
   if (process.env.BA_SMOKE_REC) {
     try {

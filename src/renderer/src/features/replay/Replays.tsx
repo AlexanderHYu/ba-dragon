@@ -283,51 +283,64 @@ export default function Replays(): React.JSX.Element {
         </div>
       )}
 
-      {playing && <Player key={playing.id} item={playing} onClose={() => setPlaying(null)} />}
+      {/* 播放器的位置一直留着：没在放的时候是个空框，点一行才把画面填进去，
+          这样列表不会因为多出一块播放器而整个往下跳。 */}
+      <div className="bplayer-slot">
+        {playing ? (
+          <Player key={playing.id} item={playing} onClose={() => setPlaying(null)} />
+        ) : (
+          <div className="bplayer-empty">
+            <div className="bplayer-empty-ico">▶</div>
+            <div>{list.length ? '点下面任意一条录像，就在这里播放' : on ? '进一局游戏就会自动开录，录完出现在这里' : '行车记录仪没开'}</div>
+          </div>
+        )}
+      </div>
 
-      <table className="t">
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>地图</th>
-            <th>大小</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((r) => (
-            <tr
-              key={r.id}
-              className={'replay-row' + (playing?.id === r.id ? ' active' : '')}
-              title="点一下在这里播放"
-              onClick={() => setPlaying((p) => (p?.id === r.id ? null : r))}
-            >
-              <td>{new Date(r.createdAt).toLocaleString('zh-CN')}</td>
-              <td>{r.map || '—'}</td>
-              <td>{size(r.size)}</td>
-              <td>
-                <button
-                  className="danger"
-                  onClick={async (e) => {
-                    e.stopPropagation()
-                    await window.BA.deleteReplay(r.id)
-                    reload()
-                  }}
-                >
-                  🗑 删除
-                </button>
-              </td>
-            </tr>
-          ))}
-          {!list.length && (
+      <div className="replay-wrap">
+        <table className="t">
+          <thead>
             <tr>
-              <td colSpan={4} className="dim">
-                {on ? '还没有录像。进一局游戏就会自动开录。' : '没开。开了之后每局自动录。'}
-              </td>
+              <th>时间</th>
+              <th>地图</th>
+              <th>大小</th>
+              <th />
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr
+                key={r.id}
+                className={'replay-row' + (playing?.id === r.id ? ' active' : '')}
+                title="点一下在这里播放"
+                onClick={() => setPlaying((p) => (p?.id === r.id ? null : r))}
+              >
+                <td>{new Date(r.createdAt).toLocaleString('zh-CN')}</td>
+                <td>{r.map || '—'}</td>
+                <td>{size(r.size)}</td>
+                <td>
+                  <button
+                    className="danger"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      await window.BA.deleteReplay(r.id)
+                      reload()
+                    }}
+                  >
+                    🗑 删除
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!list.length && (
+              <tr>
+                <td colSpan={4} className="dim">
+                  {on ? '还没有录像。进一局游戏就会自动开录。' : '没开。开了之后每局自动录。'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+          </table>
+      </div>
       <Pager page={cur} pageSize={PAGE_SIZE} total={list.length} onPage={setPage} />
 
       <div className="row" style={{ marginTop: 8 }}>

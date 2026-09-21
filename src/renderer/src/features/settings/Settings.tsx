@@ -11,6 +11,7 @@ export default function Settings(): React.JSX.Element {
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [replayCount, setReplayCount] = useState<number | null>(null)
+  const [upMsg, setUpMsg] = useState<string | null>(null)
 
   useEffect(() => {
     void window.BA.listReplays().then((l) => setReplayCount(l.length))
@@ -199,6 +200,25 @@ export default function Settings(): React.JSX.Element {
         <p>
           🐉 <b>龙区分类器</b> v{status?.version || ''} · 只读取游戏日志（GameLogs）和 BATrace 的公开接口，
           <b>不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊。</b>
+          <button
+            style={{ marginLeft: 8 }}
+            disabled={busy === 'update'}
+            onClick={async () => {
+              setBusy('update')
+              setUpMsg(null)
+              // 有新版本的话，主进程会推 update:available，顶上的横幅自己会出来
+              const u = await window.BA.checkUpdate()
+              setUpMsg(u ? '发现新版本 v' + u.version : '已经是最新版了')
+              setBusy(null)
+            }}
+          >
+            {busy === 'update' ? '查询中…' : '检查更新'}
+          </button>
+          {upMsg && <span className="dim" style={{ marginLeft: 8 }}>{upMsg}</span>}
+        </p>
+        <p className="dim">
+          安装版会自己在后台下载新版本，下好后顶上提示「重启更新」，不点的话下次关软件时自动装；
+          免安装版只提示，需要自己下新的 exe 换掉。
         </p>
         <p>
           数据全部存在本地（<code>%APPDATA%\broken-arrow-log-assistant</code>），没有自建服务器，不上传你的任何数据。
@@ -217,7 +237,7 @@ export default function Settings(): React.JSX.Element {
           <a href="#" onClick={() => window.BA.openExternal('https://github.com/Zawinzala/brokenarrow-log-maggot')}>
             断箭蛆工具
           </a>
-          （MIT），5.0 是重写版本。
+          （MIT），本版是从零重写的。
         </p>
         <p>
           有问题、有想法、发现算得不对，都可以找我：<b>QQ {QQ}</b>

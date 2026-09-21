@@ -29,8 +29,7 @@
 /* ================= 龙区分面板（照 4.0.3 的 .maggot-panel 重做） =================
    条的颜色只有「低端那一头」在主题里没有现成变量：深色底上要接近白，浅色底上
    得压暗一点才看得见边界。所以这里给面板自己开两个局部 token，其余一律用全局变量。 */
-.pdetail-grid > section.dgpanel,
-.dgpanel {
+.pdetail-grid > section.dgpanel {
   --dg-lo: #eef3fb; /* 区：接近白 */
   --dg-ind: #ffffff; /* 指针 */
   --dg-ind-line: #10141c; /* 指针描边，两种主题下都要是深色 */
@@ -39,8 +38,7 @@
   border: 1px solid #4b2731;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
-:root[data-theme='light'] .pdetail-grid > section.dgpanel,
-.dgpanel {
+:root[data-theme='light'] .pdetail-grid > section.dgpanel {
   --dg-lo: #c3cddf;
   background: linear-gradient(180deg, #fff1f2, #ffe6e8);
   border-color: #f2c4ca;
@@ -327,4 +325,11 @@
   color: var(--lit-bad);
   text-shadow: 0 0 6px var(--lit-bad-glow);
   font-weight: 600;
+}
+
+
+/* ---------- 调查羁绊：通栏，数字横着铺开 ---------- */
+.bondpanel .kv {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 8px;
 }

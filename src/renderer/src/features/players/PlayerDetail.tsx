@@ -346,9 +346,9 @@ export default function PlayerDetail({
           )}
         </section>
 
-        {/* 羁绊 */}
+        {/* 羁绊：和上面的龙区分面板一样通栏，四个数字横着铺开 */}
         {bond && bond.matches > 0 && (
-          <section>
+          <section className="wide bondpanel">
             <h3>调查羁绊</h3>
             <div className="kv">
               <div>

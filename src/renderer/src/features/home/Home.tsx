@@ -12,7 +12,7 @@ export default function Home({ onOpenReport }: { onOpenReport: (fid: string) => 
     <>
       <CurrentMatch />
       <PlayerPanel />
-      <div className="cols">
+      <div className="cols stretch">
         <Archive onOpen={onOpenReport} />
         <Replays />
       </div>

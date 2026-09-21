@@ -1,9 +1,8 @@
 // ================= 卡组备份 / 部署 =================
 // 游戏的卡组在 %USERPROFILE%\AppData\LocalLow\SteelBalalaikaStudio\BrokenArrow\Decks，
 // 一个 .dek 一副。这里做三件事：
-//   1. 每局开始自动把当前卡组打包成「上一局卡组包.zip」（只留一个，滚动覆盖）
-//   2. 手动备份成带时间戳的包
-//   3. 把某个包里的卡组还原回游戏目录（换号、重装之后用）
+//   1. 手动备份成带时间戳的包
+//   2. 把某个包里的卡组还原回游戏目录（换号、重装之后用）
 // 还原前先自动备份一份现有的，免得覆盖掉没备份过的卡组。
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
@@ -11,7 +10,6 @@ import { homedir } from 'node:os'
 import { zipCreate, zipExtract } from '@shared/zip'
 
 const GAME_DIR = join(homedir(), 'AppData', 'LocalLow', 'SteelBalalaikaStudio', 'BrokenArrow')
-const PKG_NAME = '上一局卡组包.zip'
 
 export interface DeckFile {
   name: string
@@ -24,7 +22,6 @@ export interface BackupFile {
   size: number
   mtime: number
   decks: number
-  auto: boolean
 }
 
 const stamp = (): string => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
@@ -77,7 +74,7 @@ export class DeckService {
           } catch {
             decks = 0
           }
-          return { name: f, path: p, size: st.size, mtime: st.mtimeMs, decks, auto: f === PKG_NAME }
+          return { name: f, path: p, size: st.size, mtime: st.mtimeMs, decks }
         })
         .sort((a, b) => b.mtime - a.mtime)
     } catch {
@@ -135,15 +132,6 @@ export class DeckService {
       }
     }
     return { removed }
-  }
-
-  /** 每局开始自动覆盖「上一局卡组包」 */
-  autoBackup(): void {
-    try {
-      this.backup(PKG_NAME)
-    } catch {
-      /* 备份失败不影响打游戏 */
-    }
   }
 
   /** 把备份包里的卡组还原回游戏目录；先自动备份现有的 */

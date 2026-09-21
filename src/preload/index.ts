@@ -46,6 +46,7 @@ const api = {
 
   getVersion: () => invoke('app:version'),
   getUpdateInfo: () => invoke('update:get'),
+  checkUpdate: () => invoke('update:check'),
   installUpdate: () => invoke('update:install'),
   openExternal: (url: string) => ipcRenderer.invoke('shell:open', url),
 
