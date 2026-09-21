@@ -8,6 +8,18 @@
 > 沿用同一个 `appId` 和数据目录，装上就会覆盖旧版，设置和对局档案都保留。
 > 注意：版本号重新起算（1.0.0 < 4.0.3），所以 4.0.x 的自动更新**不会**提示升级，头一次要手动装。
 
+## 下载
+
+去 [Releases](https://github.com/AlexanderHYu/ba-dragon/releases/latest) 拿最新版：
+
+| 选哪个 | 说明 |
+| --- | --- |
+| **`DragonClassifier-Setup-x.y.z.exe`（推荐）** | 安装版。**能自动更新**：以后有新版本会在后台下好，提示你重启一下就装完了 |
+| `DragonClassifier-Portable-x.y.z.exe` | 免安装版。exe 没法自己替换自己，只会提示有新版本，要手动下 |
+
+装完直接开，第一次会让你选游戏目录（`broken_arrow`），之后进游戏就自动干活。
+设置和对局档案在 `%APPDATA%roken-arrow-log-assistant`，换版本不会丢。
+
 ## 进度
 
 - [x] 脚手架：electron-vite + React + TypeScript + vitest
@@ -19,8 +31,8 @@
 - [x] 行车记录仪（录像）
 - [x] 老数据迁移：4.0.x 的对局档案、玩家库、ELO 快照搬进本地库
 - [x] 自动更新、打包、CI
+- [x] 发 1.0.0（老版用户手动装一次；之后由本仓库的自动更新接手）
 - [ ] 真机跑一局验收（录像要在玩游戏时才能验）
-- [ ] 发 1.0.0（老版用户手动装一次；之后由本仓库的自动更新接手）
 
 ## 开发
 
@@ -37,7 +49,8 @@ npm run dist       # 打包 Windows 安装版和免安装版
 
 冒烟测试（`npm run smoke`）会真的把软件起起来，确认窗口渲染、IPC 通、复盘算得出来。
 几个可选开关：`BA_SMOKE_FID=<对局ID>` 顺带算一次复盘、`BA_SMOKE_SHOT=<路径>` 截图、
-`BA_SMOKE_REC=1` 真机录 6 秒看能不能出 MP4（需要 `vendor/ffmpeg`，且屏幕不能处于休眠）。
+`BA_SMOKE_REC=1` 真机录 6 秒看能不能出 MP4（需要 `vendor/ffmpeg`，且屏幕不能处于休眠）、
+`BA_SMOKE_EVAL='<一段表达式>'` 在界面里跑一段 JS 把结果带回来（量尺寸、点东西用），跑完再截一张。
 
 ## 结构
 
