@@ -854,6 +854,10 @@ pre.log {
 .teams > div > .team-head {
   margin-top: 2px;
 }
+/* 还没分队的那一组横跨两栏（开局前往往只有这一组，半宽太窄） */
+.teams > div.wide {
+  grid-column: 1 / -1;
+}
 .pdetail-grid > section {
   padding: 12px 14px;
 }

@@ -175,8 +175,19 @@ export class LogParser {
       const id = m[1]
       const name = m[2].trim()
       const team = m[3] // Alpha / Bravo / Spectators
-      if (this.current && !this.current.players.some((p) => p.id === id)) {
-        this.current.players.push({ id, name, team })
+      if (this.current) {
+        // 自定义房间里，人先是从 Room: Client: 那行进来的（没有队伍），
+        // 开战时这份 Player list 才带队伍。所以已经认识的人要把队伍补上，不能直接跳过，
+        // 否则整个房间的人永远是「没分队」。
+        const known = this.current.players.find((p) => p.id === id)
+        if (!known) {
+          this.current.players.push({ id, name, team })
+        } else if (known.team !== team || (name && known.name !== name)) {
+          known.team = team
+          if (name) known.name = name
+        } else {
+          return // 没变化，不用再广播一次
+        }
         ev('roster', { fid: this.current.fid, map: this.current.map, players: this.current.players })
       }
       return

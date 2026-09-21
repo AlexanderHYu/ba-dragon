@@ -13,10 +13,15 @@ export default function CurrentMatch(): React.JSX.Element {
   const lobby = Object.keys(session?.snapshot.lobbyPlayers || {}).length
   const cards = query.cards
   const teamOf = (c: PlayerCard): string => c.team || '?'
-  const groups: [string, string, PlayerCard[]][] = [
-    ['Alpha', 't0', cards.filter((c) => teamOf(c) === 'Alpha')],
-    ['Bravo', 't1', cards.filter((c) => teamOf(c) === 'Bravo')],
-    ['房间里的人', '', cards.filter((c) => teamOf(c) !== 'Alpha' && teamOf(c) !== 'Bravo')]
+  // [标题, 标题颜色, 名单, 是否通栏]。A 队在左、B 队在右（排位和自定义都能从日志里读到队伍，
+  // 但要等对局开始；在房间里等的时候日志只有名字，分不出队）。
+  // 观战和还没分队的人各自横跨两栏——挤在半边不好看。
+  const isTeam = (c: PlayerCard): boolean => teamOf(c) === 'Alpha' || teamOf(c) === 'Bravo'
+  const groups: [string, string, PlayerCard[], boolean][] = [
+    ['Alpha', 't0', cards.filter((c) => teamOf(c) === 'Alpha'), false],
+    ['Bravo', 't1', cards.filter((c) => teamOf(c) === 'Bravo'), false],
+    ['观战', '', cards.filter((c) => teamOf(c) === 'Spectators'), true],
+    ['房间里的人', '', cards.filter((c) => !isTeam(c) && teamOf(c) !== 'Spectators'), true]
   ]
 
   return (
@@ -52,9 +57,9 @@ export default function CurrentMatch(): React.JSX.Element {
         </div>
       ) : (
         <div className="teams">
-          {groups.map(([label, cls, list]) =>
+          {groups.map(([label, cls, list, wide]) =>
             list.length ? (
-              <div key={label}>
+              <div key={label} className={wide ? 'wide' : undefined}>
                 <div className={'team-head ' + cls}>
                   {label}
                   <span className="dim">{list.length} 人</span>

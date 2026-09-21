@@ -30,7 +30,10 @@ export default function App(): React.JSX.Element {
     if (!location.search.includes('smoke=1')) return
     ;(window as unknown as { __openReport?: (fid: string) => void }).__openReport = (fid) =>
       setPage({ name: 'report', fid })
-  }, [setPage])
+    // 没在打游戏也能把名单摆出来看排版（只在 smoke=1 下挂）
+    ;(window as unknown as { __fakeRoster?: (q: unknown) => void }).__fakeRoster = (q) =>
+      setQuery(q as Parameters<typeof setQuery>[0])
+  }, [setPage, setQuery])
 
   // 配色跟着设置走
   useEffect(() => {
