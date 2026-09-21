@@ -4,10 +4,15 @@
 //   · 非制导命中率 = CalculateWeaponHitChance：散布随距离放大，再按目标投影面积算概率
 //   · 制导命中率   = CalculateMissileHitChance：基础命中 × ECM × 干扰弹 × 压制
 //   · AOE 衰减     = ShellHitSystem.DealAOEDamage：按到目标外壳的距离线性衰减
-//   · 穿甲判定     = 穿深 ≥ 对应面装甲（数值就是照这个调的：M829A4 穿深 840 对 M1A2 正面 850 打不动）
+//   · 选弹种       = SelectBestShellForTarget：位图能打 + 在射程内 + 伤害最高
+//   · 目标类型位   = 单位的 Type 字段（2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船）
 //
-// 还没有权威来源、由我们自己定的只有两处，界面上都标了「推算」：
-//   · 游戏自动选弹种的具体规则（方法名叫 SelectBestShellForTarget，但代码没拿到）
+// 还差一块：**打中之后掉多少血**。游戏里是 DamageFormulaKinetic / DamageFormulaHEAT 两条
+// 软比值公式（HEAT 那条读出来是 伤害 × 穿深^k ÷ (穿深^k + c × 装甲^k)），系数存在 GameConfig
+// 的运行时对象里，还没拿到。所以这里暂时按「穿深 ≥ 装甲 = 满伤，否则 0」估算。
+//
+// 自己定的规则（界面上都标了「推算」）：
+//   · 穿甲判定按「穿深 ≥ 装甲」二值化（真实是软比值，见上）
 //   · 目标外壳半径怎么从长宽高算
 import { A, B, COMBAT, M, U, W, type CAmmo, type CombatData, type CWeapon } from '../game/combat'
 
@@ -68,6 +73,8 @@ export interface WeaponProfile {
   radar: boolean
   ammo: AmmoProfile[]
   from: string
+  /** 发射通道：同一个通道上的武器不能同时开火（直升机火箭巢就靠这个分组） */
+  channel: number
 }
 
 export interface Abilities {
@@ -93,6 +100,8 @@ export interface UnitProfile {
   size: { len: number; wid: number; hei: number }
   /** 目标外壳半径：AOE 是从外壳算距离的，大目标更容易被溅到 */
   bounds: number
+  /** 在弹药目标位图里占哪一位（2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船） */
+  targetBit: number
   weapons: WeaponProfile[]
   abilities: Abilities
   sensor: { name: string; ground: number; lowAlt: number; highAlt: number } | null
@@ -120,11 +129,14 @@ export const CAT_NAME: Record<number, string> = {
 }
 
 /**
- * 目标类型位图。游戏的枚举里有 Infantry / Vehicles / Helicopters / Aircrafts / Projectiles，
- * 具体位值没拿到，这几位是拿真实弹药对出来的：
- * 斯汀格 24 = 直升机 + 飞机，AMRAAM 16 = 只打飞机，穿甲弹 36 里没有步兵位。
+ * 目标类型位：单位自己的 Type 字段就是它在弹药 TargetType 位图里占的那一位。
+ * 从游戏数据里逐个数出来的：2 = 步兵（194 个）/ 4 = 车辆（234 个）/ 8 = 直升机（45）/
+ * 16 = 飞机（62）/ 32 = 船（5）。
+ * 对得上：穿甲弹 36 = 车辆+船（不打步兵）、步枪 47 里有直升机没有飞机、
+ * 斯汀格 24 = 直升机+飞机、AMRAAM 16 = 只打飞机。
+ * 游戏的 SelectBestShellForTarget 里就是 `test [弹药+0x78], 目标类型位`。
  */
-const MASK = { inf: 1, light: 2, armor: 4, heli: 8, plane: 16 }
+const CLASS_BIT: Record<UnitClass, number> = { inf: 2, light: 4, armor: 4, heli: 8, plane: 16 }
 
 function classOf(cat: number, kinFront: number): UnitClass {
   if (cat === 1) return 'inf'
@@ -135,12 +147,16 @@ function classOf(cat: number, kinFront: number): UnitClass {
 
 export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
 
-/** 这发弹药会不会用在这类目标上（有 AOE 的落地就炸，不受位图限制） */
+/**
+ * 这发弹药能不能锁这个目标：弹药的目标位图和目标的类型位做与运算。
+ * 游戏里就是这么判的（SelectBestShellForTarget 里的 test 指令）。
+ * 有溅射的弹药同样受这个限制——想炸一片得瞄地面，那是另一条路径。
+ */
+export function canTargetBit(a: AmmoProfile, bit: number): boolean {
+  return !!(a.targetMask & bit)
+}
 export function canTarget(a: AmmoProfile, k: UnitClass): boolean {
-  if (a.aoe > 0) return true
-  const m = a.targetMask
-  if (!m) return false
-  return !!(m & MASK[k])
+  return canTargetBit(a, CLASS_BIT[k])
 }
 
 // ---------- 配装 → 单位 ----------
@@ -181,7 +197,7 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (special) count.set(special, (count.get(special) || 0) + 1)
     }
     for (const [wid, c] of count) {
-      const w = weaponProfile(data, eff, wid, c, c + ' 人')
+      const w = weaponProfile(data, eff, wid, c, c + ' 人', 0)
       if (w) weapons.push(w)
     }
   } else {
@@ -197,8 +213,8 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (![...picked.values()].includes(tid) && data.turretWeapons[tid]) picked.set('opt#' + tid, tid)
     }
     for (const tid of picked.values()) {
-      for (const wid of data.turretWeapons[tid] || []) {
-        const w = weaponProfile(data, eff, wid, 1, '')
+      for (const [wid, channel] of data.turretWeapons[tid] || []) {
+        const w = weaponProfile(data, eff, wid, 1, '', channel)
         if (w) weapons.push(w)
       }
     }
@@ -236,6 +252,7 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     size: { len, wid, hei: u[U.hei] || 2 },
     // 外壳半径：拿长宽当一个矩形，取它的外接圆半径（游戏用的是碰撞体，这里只能这么近似）
     bounds: r2(Math.sqrt(len * len + wid * wid) / 2),
+    targetBit: u[U.targetBit] || CLASS_BIT[klass],
     weapons: weapons.sort((a, c) => topDamage(c) - topDamage(a)),
     abilities: ab,
     sensor: sens ? { name: sens[0], ground: sens[1], lowAlt: sens[2], highAlt: sens[3] } : null,
@@ -250,7 +267,8 @@ function weaponProfile(
   unitId: number,
   weaponId: number,
   count: number,
-  from: string
+  from: string,
+  channel: number
 ): WeaponProfile | null {
   const w: CWeapon | undefined = data.weapons[weaponId]
   if (!w) return null
@@ -308,7 +326,8 @@ function weaponProfile(
     onMove: !!w[W.move],
     radar: !!w[W.radar],
     ammo,
-    from
+    from,
+    channel
   }
 }
 
@@ -517,7 +536,7 @@ export function shotAt(
     dps: r2((expected * w.count) / per),
     stressShots: a.stress > 0 ? Math.ceil(target.maxStress / a.stress) : null,
     inRange: dist >= a.minRange && dist <= range,
-    usable: canTarget(a, target.klass),
+    usable: canTargetBit(a, target.targetBit),
     range
   }
 }
@@ -532,8 +551,12 @@ export interface Engagement {
 }
 
 /**
- * 每件武器挑一种弹。游戏里这件事叫 SelectBestShellForTarget，具体规则没拿到，
- * 这里按「能打这类目标 + 够得着 + 期望伤害最高（打得穿的优先）」来选。
+ * 每件武器挑一种弹。这是照游戏的 SelectBestShellForTarget 来的（反汇编读出来的）：
+ *   1. 弹药目标位图 ∩ 目标类型位 ≠ 0
+ *   2. 最小射程 ≤ 距离 ≤ 这个目标对应的射程
+ *   3. 剩下的里面挑 **伤害最高** 的那一发
+ * 注意游戏在这一步**不看穿不穿得动**——所以自动开火经常拿破甲弹去啃正面。
+ * 烟雾弹是另一条请求路径（专门放烟的时候才用），这里不当攻击手段。
  */
 export function engage(
   attacker: UnitProfile,
@@ -546,15 +569,30 @@ export function engage(
     const all = w.ammo
       .map((ammo) => ({ ammo, result: shotAt(w, ammo, target, dist, facing, opts) }))
       .sort((x, y) => {
+        // 先把游戏会考虑的排前面，组内按伤害（游戏就是挑伤害最高的）
         const ok = (r: { result: ShotResult }): number => (r.result.usable && r.result.inRange ? 1 : 0)
         if (ok(x) !== ok(y)) return ok(y) - ok(x)
-        if (x.result.through !== y.result.through) return x.result.through ? -1 : 1
-        return y.result.dps - x.result.dps
+        return y.ammo.dmg - x.ammo.dmg
       })
-    const top = all[0]
-    const good = top && top.result.usable && top.result.inRange ? top : null
-    return { weapon: w, best: good?.ammo || null, result: good?.result || null, all }
+    const top = all.find((x) => x.result.usable && x.result.inRange)
+    return { weapon: w, best: top?.ammo || null, result: top?.result || null, all }
   })
+}
+
+/**
+ * 一个单位的总输出。同一个发射通道上的武器不能同时开火（`CanUseFiringChannel`），
+ * 所以每个通道只取最能打的那一件，再把各通道加起来。
+ */
+export function totalDps(list: Engagement[]): { dps: number; byChannel: { channel: number; dps: number; weapon: string }[] } {
+  const best = new Map<number, { channel: number; dps: number; weapon: string }>()
+  for (const e of list) {
+    if (!e.result) continue
+    const ch = e.weapon.channel
+    const cur = best.get(ch)
+    if (!cur || e.result.dps > cur.dps) best.set(ch, { channel: ch, dps: e.result.dps, weapon: e.weapon.name })
+  }
+  const byChannel = [...best.values()].sort((a, b) => b.dps - a.dps)
+  return { dps: Math.round(byChannel.reduce((s, x) => s + x.dps, 0) * 100) / 100, byChannel }
 }
 
 // ---------- APS ----------

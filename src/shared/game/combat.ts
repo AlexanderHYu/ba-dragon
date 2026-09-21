@@ -3,8 +3,12 @@
 // scripts/export-gamedata.mts 从游戏文件里导出来，游戏更新之后重新导一次。
 import raw from './combat.json'
 
-/** 单位：[名字, 价格, 长, 宽, 高, 最大压制, 隐蔽, 类别, 兵种角色, 国家] */
-export type CUnit = [string, number, number, number, number, number, number, number, number, number]
+/**
+ * 单位：[名字, 价格, 长, 宽, 高, 最大压制, 隐蔽, 类别, 兵种角色, 国家, 目标类型位]
+ * 目标类型位就是游戏里的 Type 字段：2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船，
+ * 弹药的 TargetType 位图和它做与运算，有交集才打得了。
+ */
+export type CUnit = [string, number, number, number, number, number, number, number, number, number, number]
 /** 装甲：[血量, 动能前, 动能侧, 动能后, 动能顶, 破甲前, 破甲侧, 破甲后, 破甲顶, 步兵护甲值] */
 export type CArmor = [number, number, number, number, number, number, number, number, number, number]
 /**
@@ -111,8 +115,8 @@ export interface CombatData {
   unitArmor: Record<number, number>
   /** 单位能挂的炮塔（含各种变体） */
   turrets: Record<number, CTurretMount[]>
-  /** 炮塔上的武器 */
-  turretWeapons: Record<number, number[]>
+  /** 炮塔上的武器：[武器id, 发射通道]。同一个通道上的武器不能同时开火 */
+  turretWeapons: Record<number, [number, number][]>
   weapons: Record<number, CWeapon>
   /** "单位id:武器id" → [[弹药id, 携带量], …] */
   weaponAmmo: Record<string, [number, number][]>
@@ -141,7 +145,19 @@ export const COMBAT = raw as unknown as CombatData
 export const hasCombat = (): boolean => Object.keys(COMBAT.units || {}).length > 0
 
 // ---------- 位置常量，别到处写魔法下标 ----------
-export const U = { name: 0, cost: 1, len: 2, wid: 3, hei: 4, stress: 5, stealth: 6, cat: 7, role: 8, country: 9 } as const
+export const U = {
+  name: 0,
+  cost: 1,
+  len: 2,
+  wid: 3,
+  hei: 4,
+  stress: 5,
+  stealth: 6,
+  cat: 7,
+  role: 8,
+  country: 9,
+  targetBit: 10
+} as const
 export const A = { hp: 0, kf: 1, ks: 2, kr: 3, kt: 4, hf: 5, hs: 6, hr: 7, ht: 8, inf: 9 } as const
 export const W = {
   name: 0,

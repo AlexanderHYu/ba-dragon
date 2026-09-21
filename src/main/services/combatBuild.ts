@@ -29,7 +29,8 @@ export function buildCombat(r: RawTables): CombatData {
       n(u.Stealth),
       n(u.CategoryType),
       n(u.Role),
-      n(u.CountryId)
+      n(u.CountryId),
+      n(u.Type)
     ] as CUnit
   }
 
@@ -71,9 +72,9 @@ export function buildCombat(r: RawTables): CombatData {
     ;(turrets[uid] ||= []).push([tid, n(x.Order), turretClass(name), b(turretDefault.get(tid))] as CTurretMount)
   }
 
-  const turretWeapons: Record<number, number[]> = {}
+  const turretWeapons: Record<number, [number, number][]> = {}
   for (const x of row('TurretWeaponsJson')) {
-    ;(turretWeapons[n(x.TurretId)] ||= []).push(n(x.WeaponId))
+    ;(turretWeapons[n(x.TurretId)] ||= []).push([n(x.WeaponId), n(x.WeaponChannel)])
   }
 
   const weapons: Record<number, CWeapon> = {}

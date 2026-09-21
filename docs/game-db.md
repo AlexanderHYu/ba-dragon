@@ -90,10 +90,30 @@ npm run export-gamedata -- --key <32位密钥>     # 写 src/shared/game/data.js
 
 ### 战斗公式：从哪来的
 
-下面几条来自对 `GameAssembly.dll` 的反编译审计（朋友做的，逐条标了 VERIFIED）。
-方法名在 `BrokenArrow_Data/il2cpp_data/Metadata/global-metadata.dat` 的字符串表里能对上：
-`CalculateWeaponHitChance`、`CalculateMissileHitChance`、`ShellHitSystem.DealAOEDamage`、
-`ComputePenetration`、`SelectBestShellForTarget`、`GetDispersionReferenceRange`。
+**全部是从 `GameAssembly.dll` 的机器码里读出来的**，不是猜的。
+
+游戏是 IL2CPP 打的（C# → C++ → x86-64），没有 IL 可读。`tools/il2cpp-peek.py` 做这三步：
+
+1. 解 `global-metadata.dat`，按名字找到方法拿它的 token；
+2. 在 `GameAssembly.dll` 里按模块名找到 `CodeGenModule`，顺着 `methodPointers[token的rid - 1]` 拿到函数地址；
+3. capstone 反汇编，顺手把 rip 相对寻址的浮点常量读出来。
+
+```bash
+pip install capstone
+python tools/il2cpp-peek.py CalculateMissileHitChance
+python tools/il2cpp-peek.py get_Damage --count 4      # 属性 getter 能直接读出字段偏移
+```
+
+字段偏移也是这么定的——属性 getter 就是一条 `movss xmm0, [rcx+偏移] / ret`：
+
+| 字段 | 偏移 | 字段 | 偏移 |
+| --- | --- | --- | --- |
+| SupplyCost | 0x5c | TargetType | 0x78 |
+| **Damage** | **0x64** | ArmorTargeted | 0x80 |
+| StressDamage | 0x68 | PenetrationAtMinRange | 0x84 |
+| HealthAOERadius | 0x90 | PenetrationAtGroundRange | 0x88 |
+| StressAOERadius | 0x94 | MinimalRange / GroundRange | 0xac / 0xb0 |
+| DispersionH / V / Minimal | 0xd8 / 0xdc / 0xe0 | Seeker | 0x108 |
 
 **非制导武器的命中率**（`CalculateWeaponHitChance`）
 
@@ -109,9 +129,11 @@ H = 水平散布 × 比例      V = 垂直散布 × 比例
 **制导弹药的命中率**（`CalculateMissileHitChance`）
 
 ```
-命中率 = 基础命中 × 目标ECM × 干扰弹效果 × 压制系数
+命中率 = 基础命中 × 目标ECM × 干扰弹效果 × 压制系数 × 经验 × 暴击系数
 干扰弹效果 = 没放就是 1；放了 n 发 = ((1 − 弹药抗干扰) × 干扰弹乘数) ^ n
 ```
+
+标量重载里确实是连着六个 `mulss`；我们只算前四个，经验和暴击那两个乘数游戏没写在数据里。
 
 制导弹药把「水平散布 / 垂直散布」两个字段挪作他用：**水平 = 基础命中率，垂直 = 抗干扰**。
 实际数据里基本是 1.0 / 0.0，所以一发热焰弹（×0.85）就能把命中砍到 85%，连放两发 72%，
@@ -127,9 +149,57 @@ d = clamp(爆点到目标中心 − 目标外壳半径, 0, 100)
 两件事值得注意：距离是从**目标外壳**算的（所以大目标更容易被溅到），
 以及引擎只处理爆心 100 米以内的单位。
 
+反汇编里能看到 `movss xmm15, 100`（那个 100 米的夹子）、`divss` 之后 `subss xmm1, xmm0`
+（1 − d/半径）再 clamp 到 [0,1]，以及 `subss ... [rbx+0x28]`（减目标外壳半径）。
+
+**游戏怎么自动挑弹种**（`SelectBestShellForTarget`）
+
+```
+对每一种弹药：
+  1. test [弹药+0x78], 目标类型位      ; 目标位图和目标的类型位有交集才考虑
+  2. 距离 ≥ 最小射程，且 ≤ 对这个目标的有效射程
+  3. 剩下的里面挑 Damage（+0x64）最高的那一发
+```
+
+**这一步不看穿不穿得动**——所以自动开火经常拿伤害高但穿深低的弹去啃正面。
+另外烟雾弹和激光制导弹是另一条请求路径（`GenerateSmoke` / `LaserGuided` 两个标志），
+普通开火不会选它们。
+
+**目标类型位**：单位的 `Type` 字段就是它在位图里占的那一位，从数据里逐个数出来：
+**2 = 步兵**（194 个单位）、**4 = 车辆**（234）、**8 = 直升机**（45）、**16 = 飞机**（62）、**32 = 船**（5）。
+对得上：穿甲弹 36 = 车辆+船（打不了步兵）、步枪 47 里有直升机没有飞机、
+斯汀格 24 = 直升机+飞机、AMRAAM 16 = 只打飞机。
+
 **攻顶**：`TopArmorAttack` 是显式标志（TOW-2B、集束弹、机炮扫射）；
 另外抛射角 36°、抛射高度 0 的那一组反坦克导弹（标枪、地狱火、JAGM、长钉）也是攻顶——
 这一条是看数据归纳的（空空弹的抛射角是 5° 配 100 的抛射高度，不算）。
+
+**发射通道**（`CanUseFiringChannel`）
+
+每件武器挂在炮塔上时有个 `WeaponChannel`。**同一个通道上的武器不能同时开火**，
+不同通道可以——直升机的火箭巢、坦克的主炮和同轴机枪就是这么分的。
+所以算一个单位的总输出时，每个通道只能取最能打的那一件再相加。
+
+### 还没拿到的：打中之后掉多少血
+
+`BattleSystemHelpers` 里有 `DamageFormulaKinetic` 和 `DamageFormulaHEAT` 两条公式
+（还有 `CalculateHitDamage` / `CalculateHitDamageWithThreshold` / `CalculateCQCHitDamage`）。
+HEAT 那条反汇编出来是：
+
+```
+伤害 × pow(穿深, k) / (pow(穿深, k) + c × pow(装甲, k))
+```
+
+也就是说**穿甲不是二值的**，是一条软比值曲线：穿深比装甲高就掉得多，低也不是完全零。
+动能那条结构类似，外加一个上限。
+
+问题是 k 和 c 这些系数存在运行时的 `BrokenArrow.Client.Ecs.Configs.GameConfig` 对象里
+（机器码里是 `[config+0x16c]`、`[+0x170]`、`[+0x174]`、`[+0x178]`），既不在编译好的单位库里，
+也没在这些表里，所以暂时拿不到。
+
+**计算器现在按「穿深 ≥ 装甲 = 满伤，否则 0」估算，界面上标了。**
+穿深、装甲、伤害这些输入都是真值，只有「打中掉多少血」这一步是近似。
+拿到那四个系数就能把这一块也变成真的。
 
 ### 哪些是直读，哪些是推的
 
@@ -139,8 +209,6 @@ d = clamp(爆点到目标中心 − 目标外壳半径, 0, 100)
 
 - **穿甲判定 = 穿深 ≥ 装甲**。依据是数值本身就是照这个调的：M829A4 穿深 840，M1A2 SEP v3 正面动能 850 —— 差 10 点，正好「自己打不穿自己」。侧面 120 就随便穿。
 - **穿深随距离线性掉**：近距穿深 → 地面射程处的穿深之间插值（两个值一样的导弹就不掉）。
-- **游戏怎么自动挑弹种**：方法叫 `SelectBestShellForTarget`，代码没拿到。
-  我们按「能打这类目标 + 够得着 + 期望伤害最高（打得穿的优先）」来挑。
 - **目标外壳半径**：AOE 是从外壳算距离的，但外壳是碰撞体，数据里只有长宽高，
   所以按长宽的外接圆半径近似。
 - **溅射也要过穿甲判定**：不然「打不穿的 HE 照样炸死坦克」，反应装甲就没意义了。

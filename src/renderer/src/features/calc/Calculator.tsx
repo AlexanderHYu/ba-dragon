@@ -6,12 +6,15 @@ import {
   CLASS_NAME,
   FACE_NAME,
   aoeCurve,
+  canTarget,
+  rangeFor,
   apsAgainst,
   engage,
   guidedHit,
   isGuided,
   lethalRadius,
   profileOf,
+  totalDps,
   type AmmoProfile,
   type Engagement,
   type Facing,
@@ -57,10 +60,22 @@ export default function Calculator(): React.JSX.Element {
   const opts = useMemo(() => ({ flares, stress }), [flares, stress])
   const list = useMemo(() => (A && T ? engage(A, T, dist, facing, opts) : []), [A, T, dist, facing, opts])
 
-  const maxRange = useMemo(
-    () => Math.max(700, ...(A?.weapons.flatMap((w) => w.ammo.map((a) => Math.max(a.range, a.lowAlt, a.highAlt))) || [])),
-    [A]
-  )
+  // 滑条的上限 = 这个攻击方能够着这类目标的最远射程（打飞机看高空射程，打直升机看低空）
+  const ranges = useMemo(() => {
+    if (!A || !T) return []
+    const out: { name: string; range: number }[] = []
+    for (const w of A.weapons) {
+      const r = Math.max(0, ...w.ammo.filter((a) => canTarget(a, T.klass)).map((a) => rangeFor(a, T)))
+      if (r > 0) out.push({ name: w.name, range: Math.round(r) })
+    }
+    return out.sort((a, b) => b.range - a.range)
+  }, [A, T])
+  const maxRange = useMemo(() => Math.ceil(Math.max(100, ...ranges.map((r) => r.range)) / 25) * 25, [ranges])
+
+  // 换了单位之后距离可能超出新的射程，拉回来
+  useEffect(() => {
+    setDist((d) => Math.min(d, maxRange))
+  }, [maxRange])
 
   // 有溅射的那几种弹，画曲线用
   const aoeList = useMemo(() => {
@@ -73,6 +88,7 @@ export default function Calculator(): React.JSX.Element {
   const [aoePick, setAoePick] = useState(0)
   const aoe = aoeList[Math.min(aoePick, aoeList.length - 1)]
   const anyGuided = list.some((e) => e.best && isGuided(e.best))
+  const total = useMemo(() => totalDps(list), [list])
 
   return (
     <div className="calc">
@@ -96,11 +112,12 @@ export default function Calculator(): React.JSX.Element {
             <input
               type="range"
               min={0}
-              max={Math.round(maxRange / 50) * 50}
-              step={25}
-              value={dist}
+              max={maxRange}
+              step={maxRange > 2000 ? 50 : 25}
+              value={Math.min(dist, maxRange)}
               onChange={(e) => setDist(Number(e.target.value))}
             />
+            <span className="dim">最远 {maxRange} m</span>
           </label>
           <div className="calc-faces">
             打哪面
@@ -111,6 +128,21 @@ export default function Calculator(): React.JSX.Element {
             ))}
           </div>
         </div>
+        {!!ranges.length && (
+          <div className="calc-ticks">
+            <span className="dim">各武器射程</span>
+            {ranges.map((r) => (
+              <button
+                key={r.name + r.range}
+                className={dist === r.range ? 'primary' : ''}
+                title={'跳到 ' + r.name + ' 的最远射程'}
+                onClick={() => setDist(r.range)}
+              >
+                {r.name} {r.range}
+              </button>
+            ))}
+          </div>
+        )}
         {anyGuided && (
           <div className="calc-controls">
             <label className="calc-range">
@@ -194,10 +226,21 @@ export default function Calculator(): React.JSX.Element {
                 </tbody>
               </table>
             </div>
+            {total.byChannel.length > 0 && (
+              <div className="calc-total">
+                <b>同时开火的总输出 {total.dps} / 秒</b>
+                <span className="dim">
+                  ——同一个发射通道上的武器不能一起打，所以每个通道只算最能打的那件：
+                  {total.byChannel.map((c) => ' 通道' + c.channel + ' ' + c.weapon + '(' + c.dps + ')').join('，')}
+                </span>
+              </div>
+            )}
             <div className="dim calc-note">
               每件武器用哪种弹是自动挑的（能打这类目标、够得着、期望伤害最高的那个）；点一行看这把武器的全部弹种。
-              命中率、穿深衰减、溅射衰减都是照游戏本体的算法算的；「游戏具体怎么挑弹种」和「目标外壳半径怎么算」
-              这两处游戏没给，是我们自己定的规则。
+              命中率、选弹、溅射衰减、目标类型判定都是照游戏本体的机器码实现的。
+              <b>但「打中之后掉多少血」还没完全拿到</b>：游戏里是 DamageFormulaKinetic / DamageFormulaHEAT
+              两条软比值公式（大致是 穿深^k ÷ (穿深^k + c × 装甲^k) × 伤害），系数存在 GameConfig 里，还没读出来。
+              所以这里暂时按「穿深 ≥ 装甲 = 满伤，否则 0」估算——穿深和装甲的对比是真值，掉血数字要打个问号。
             </div>
           </div>
 

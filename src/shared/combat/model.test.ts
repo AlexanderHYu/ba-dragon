@@ -15,6 +15,7 @@ import {
   lethalRadius,
   penAt,
   profileOf,
+  totalDps,
   shotAt,
   unguidedHit,
   type AmmoProfile
@@ -24,9 +25,10 @@ import {
 const DATA: CombatData = {
   meta: { updatedAt: '2026-09-21', stamp: 'test' },
   units: {
-    1: ['测试坦克', 200, 7, 3.4, 2.3, 1000, 1, 2, 0, 2],
-    2: ['测试步兵', 60, 4, 4, 2, 1000, 0.6, 1, 0, 1],
-    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0, 1]
+    // 最后一位是目标类型位：4 = 车辆，2 = 步兵
+    1: ['测试坦克', 200, 7, 3.4, 2.3, 1000, 1, 2, 0, 2, 4],
+    2: ['测试步兵', 60, 4, 4, 2, 1000, 0.6, 1, 0, 1, 2],
+    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0, 1, 2]
   },
   armors: {
     10: [17, 800, 150, 100, 60, 1300, 500, 200, 100, 0], // 坦克
@@ -40,7 +42,8 @@ const DATA: CombatData = {
       [102, 1, 'CupolaTurret', 1]
     ]
   },
-  turretWeapons: { 100: [200], 101: [201], 102: [202] },
+  // [武器id, 发射通道]
+  turretWeapons: { 100: [[200, 0]], 101: [[201, 0]], 102: [[202, 1]] },
   weapons: {
     // [名字, 弹匣, 装填min, max, 点射min, max, 点射内间隔, 点射间min, max, 瞄准min, max, 行进间, 稳定, 雷达, 跟踪]
     200: ['120mm 炮', 1, 6, 7, 1, 1, 0, 1, 1, 1.5, 2.5, 0, 1, 0, 1],
@@ -225,11 +228,13 @@ describe('穿深和伤害', () => {
     const p = tank()!
     const w = p.weapons.find((x) => x.name === '同轴机枪')!
     expect(shotAt(w, ammo(302), p, 500, 'side').inRange).toBe(false) // 机枪 300 米
-    // 穿甲弹的目标位图里没有步兵
+    // 目标位图：穿甲弹 36 = 车辆(4) + 船(32)，没有步兵位(2)
     expect(canTarget(ammo(300), 'inf')).toBe(false)
+    expect(canTarget(ammo(300), 'armor')).toBe(true)
+    // 机枪 47 = 1+2+4+8+32，步兵、车辆、直升机都在里面，飞机(16)不在
     expect(canTarget(ammo(302), 'inf')).toBe(true)
-    // 有 AOE 的落地就炸，不受位图限制
-    expect(canTarget(ammo(305), 'armor')).toBe(true)
+    expect(canTarget(ammo(302), 'heli')).toBe(true)
+    expect(canTarget(ammo(302), 'plane')).toBe(false)
   })
 })
 
@@ -330,6 +335,21 @@ describe('AOE（游戏的 DealAOEDamage）', () => {
   })
 })
 
+describe('发射通道', () => {
+  it('同一个通道上的武器不能同时开火，总输出只算最强的那件', () => {
+    const p = tank()!
+    const gun = p.weapons.find((w) => w.name === '120mm 炮')!
+    const mg = p.weapons.find((w) => w.name === '同轴机枪')!
+    expect(gun.channel).toBe(0)
+    expect(mg.channel).toBe(1) // 不同通道，能一起打
+    // 打坦克侧面：主炮和同轴机枪都够得着、都能锁这类目标，分属两个通道
+    const list = engage(p, p, 300, 'side')
+    const { dps, byChannel } = totalDps(list)
+    expect(byChannel.length).toBe(2)
+    expect(dps).toBeCloseTo(byChannel[0].dps + byChannel[1].dps, 2)
+  })
+})
+
 describe('APS', () => {
   it('只有标了可拦截的弹药才受影响，拦截次数 +1 发就能穿过去', () => {
     const t = profileOf(1, [902], DATA)!
@@ -338,17 +358,25 @@ describe('APS', () => {
   })
 })
 
-describe('自动选弹种', () => {
-  it('打坦克侧面挑穿甲弹，打步兵挑能打步兵的那种', () => {
+describe('自动选弹种（照游戏的 SelectBestShellForTarget）', () => {
+  it('位图不让打的弹药选不出来', () => {
     const tankP = tank()!
     const infP = inf()!
-    const vsTank = engage(tankP, tankP, 300, 'side')
-    const gun = vsTank.find((e) => e.weapon.name === '120mm 炮')!
-    expect(gun.best?.name).toBe('尾翼稳定脱壳穿甲弹')
     const vsInf = engage(tankP, infP, 200, 'front')
-    const gun2 = vsInf.find((e) => e.weapon.name === '120mm 炮')!
-    // 穿甲弹不打步兵，所以选不出它
-    expect(gun2.best?.name).not.toBe('尾翼稳定脱壳穿甲弹')
+    const gun = vsInf.find((e) => e.weapon.name === '120mm 炮')!
+    // 穿甲弹的位图里没有步兵位，打步兵时轮不到它
+    expect(gun.best?.name).not.toBe('尾翼稳定脱壳穿甲弹')
+  })
+
+  it('剩下的里面挑伤害最高的——游戏这一步不看穿不穿得动', () => {
+    const tankP = tank()!
+    const vsTank = engage(tankP, tankP, 300, 'front')
+    const gun = vsTank.find((e) => e.weapon.name === '120mm 炮')!
+    // 这门炮只带穿甲弹，所以还是它；换一门带两种弹的看伤害排序
+    expect(gun.best?.name).toBe('尾翼稳定脱壳穿甲弹')
+    const p2 = profileOf(1, [900], DATA)! // 换成带破甲弹的 130mm
+    const e2 = engage(p2, tankP, 300, 'front').find((e) => e.weapon.name === '130mm 炮')!
+    expect(e2.best?.name).toBe('破甲弹')
   })
 
   it('够不着的武器选不出弹药', () => {
