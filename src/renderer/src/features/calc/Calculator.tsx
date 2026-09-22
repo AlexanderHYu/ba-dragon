@@ -246,8 +246,10 @@ export default function Calculator(): React.JSX.Element {
               <div className="calc-total">
                 <b>同时开火的总输出 {total.dps} / 秒</b>
                 <span className="dim">
-                  ——同一个发射通道上的武器不能一起打，所以每个通道只算最能打的那件：
-                  {total.byChannel.map((c) => ' 通道' + c.channel + ' ' + c.weapon + '(' + c.dps + ')').join('，')}
+                  ——通道 0 的武器各打各的；同一个非零通道上的武器互相挡着，只算最能打的那件：
+                  {total.byChannel
+                    .map((c) => (c.channel ? ' 通道' + c.channel + ' ' : ' ') + c.weapon + '(' + c.dps + ')')
+                    .join('，')}
                 </span>
               </div>
             )}

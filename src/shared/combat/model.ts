@@ -249,10 +249,9 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (primary) count.set(primary, (count.get(primary) || 0) + 1)
       if (special) count.set(special, (count.get(special) || 0) + 1)
     }
-    // 班组里不同的枪是不同的人在打，能同时开火，所以各占一个发射通道
-    let ch = 0
     for (const [wid, c] of count) {
-      const w = weaponProfile(data, eff, wid, c, c + ' 人', ch++)
+      // 班组的枪不占发射通道，不同的人各打各的
+      const w = weaponProfile(data, eff, wid, c, c + ' 人', 0)
       if (w) weapons.push(w)
     }
   } else {
@@ -696,19 +695,24 @@ export function engage(
 }
 
 /**
- * 一个单位的总输出。同一个发射通道上的武器不能同时开火（`CanUseFiringChannel`），
- * 所以每个通道只取最能打的那一件，再把各通道加起来。
+ * 一个单位的总输出。
+ *
+ * `CanUseFiringChannel` 进门第一件事是 `mov esi, [weapon+0xc0]; test esi, esi; je 返回true`——
+ * **通道 0 等于不占通道**，直接放行；只有同一个**非零**通道上的武器才互相挡着不能同时开火
+ * （直升机火箭巢、飞机的某些挂架就是这么分组的）。数据里 1191 件武器是通道 0，非零的只有 88 件。
+ * 所以：通道 0 的各算各的，非零通道每组只取最能打的那一件。
  */
 export function totalDps(list: Engagement[]): {
   dps: number
   byChannel: { channel: number; dps: number; weapon: string }[]
 } {
-  const best = new Map<number, { channel: number; dps: number; weapon: string }>()
-  for (const e of list) {
+  const best = new Map<string, { channel: number; dps: number; weapon: string }>()
+  for (const [i, e] of list.entries()) {
     if (!e.result) continue
     const ch = e.weapon.channel
-    const cur = best.get(ch)
-    if (!cur || e.result.dps > cur.dps) best.set(ch, { channel: ch, dps: e.result.dps, weapon: e.weapon.name })
+    const key = ch ? 'c' + ch : 'w' + e.weapon.id + '#' + i
+    const cur = best.get(key)
+    if (!cur || e.result.dps > cur.dps) best.set(key, { channel: ch, dps: e.result.dps, weapon: e.weapon.name })
   }
   const byChannel = [...best.values()].sort((a, b) => b.dps - a.dps)
   return { dps: Math.round(byChannel.reduce((s, x) => s + x.dps, 0) * 100) / 100, byChannel }
@@ -846,13 +850,14 @@ export interface Simulation {
 export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?: number } = {}): Simulation {
   const limit = opts.limit ?? 90
   const lv = stressLevels(target)
-  // 同一发射通道不能同时开火，和 totalDps 一个规则
-  const byCh = new Map<number, Engagement>()
-  for (const e of list) {
+  // 同一个非零通道上的武器不能同时开火；通道 0 不占通道，各打各的（和 totalDps 一个规则）
+  const byCh = new Map<string, Engagement>()
+  for (const [i, e] of list.entries()) {
     const r = e.result
     if (!r || !e.best || r.expected <= 0) continue
-    const cur = byCh.get(e.weapon.channel)
-    if (!cur || r.dps > (cur.result?.dps ?? 0)) byCh.set(e.weapon.channel, e)
+    const key = e.weapon.channel ? 'c' + e.weapon.channel : 'w' + e.weapon.id + '#' + i
+    const cur = byCh.get(key)
+    if (!cur || r.dps > (cur.result?.dps ?? 0)) byCh.set(key, e)
   }
   const guns = [...byCh.values()].map((e) => {
     const w = e.weapon
@@ -876,6 +881,9 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
   let deadAt: number | null = null
   let shockedAt: number | null = null
   let panickedAt: number | null = null
+
+  // 曲线从原点起画，不然只打两秒的时候前面会空一截
+  samples.push({ t: 0, hp: r2(hp), stress: 0, level: 0, alive })
 
   const dt = 0.05
   const push = (t: number, kind: SimEvent['kind'], text: string): void => {

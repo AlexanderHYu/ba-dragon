@@ -548,14 +548,27 @@ describe('压制与掉人', () => {
   })
 })
 
-describe('班组同时开火', () => {
-  it('班组里不同的枪各占一个通道，能一起打', () => {
+describe('发射通道', () => {
+  it('通道 0 = 不占通道，每件武器各算各的', () => {
+    // CanUseFiringChannel 一进门就是 test esi,esi / je 返回 true
     const squad = profileOf(3, [], DATA)!
-    const channels = squad.weapons.map((w) => w.channel)
-    expect(new Set(channels).size).toBe(channels.length)
-    // 步枪 + 火箭筒都算进总输出，不是只算最能打的那件
+    expect(squad.weapons.every((w) => w.channel === 0)).toBe(true)
     const t = profileOf(1, [901], DATA)!
+    // 步枪 + 火箭筒都要算进总输出，不是只算最能打的那件
     const total = totalDps(engage(squad, t, 200, 'front'))
-    expect(total.byChannel.length).toBeGreaterThan(1)
+    expect(total.byChannel.length).toBe(2)
+  })
+
+  it('同一个非零通道上的武器只算最能打的那件', () => {
+    const t = tank()!
+    // 主炮和同轴都在通道 0，各算各的；炮塔顶那挺在通道 1
+    const victim = profileOf(1, [901], DATA)!
+    const total = totalDps(engage(t, victim, 300, 'side'))
+    const one = total.byChannel.filter((c) => c.channel === 1)
+    expect(one.length).toBeLessThanOrEqual(1)
+    expect(total.dps).toBeCloseTo(
+      total.byChannel.reduce((s, c) => s + c.dps, 0),
+      2
+    )
   })
 })
