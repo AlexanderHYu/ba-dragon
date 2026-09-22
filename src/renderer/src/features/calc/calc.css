@@ -442,3 +442,15 @@ button.ub-item.on {
 .calc-timeline .ev-dry {
   color: var(--warn);
 }
+
+.calc-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.calc-check input {
+  cursor: pointer;
+  margin: 0;
+}

@@ -55,7 +55,7 @@ export default function Calculator(): React.JSX.Element {
   const [facing, setFacing] = useState<Facing>('front')
   const [flares, setFlares] = useState(1)
   /** 目标躲的那栋楼里一共几个人（0 = 在平地上） */
-  const [building, setBuilding] = useState(0)
+  const [inBuilding, setInBuilding] = useState(false)
   const [stress, setStress] = useState(1)
   const [open, setOpen] = useState<number | null>(null)
   /** 关掉的武器，不参与「同时开火」的总输出和曲线 */
@@ -77,7 +77,9 @@ export default function Calculator(): React.JSX.Element {
 
   const A = useMemo(() => profileOf(attacker.unit, attacker.opts, data), [attacker, data])
   const T = useMemo(() => profileOf(target.unit, target.opts, data), [target, data])
-  const opts = useMemo(() => ({ flares, stress, building }), [flares, stress, building])
+  // 楼里的人数就按目标这一个班算（一个班占一栋楼）
+  const occupants = inBuilding ? T?.squad.length || 0 : 0
+  const opts = useMemo(() => ({ flares, stress, building: occupants }), [flares, stress, occupants])
   const list = useMemo(() => (A && T ? engage(A, T, dist, facing, opts) : []), [A, T, dist, facing, opts])
 
   // 滑条的上限 = 这个攻击方能够着这类目标的最远射程（打飞机看高空射程，打直升机看低空）
@@ -144,18 +146,11 @@ export default function Calculator(): React.JSX.Element {
             />
             <span className="dim">最远 {toM(maxRange)} m</span>
           </label>
-          {T?.klass === 'inf' && (
-            <label className="calc-range">
-              楼里 <b>{building === 0 ? '不在楼里' : building + ' 人'}</b>
-              <input
-                type="range"
-                min={0}
-                max={20}
-                step={1}
-                value={building}
-                onChange={(e) => setBuilding(Number(e.target.value))}
-              />
-              <span className="dim">楼里人越多越不禁打</span>
+          {T?.klass === 'inf' && T.squad.length > 0 && (
+            <label className="calc-check">
+              <input type="checkbox" checked={inBuilding} onChange={(e) => setInBuilding(e.target.checked)} />
+              目标在楼里
+              <span className="dim">按这一个班 {T.squad.length} 人算</span>
             </label>
           )}
           <div className="calc-faces">
@@ -233,11 +228,11 @@ export default function Calculator(): React.JSX.Element {
                       受伤害 ×{infantryFactor(T.squad.length, 0).toFixed(2)}
                     </b>
                     <span className="dim">（{T.squad.length} 人满编）</span>
-                    {building > 0 && (
+                    {occupants > 0 && (
                       <>
                         {' · '}
                         <b title="楼里：clamp01(0.18 + 0.02 × 楼里总人数)，只对单发伤害小于 5 的弹生效">
-                          楼里再 ×{buildingFactor(building).toFixed(2)}
+                          楼里再 ×{buildingFactor(occupants).toFixed(2)}
                         </b>
                       </>
                     )}
