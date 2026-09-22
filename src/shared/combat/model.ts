@@ -54,6 +54,8 @@ export interface AmmoProfile {
   seeker: number
   /** 无视掩体的比例（0~1 的浮点，不是开关）：1 = 完全无视楼房和步兵减伤 */
   ignoreCover: number
+  /** 近炸引信的起爆距离，0 = 撞上才炸（数据重新导出之前一律是 0） */
+  radioFuse: number
   /** 抛射角：反坦克导弹里 36° 那一组就是攻顶的（标枪、地狱火、长钉…） */
   loftAngle: number
   loftHeight: number
@@ -99,7 +101,10 @@ export interface UnitProfile {
   hp: number
   kin: [number, number, number, number]
   heat: [number, number, number, number]
-  infArmor: number
+  /** 统一装甲值（ArmorValue）：步兵、飞机、皮薄的车没有方向装甲，用这一个数 */
+  armorValue: number
+  /** 有没有分方向的装甲；没有就一律用 armorValue */
+  directional: boolean
   maxStress: number
   size: { len: number; wid: number; hei: number }
   /** 目标外壳半径：AOE 是从外壳算距离的，大目标更容易被溅到 */
@@ -260,6 +265,8 @@ export const bypassCover = (factor: number, ignoreCover: number): number =>
 /** 这一发打在这个目标身上，基础伤害要先乘多少 */
 export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
   let mul = 1
+  // 近炸引信：在旁边炸，平均只打出三分之一
+  if (usesRadioFuse(a, target)) mul *= RADIOFUSE.avgDamage
   if (target.klass === 'inf' && target.squad.length) {
     const alive = sit.alive ?? target.squad.length
     mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
@@ -272,6 +279,29 @@ export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = 
 }
 
 export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
+
+/**
+ * 近炸引信。防空导弹不是撞上去的，是在目标旁边炸开，所以哪怕判定「命中」也吃不到直击伤害，
+ * 真正落到身上的是那个距离上的溅射伤害。游戏自己有两个常量
+ * （`BattleSystemConstants` 的静态构造函数里写死：`[static+0x28] = 0.5`、`[static+0x2c] = 0.33`）：
+ *
+ *   MISSILE_RADIOFUSE_HIT_PREDICTED_AVERAGE_DAMAGE_PROPORTION = 0.33
+ *       一次近炸命中**平均**只打出 33% 的伤害，游戏的 AI 就拿这个数预估伤害
+ *   MISSILE_MISS_RADIOFUSE_TRIGGER_CHANCE = 0.5
+ *       就算判定脱靶，引信还有一半概率照样起爆
+ */
+export const RADIOFUSE = { avgDamage: 0.33, missTrigger: 0.5 } as const
+
+/**
+ * 这一发打这个目标走不走近炸引信。
+ *
+ * 准的判据是弹药表的 `RadioFuseDistance > 0`，但那个字段要重新导出一次数据才有。
+ * 在那之前退回推算：**制导 + 有溅射 + 打飞行目标**——防空弹和空空弹都符合，界面上标了「推算」。
+ */
+export function usesRadioFuse(a: AmmoProfile, target: UnitProfile): boolean {
+  if (a.radioFuse > 0) return true
+  return isGuided(a) && a.aoe > 0 && (target.klass === 'plane' || target.klass === 'heli')
+}
 
 /**
  * 这发弹药能不能锁这个目标：弹药的目标位图和目标的类型位做与运算。
@@ -383,7 +413,8 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     hp: armor[A.hp],
     kin: [armor[A.kf], armor[A.ks], armor[A.kr], armor[A.kt]],
     heat: [armor[A.hf], armor[A.hs], armor[A.hr], armor[A.ht]],
-    infArmor: armor[A.inf],
+    armorValue: armor[A.inf],
+    directional: [A.kf, A.ks, A.kr, A.kt, A.hf, A.hs, A.hr, A.ht].some((k) => armor[k] > 0),
     maxStress: u[U.stress] || 1000,
     size: { len, wid, hei: u[U.hei] || 2 },
     // 外壳半径：拿长宽当一个矩形，取它的外接圆半径（游戏用的是碰撞体，这里只能这么近似）
@@ -469,6 +500,7 @@ function weaponProfile(
       noFalloff: !!a[M.noFalloff],
       seeker: a[M.seeker],
       ignoreCover: a[M.ignoreCover] || 0,
+      radioFuse: a[M.radioFuse] || 0,
       loftAngle: a[M.loftAngle],
       loftHeight: a[M.loftHeight]
     })
@@ -641,8 +673,15 @@ export function penAt(a: AmmoProfile, dist: number): number {
   return Math.round(a.penMin + (a.penFar - a.penMin) * t)
 }
 
+/**
+ * 目标这一面的装甲。
+ *
+ * 数据里每个单位要么有**八面装甲**（动能前/侧/后/顶 + 破甲前/侧/后/顶），要么只有一个
+ * **统一装甲值** `ArmorValue`，两者互斥。步兵、飞机、直升机、皮薄的车都走后者——
+ * 所以飞机的方向装甲全是 0，**不能当成「没装甲」**（A-10 的 ArmorValue 是 30）。
+ */
 export function armorAt(target: UnitProfile, a: AmmoProfile, facing: Facing): number {
-  if (target.klass === 'inf') return target.infArmor
+  if (!target.directional) return target.armorValue
   const i = a.topAttack ? FACE_IDX.top : FACE_IDX[facing]
   return a.armorType === 1
     ? target.kin[i]
@@ -989,6 +1028,9 @@ export function simulate(
 
   // 曲线从原点起画，不然只打两秒的时候前面会空一截
   samples.push({ t: 0, hp: r2(hp), stress: 0, level: 0, alive })
+  /** 上一次记曲线的时刻：压制是每秒结算的，但血量每一发都在掉，得记细一点 */
+  let lastSample = 0
+  const SAMPLE = 0.25
 
   const dt = 0.05
   const push = (t: number, kind: SimEvent['kind'], text: string): void => {
@@ -1069,7 +1111,13 @@ export function simulate(
           push(t, 'calm', '压制掉到 ' + Math.round(stress) + '，回到' + (level === 1 ? '黄' : '正常'))
         }
       }
-      samples.push({ t: Math.round(t), hp: r2(hp), stress: Math.round(stress), level, alive })
+    }
+
+    // 曲线按固定间隔记，和整秒结算分开——不然打死的那一下会落在两次采样中间，
+    // 曲线画到一半就断了，横轴也对不上上面写的「打死 X 秒」
+    if (t - lastSample >= SAMPLE - 1e-9 || deadAt != null) {
+      lastSample = t
+      samples.push({ t: Math.round(t * 100) / 100, hp: r2(hp), stress: Math.round(stress), level, alive })
     }
   }
 

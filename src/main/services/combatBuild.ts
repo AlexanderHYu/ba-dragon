@@ -151,7 +151,8 @@ export function buildCombat(r: RawTables): CombatData {
       n(a.Seeker),
       n(a.DispersionMinimal),
       n(a.LoftAngle),
-      n(a.LoftHeight)
+      n(a.LoftHeight),
+      n(a.RadioFuseDistance)
     ] as CAmmo
   }
 

@@ -195,8 +195,8 @@ export default function UnitPicker({
       {profile && (
         <div className="pick-stats dim">
           HP {profile.hp}
-          {profile.klass === 'inf' ? (
-            <> · 护甲 {profile.infArmor}</>
+          {!profile.directional ? (
+            <> · 装甲 {profile.armorValue}（不分方向）</>
           ) : (
             <>
               {' '}

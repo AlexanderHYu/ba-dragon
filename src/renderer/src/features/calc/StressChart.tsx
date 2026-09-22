@@ -36,7 +36,14 @@ export default function StressChart({
     samples.map((s, i) => (i ? 'L' : 'M') + x(s.t).toFixed(1) + ',' + f(s).toFixed(1)).join(' ')
   const sPath = line((s) => ys(s.stress))
   const area = sPath + ' L' + x(span) + ',' + ys(0) + ' L' + x(samples[0].t) + ',' + ys(0) + ' Z'
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(span * f))
+  // 刻度：短的打一两秒就结束，取整会挤成一堆重复的，所以按跨度决定要不要小数，再去重
+  const fmt = (v: number): string => (span < 5 ? (Math.round(v * 10) / 10).toFixed(1) : String(Math.round(v)))
+  const ticks: { v: number; label: string }[] = []
+  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+    const v = span * f
+    const label = fmt(v)
+    if (!ticks.some((x) => x.label === label)) ticks.push({ v, label })
+  }
 
   return (
     <svg className="aoe-chart" viewBox={'0 0 ' + W + ' ' + H} width="100%" height={H}>
@@ -86,9 +93,16 @@ export default function StressChart({
       ))}
 
       <line x1={pad.l} y1={H - pad.b} x2={W - pad.r} y2={H - pad.b} stroke="var(--line-hi)" />
-      {ticks.map((t) => (
-        <text key={t} x={x(t)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--dim)">
-          {t}s
+      {ticks.map((t, i) => (
+        <text
+          key={t.label}
+          x={x(t.v)}
+          y={H - 8}
+          textAnchor={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : 'middle'}
+          fontSize="10"
+          fill="var(--dim)"
+        >
+          {t.label}s
         </text>
       ))}
       {[0, maxStress / 2, maxStress].map((v, i) => (

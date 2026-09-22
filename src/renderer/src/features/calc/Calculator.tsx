@@ -17,8 +17,10 @@ import {
   buildingFactor,
   infantryFactor,
   profileOf,
+  RADIOFUSE,
   simulate,
   toM,
+  usesRadioFuse,
   stressPenalty,
   STRESS_NAME,
   totalDps,
@@ -217,8 +219,8 @@ export default function Calculator(): React.JSX.Element {
               {A.name} 打 {T.name}
               <span className="dim">
                 {CLASS_NAME[T.klass]} · HP {T.hp} ·{' '}
-                {T.klass === 'inf'
-                  ? '护甲 ' + T.infArmor
+                {!T.directional
+                  ? '装甲 ' + T.armorValue + '（不分方向）'
                   : FACE_NAME[facing] +
                     ' 动能 ' +
                     T.kin[FACES.indexOf(facing)] +
@@ -283,6 +285,7 @@ export default function Calculator(): React.JSX.Element {
                     <Row
                       key={e.weapon.id + ':' + i}
                       e={e}
+                      target={T}
                       on={!off.has(keyOf(e, i))}
                       onSwitch={() =>
                         setOff((p) => {
@@ -524,12 +527,14 @@ function StressPanel({
 
 function Row({
   e,
+  target,
   on,
   onSwitch,
   open,
   onToggle
 }: {
   e: Engagement
+  target: UnitProfile
   on: boolean
   onSwitch: () => void
   open: boolean
@@ -576,6 +581,14 @@ function Row({
                 ) : null}
                 {a.aoe > 0 && <i className="tag aoe">溅射 {toM(a.aoe)}m</i>}
                 {a.topAttack && <i className="tag">顶攻</i>}
+                {usesRadioFuse(a, target) && (
+                  <i
+                    className="tag warn"
+                    title="近炸引信：导弹在目标旁边炸，吃不到直击伤害。游戏自己的常量是平均 33%（推算：这一发的近炸距离要等数据重新导出才有）"
+                  >
+                    近炸 ×{RADIOFUSE.avgDamage}
+                  </i>
+                )}
                 {a.intercept && <i className="tag warn">可被拦</i>}
               </span>
             </>
