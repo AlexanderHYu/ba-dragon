@@ -161,13 +161,16 @@ export default function UnitPicker({
   data,
   value,
   onChange,
-  profile
+  profile,
+  children
 }: {
   title: string
   data: CombatData
   value: Pick
   onChange: (p: Pick) => void
   profile: UnitProfile | null
+  /** 挂在这一格下面的额外开关（射手状态 / 干扰弹 / 在不在楼里） */
+  children?: React.ReactNode
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const slots = data.unitOptions[value.unit] || []
@@ -233,6 +236,8 @@ export default function UnitPicker({
           </label>
         ))}
       </div>
+
+      {children && <div className="pick-extra">{children}</div>}
     </div>
   )
 }

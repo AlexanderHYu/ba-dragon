@@ -454,3 +454,18 @@ button.ub-item.on {
   cursor: pointer;
   margin: 0;
 }
+
+/* 挂在单位格子下面的开关（射手状态 / 干扰弹 / 在楼里） */
+.pick-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.pick-extra .calc-range {
+  flex: 1 1 200px;
+  min-width: 180px;
+}

@@ -129,8 +129,44 @@ export default function Calculator(): React.JSX.Element {
         </h2>
 
         <div className="calc-pickers">
-          <UnitPicker title="攻击方" data={data} value={attacker} onChange={setAttacker} profile={A} />
-          <UnitPicker title="目标" data={data} value={target} onChange={setTarget} profile={T} />
+          <UnitPicker title="攻击方" data={data} value={attacker} onChange={setAttacker} profile={A}>
+            {anyGuided && (
+              <label className="calc-range">
+                射手状态 <b>{pct(stress)}</b>
+                <input
+                  type="range"
+                  min={0.3}
+                  max={1}
+                  step={0.05}
+                  value={stress}
+                  onChange={(e) => setStress(Number(e.target.value))}
+                />
+                <span className="dim">自己被压制会降导弹命中</span>
+              </label>
+            )}
+          </UnitPicker>
+          <UnitPicker title="目标" data={data} value={target} onChange={setTarget} profile={T}>
+            {anyGuided && (
+              <label className="calc-range">
+                放了 <b>{flares}</b> 发干扰弹
+                <input
+                  type="range"
+                  min={0}
+                  max={4}
+                  step={1}
+                  value={flares}
+                  onChange={(e) => setFlares(Number(e.target.value))}
+                />
+              </label>
+            )}
+            {T?.klass === 'inf' && T.squad.length > 0 && (
+              <label className="calc-check">
+                <input type="checkbox" checked={inBuilding} onChange={(e) => setInBuilding(e.target.checked)} />
+                在楼里
+                <span className="dim">按这一个班 {T.squad.length} 人算</span>
+              </label>
+            )}
+          </UnitPicker>
         </div>
 
         <div className="calc-controls">
@@ -146,13 +182,6 @@ export default function Calculator(): React.JSX.Element {
             />
             <span className="dim">最远 {toM(maxRange)} m</span>
           </label>
-          {T?.klass === 'inf' && T.squad.length > 0 && (
-            <label className="calc-check">
-              <input type="checkbox" checked={inBuilding} onChange={(e) => setInBuilding(e.target.checked)} />
-              目标在楼里
-              <span className="dim">按这一个班 {T.squad.length} 人算</span>
-            </label>
-          )}
           <div className="calc-faces">
             打哪面
             {FACES.map((f) => (
@@ -176,33 +205,6 @@ export default function Calculator(): React.JSX.Element {
                 {r.n > 1 && <span className="dim"> ×{r.n}</span>}
               </button>
             ))}
-          </div>
-        )}
-        {anyGuided && (
-          <div className="calc-controls">
-            <label className="calc-range">
-              目标放了 <b>{flares}</b> 发干扰弹
-              <input
-                type="range"
-                min={0}
-                max={4}
-                step={1}
-                value={flares}
-                onChange={(e) => setFlares(Number(e.target.value))}
-              />
-            </label>
-            <label className="calc-range">
-              射手状态 <b>{pct(stress)}</b>
-              <input
-                type="range"
-                min={0.3}
-                max={1}
-                step={0.05}
-                value={stress}
-                onChange={(e) => setStress(Number(e.target.value))}
-              />
-              <span className="dim">被压制会降命中</span>
-            </label>
           </div>
         )}
       </div>
