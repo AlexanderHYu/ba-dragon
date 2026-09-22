@@ -1,5 +1,7 @@
-// AOE 伤害随距离的曲线。横轴是离爆心多远，纵轴是伤害；
+// AOE 伤害随距离的曲线。横轴是离爆心多远（米，已经按游戏的显示倍率换算），纵轴是伤害；
 // 画一条目标血量的横线，线以上就是能一发带走的范围。
+import { toM } from '@shared/combat/model'
+
 export default function AoeChart({
   curve,
   hp,
@@ -49,7 +51,7 @@ export default function AoeChart({
       <line x1={pad.l} y1={H - pad.b} x2={W - pad.r} y2={H - pad.b} stroke="var(--line-hi)" />
       {ticks.map((t) => (
         <text key={t} x={x(t)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--dim)">
-          {t}m
+          {toM(t)}m
         </text>
       ))}
       {[0, maxD / 2, maxD].map((v, i) => (

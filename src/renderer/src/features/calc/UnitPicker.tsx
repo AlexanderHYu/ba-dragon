@@ -46,6 +46,14 @@ export function UnitBrowser({
     [data]
   )
 
+  // 有些单位是别的单位「换配装」换出来的变体（比如 Rangers Mk47 AGL），
+  // 它们自己没有配装槽——槽位在母单位身上。列表里标一下，免得以为是漏了。
+  const variants = useMemo(() => {
+    const out = new Set<number>()
+    for (const e of Object.values(data.options || {})) if (e?.u) out.add(e.u)
+    return out
+  }, [data])
+
   const list = useMemo(() => {
     const text = q.trim().toLowerCase()
     return Object.entries(data.units)
@@ -129,7 +137,14 @@ export function UnitBrowser({
                 onClose()
               }}
             >
-              <span className="ub-name">{u.name}</span>
+              <span className="ub-name">
+                {u.name}
+                {variants.has(u.id) && !(data.unitOptions[u.id] || []).length && (
+                  <i className="tag dimtag" title="这是别的单位换配装换出来的版本，所以它自己没有配装槽">
+                    变体
+                  </i>
+                )}
+              </span>
               <span className="dim ub-cat">{CAT_NAME[u.cat] || ''}</span>
               <span className="ub-cost">{u.cost}</span>
             </button>

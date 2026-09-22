@@ -43,18 +43,27 @@ const DATA: CombatData = {
   unitArmor: { 1: 10, 2: 11, 3: 11, 4: 11 },
   turrets: {
     1: [
-      [100, 0, 'MainTurret', 1],
-      [101, 0, 'MainTurret', 0],
-      [102, 1, 'CupolaTurret', 1]
+      [100, 0, 'MainTurret', 1, 0],
+      [101, 0, 'MainTurret', 0, 0],
+      // 同轴机枪是主炮塔的子炮塔：换主炮就跟着换
+      [102, 1, 'CupolaTurret', 1, 100],
+      [105, 1, 'CupolaTurret', 0, 101]
     ],
     // 两个一模一样的挂架，各带 2 发
     4: [
-      [103, 0, 'Pylon', 1],
-      [104, 1, 'Pylon', 1]
+      [103, 0, 'Pylon', 1, 0],
+      [104, 1, 'Pylon', 1, 0]
     ]
   },
   // [武器id, 发射通道]
-  turretWeapons: { 100: [[200, 0]], 101: [[201, 0]], 102: [[202, 1]], 103: [[205, 0]], 104: [[205, 1]] },
+  turretWeapons: {
+    100: [[200, 0]],
+    101: [[201, 0]],
+    102: [[202, 1]],
+    105: [[202, 1]],
+    103: [[205, 0]],
+    104: [[205, 1]]
+  },
   weapons: {
     // [名字, 弹匣, 装填min, max, 点射min, max, 点射内间隔, 点射间min, max, 瞄准min, max, 行进间, 稳定, 雷达, 跟踪, 可合并]
     200: ['120mm 炮', 1, 6, 7, 1, 1, 0, 1, 1, 1.5, 2.5, 0, 1, 0, 1, 0],
@@ -570,5 +579,16 @@ describe('发射通道', () => {
       total.byChannel.reduce((s, c) => s + c.dps, 0),
       2
     )
+  })
+})
+
+describe('子炮塔跟着父炮塔换', () => {
+  it('换主炮，挂在它下面的同轴也跟着换', () => {
+    const base = profileOf(1, [], DATA)!
+    expect(base.weapons.map((w) => w.id).sort()).toEqual([200, 202])
+    // 900 = 换主炮（101），它的子炮塔是 105
+    const swapped = profileOf(1, [900], DATA)!
+    expect(swapped.weapons.map((w) => w.id).sort()).toEqual([201, 202])
+    expect(swapped.weapons.length).toBe(2)
   })
 })

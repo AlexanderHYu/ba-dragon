@@ -416,3 +416,29 @@ button.ub-item.on {
     grid-template-columns: 1fr;
   }
 }
+
+/* 武器开关那一列 */
+.calc-table th.calc-onoff,
+.calc-table td.calc-onoff {
+  width: 28px;
+  text-align: center;
+  padding-left: 6px;
+  padding-right: 0;
+}
+.calc-table td.calc-onoff input {
+  cursor: pointer;
+  margin: 0;
+}
+.calc-row-off td:not(.calc-onoff) {
+  opacity: 0.4;
+}
+.calc-firing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11.5px;
+  margin: 2px 0 6px;
+}
+.calc-timeline .ev-dry {
+  color: var(--warn);
+}

@@ -198,6 +198,17 @@ export function damageOf(base: number, pen: number, armor: number, armorType: nu
   return r2(Math.max(d, base * BS.minimalDamage))
 }
 
+/**
+ * 距离显示倍率。游戏数据库里的射程、散布、溅射半径都是「世界单位」，
+ * 而游戏界面上给玩家看的米数是它的两倍——数据里写 700 的坦克炮，游戏里显示 1400 m。
+ *
+ * 所有计算都留在世界单位里（比值不受影响，公式和游戏本体一致），只在显示的时候乘这个数。
+ * 单位的长宽高是例外：那本来就是真实米数（艾布拉姆斯 7.6 m），不要乘。
+ */
+export const DIST_SCALE = 2
+/** 世界单位 → 界面上的米 */
+export const toM = (x: number): number => Math.round(x * DIST_SCALE)
+
 export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
 
 /**
@@ -257,14 +268,22 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
   } else {
     const mounts = data.turrets[eff] || []
     const picked = new Map<string, number>()
-    for (const [tid, order, cls, isDefault] of mounts) {
+    for (const [tid, order, cls, isDefault, parent] of mounts) {
       const key = cls + '#' + order
       const chosen = Object.values(slotTurret).includes(tid)
       if (chosen) picked.set(key, tid)
-      else if (!picked.has(key) && isDefault) picked.set(key, tid)
+      // 有父炮塔的不参与「默认件」评选——它上不上场只看父炮塔选没选
+      else if (!parent && !picked.has(key) && isDefault) picked.set(key, tid)
     }
     for (const tid of Object.values(slotTurret)) {
       if (![...picked.values()].includes(tid) && data.turretWeapons[tid]) picked.set('opt#' + tid, tid)
+    }
+    // 子炮塔跟着父炮塔走：配装换的是主炮塔，挂在它下面的同轴机枪、遥控武器站也要跟着换。
+    // 没有 ParentTurretId 的老数据就退回原来的规则（默认件）。
+    const roots = new Set(picked.values())
+    for (const [tid, , , , parent] of mounts) {
+      if (!parent || roots.has(tid)) continue
+      if (roots.has(parent) && data.turretWeapons[tid]) picked.set('child#' + tid, tid)
     }
     for (const tid of picked.values()) {
       for (const [wid, channel] of data.turretWeapons[tid] || []) {
@@ -809,7 +828,7 @@ export function stressPenalty(u: UnitProfile, level: number): StressMod {
 
 export interface SimEvent {
   t: number
-  kind: 'shocked' | 'panicked' | 'calm' | 'soldier' | 'dead'
+  kind: 'shocked' | 'panicked' | 'calm' | 'soldier' | 'dead' | 'dry'
   text: string
   hp: number
   stress: number
@@ -832,7 +851,16 @@ export interface Simulation {
   shocked: number
   panicked: number
   /** 真正开火的武器（每个发射通道只留最能打的一件） */
-  firing: { weapon: WeaponProfile; ammo: AmmoProfile; result: ShotResult; shots: number }[]
+  firing: {
+    weapon: WeaponProfile
+    ammo: AmmoProfile
+    result: ShotResult
+    shots: number
+    /** 总备弹 */
+    stock: number
+    /** 打光的时刻，没打光就是 null */
+    dry: number | null
+  }[]
   /** 稳定开火时每秒进账多少压制 */
   stressPerSec: number
   /** 停火后第一秒恢复多少（之后每秒再多 1） */
@@ -862,7 +890,19 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
   const guns = [...byCh.values()].map((e) => {
     const w = e.weapon
     const burst = Math.max(1, w.burst || w.mag || 1)
-    return { e, w, next: w.aim, left: Math.max(1, w.mag || 1), inBurst: burst, burst, shots: 0 }
+    // 总备弹：这种弹在这个单位上带了多少发（班组按人数乘）。打光了这件武器就哑火
+    const stock = Math.max(1, (e.best as AmmoProfile).qty || w.mag || 1) * Math.max(1, w.count)
+    return {
+      e,
+      w,
+      next: w.aim,
+      left: Math.max(1, w.mag || 1),
+      inBurst: burst,
+      burst,
+      shots: 0,
+      stock,
+      dry: null as number | null
+    }
   })
 
   const squadSize = target.squad.length
@@ -892,7 +932,7 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
 
   for (let t = 0; t <= limit + 1e-9 && deadAt == null; t += dt) {
     for (const g of guns) {
-      while (g.next <= t + 1e-9 && deadAt == null) {
+      while (g.next <= t + 1e-9 && deadAt == null && g.shots < g.stock) {
         const r = g.e.result as ShotResult
         const a = g.e.best as AmmoProfile
         const n = g.w.count
@@ -914,6 +954,11 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
           hp = 0
           deadAt = t
           push(t, 'dead', '目标被打死')
+          break
+        }
+        if (g.shots >= g.stock) {
+          g.dry = t
+          push(t, 'dry', g.w.name + ' 打光了（' + g.stock + ' 发）')
           break
         }
         g.left--
@@ -963,7 +1008,9 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
       weapon: g.w,
       ammo: g.e.best as AmmoProfile,
       result: g.e.result as ShotResult,
-      shots: g.shots
+      shots: g.shots,
+      stock: g.stock,
+      dry: g.dry == null ? null : Math.round(g.dry * 10) / 10
     }))
   const stressPerSec =
     Math.round(

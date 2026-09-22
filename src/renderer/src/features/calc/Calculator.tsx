@@ -16,6 +16,7 @@ import {
   defaultOpts,
   profileOf,
   simulate,
+  toM,
   stressPenalty,
   STRESS_NAME,
   totalDps,
@@ -30,6 +31,8 @@ import StressChart from './StressChart'
 import './calc.css'
 
 const FACES: Facing[] = ['front', 'side', 'rear', 'top']
+/** 每一行武器的身份：同一件武器可能挂好几份，得带上序号 */
+const keyOf = (e: Engagement, i: number): string => e.weapon.id + ':' + i
 const pct = (x: number): string => Math.round(x * 100) + '%'
 
 export default function Calculator(): React.JSX.Element {
@@ -48,6 +51,8 @@ export default function Calculator(): React.JSX.Element {
   const [flares, setFlares] = useState(1)
   const [stress, setStress] = useState(1)
   const [open, setOpen] = useState<number | null>(null)
+  /** 关掉的武器，不参与「同时开火」的总输出和曲线 */
+  const [off, setOff] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     void window.BA.getCombatData().then((d) => {
@@ -60,6 +65,9 @@ export default function Calculator(): React.JSX.Element {
     })
   }, [])
 
+  // 换攻击方就把开关清空
+  useEffect(() => setOff(new Set()), [attacker.unit])
+
   const A = useMemo(() => profileOf(attacker.unit, attacker.opts, data), [attacker, data])
   const T = useMemo(() => profileOf(target.unit, target.opts, data), [target, data])
   const opts = useMemo(() => ({ flares, stress }), [flares, stress])
@@ -68,12 +76,17 @@ export default function Calculator(): React.JSX.Element {
   // 滑条的上限 = 这个攻击方能够着这类目标的最远射程（打飞机看高空射程，打直升机看低空）
   const ranges = useMemo(() => {
     if (!A || !T) return []
-    const out: { name: string; range: number }[] = []
+    // 同名同射程的（比如两个一样的火箭巢）合成一条，免得列一排重复的
+    const out = new Map<string, { name: string; range: number; n: number }>()
     for (const w of A.weapons) {
-      const r = Math.max(0, ...w.ammo.filter((a) => canTarget(a, T.klass)).map((a) => rangeFor(a, T)))
-      if (r > 0) out.push({ name: w.name, range: Math.round(r) })
+      const r = Math.round(Math.max(0, ...w.ammo.filter((a) => canTarget(a, T.klass)).map((a) => rangeFor(a, T))))
+      if (r <= 0) continue
+      const k = w.name + '@' + r
+      const cur = out.get(k)
+      if (cur) cur.n++
+      else out.set(k, { name: w.name, range: r, n: 1 })
     }
-    return out.sort((a, b) => b.range - a.range)
+    return [...out.entries()].map(([key, v]) => ({ key, ...v })).sort((a, b) => b.range - a.range)
   }, [A, T])
   const maxRange = useMemo(() => Math.ceil(Math.max(100, ...ranges.map((r) => r.range)) / 25) * 25, [ranges])
 
@@ -93,7 +106,9 @@ export default function Calculator(): React.JSX.Element {
   const [aoePick, setAoePick] = useState(0)
   const aoe = aoeList[Math.min(aoePick, aoeList.length - 1)]
   const anyGuided = list.some((e) => e.best && isGuided(e.best))
-  const total = useMemo(() => totalDps(list), [list])
+  /** 只算开关打开的那些武器 */
+  const onList = useMemo(() => list.filter((e, i) => !off.has(keyOf(e, i))), [list, off])
+  const total = useMemo(() => totalDps(onList), [onList])
 
   return (
     <div className="calc">
@@ -111,7 +126,7 @@ export default function Calculator(): React.JSX.Element {
 
         <div className="calc-controls">
           <label className="calc-range">
-            距离 <b>{dist} m</b>
+            距离 <b>{toM(dist)} m</b>
             <input
               type="range"
               min={0}
@@ -120,7 +135,7 @@ export default function Calculator(): React.JSX.Element {
               value={Math.min(dist, maxRange)}
               onChange={(e) => setDist(Number(e.target.value))}
             />
-            <span className="dim">最远 {maxRange} m</span>
+            <span className="dim">最远 {toM(maxRange)} m</span>
           </label>
           <div className="calc-faces">
             打哪面
@@ -136,12 +151,13 @@ export default function Calculator(): React.JSX.Element {
             <span className="dim">各武器射程</span>
             {ranges.map((r) => (
               <button
-                key={r.name + r.range}
+                key={r.key}
                 className={dist === r.range ? 'primary' : ''}
                 title={'跳到 ' + r.name + ' 的最远射程'}
                 onClick={() => setDist(r.range)}
               >
-                {r.name} {r.range}
+                {r.name} {toM(r.range)}
+                {r.n > 1 && <span className="dim"> ×{r.n}</span>}
               </button>
             ))}
           </div>
@@ -196,8 +212,11 @@ export default function Calculator(): React.JSX.Element {
               <table className="t calc-table">
                 <thead>
                   <tr>
+                    <th className="calc-onoff" title="取消勾选就不算进下面的「同时开火总输出」和曲线">
+                      开
+                    </th>
                     <th>武器</th>
-                    <th>会用哪种弹</th>
+                    <th>弹种</th>
                     <th className="num" title="非制导按散布和目标投影面积算；制导 = 基础命中 × ECM × 干扰弹 × 状态">
                       命中率
                     </th>
@@ -208,17 +227,17 @@ export default function Calculator(): React.JSX.Element {
                       className="num"
                       title="破甲弹：伤害 × 穿深² ÷ (穿深² + 装甲²)；动能弹：穿得动满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，有 10% 下限"
                     >
-                      打中掉多少血
+                      单发伤害
                     </th>
                     <th className="num" title="命中 × 直击 + 未命中 × 溅射">
-                      一发期望
+                      单发期望伤害
                     </th>
-                    <th className="num">打死要几发</th>
-                    <th className="num" title="含瞄准和装填">
-                      几秒
+                    <th className="num">击杀所需数量</th>
+                    <th className="num" title="含瞄准和装填，不含弹丸飞行时间">
+                      击杀时间
                     </th>
                     <th className="num" title="期望伤害 ÷ 每发耗时，班组按人数乘">
-                      每秒
+                      秒伤
                     </th>
                     <th className="num">射程</th>
                   </tr>
@@ -228,13 +247,23 @@ export default function Calculator(): React.JSX.Element {
                     <Row
                       key={e.weapon.id + ':' + i}
                       e={e}
+                      on={!off.has(keyOf(e, i))}
+                      onSwitch={() =>
+                        setOff((p) => {
+                          const n = new Set(p)
+                          const k = keyOf(e, i)
+                          if (n.has(k)) n.delete(k)
+                          else n.add(k)
+                          return n
+                        })
+                      }
                       open={open === i}
                       onToggle={() => setOpen(open === i ? null : i)}
                     />
                   ))}
                   {!list.length && (
                     <tr>
-                      <td colSpan={10} className="dim">
+                      <td colSpan={11} className="dim">
                         这个单位没有武器
                       </td>
                     </tr>
@@ -263,8 +292,8 @@ export default function Calculator(): React.JSX.Element {
           </div>
 
           <div className="card">
-            <h2>压制与掉人</h2>
-            <StressPanel target={T} list={list} />
+            <h2>伤害与压制曲线</h2>
+            <StressPanel target={T} list={onList} />
           </div>
 
           <div className="cols">
@@ -291,15 +320,17 @@ export default function Calculator(): React.JSX.Element {
                   <AoeChart curve={aoeCurve(aoe, T)} hp={T.hp} bounds={T.bounds} radius={aoe.aoe} />
                   <div className="calc-aoe-info">
                     <span>
-                      爆心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{aoe.aoe} m</b>
+                      爆心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{toM(aoe.aoe)} m</b>
                       {aoe.noFalloff && <>（这种弹不衰减，圈里一律满伤）</>}
                     </span>
                     <span>
-                      落点离 {T.name} 中心 <b>{lethalRadius(aoe, T) ?? '—'} m</b> 以内能一发带走（{T.hp} HP）
+                      落点离 {T.name} 中心{' '}
+                      <b>{lethalRadius(aoe, T) == null ? '—' : toM(lethalRadius(aoe, T) as number)} m</b> 以内能一发带走
+                      （{T.hp} HP）
                     </span>
                     <span className="dim">
-                      距离是从目标外壳算的：{T.name} 外壳半径 {T.bounds} m，所以大目标更容易被溅到； 引擎只处理爆心 100
-                      m 以内的单位。
+                      距离是从目标外壳算的：{T.name} 外壳半径 {toM(T.bounds)} m，所以大目标更容易被溅到； 引擎只处理爆心{' '}
+                      {toM(100)} m 以内的单位。
                     </span>
                   </div>
                 </>
@@ -357,6 +388,21 @@ function StressPanel({ target, list }: { target: UnitProfile; list: Engagement[]
         hp={target.hp}
         deaths={deaths}
       />
+
+      <div className="calc-firing dim">
+        参战武器：
+        {sim.firing.map((f, i) => (
+          <span key={i} className="calc-firing-one">
+            {f.weapon.name}
+            {f.weapon.count > 1 && ' ×' + f.weapon.count}
+            <span className="dim">
+              {' '}
+              / {f.ammo.name} · 备弹 {f.stock}
+              {f.dry != null && <b className="lit-bad"> · {f.dry}s 打光</b>}
+            </span>
+          </span>
+        ))}
+      </div>
 
       <div className="calc-stress-cols">
         <div>
@@ -432,12 +478,37 @@ function StressPanel({ target, list }: { target: UnitProfile; list: Engagement[]
   )
 }
 
-function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: () => void }): React.JSX.Element {
+function Row({
+  e,
+  on,
+  onSwitch,
+  open,
+  onToggle
+}: {
+  e: Engagement
+  on: boolean
+  onSwitch: () => void
+  open: boolean
+  onToggle: () => void
+}): React.JSX.Element {
   const r = e.result
   const a = e.best
   return (
     <>
-      <tr className={'calc-row' + (open ? ' open' : '')} onClick={onToggle} title="点一下看这把武器的全部弹种">
+      <tr
+        className={'calc-row' + (open ? ' open' : '') + (on ? '' : ' calc-row-off')}
+        onClick={onToggle}
+        title="点一下看这把武器的全部弹种"
+      >
+        <td className="calc-onoff" onClick={(ev) => ev.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={on}
+            disabled={!r}
+            onChange={onSwitch}
+            title="算不算进「同时开火总输出」和曲线"
+          />
+        </td>
         <td>
           {e.weapon.name}
           {e.weapon.count > 1 && <span className="dim"> ×{e.weapon.count}</span>}
@@ -459,7 +530,7 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
                 ) : a.armorType === 2 ? (
                   <i className="tag heat">破甲</i>
                 ) : null}
-                {a.aoe > 0 && <i className="tag aoe">溅射 {a.aoe}m</i>}
+                {a.aoe > 0 && <i className="tag aoe">溅射 {toM(a.aoe)}m</i>}
                 {a.topAttack && <i className="tag">顶攻</i>}
                 {a.intercept && <i className="tag warn">可被拦</i>}
               </span>
@@ -486,11 +557,11 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
         <td className="num">{r?.shots ?? '—'}</td>
         <td className="num">{r?.seconds ?? '—'}</td>
         <td className="num">{r?.dps || '—'}</td>
-        <td className="num">{r ? Math.round(r.range) : '—'}</td>
+        <td className="num">{r ? toM(r.range) : '—'}</td>
       </tr>
       {open && (
         <tr className="calc-alt-row">
-          <td colSpan={10}>
+          <td colSpan={11}>
             <div className="calc-alt">
               <div className="calc-alt-head">{e.weapon.name} 带的全部弹种</div>
               <table className="t">
@@ -502,8 +573,8 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
                     <th className="num">穿深/装甲</th>
                     <th className="num">直击</th>
                     <th className="num">溅射</th>
-                    <th className="num">一发期望</th>
-                    <th className="num">每秒</th>
+                    <th className="num">单发期望伤害</th>
+                    <th className="num">秒伤</th>
                     <th className="num">射程</th>
                   </tr>
                 </thead>
@@ -527,7 +598,7 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
                       <td className="num">{ammo.aoe > 0 ? result.splash : '—'}</td>
                       <td className="num">{result.expected}</td>
                       <td className="num">{result.dps || '—'}</td>
-                      <td className="num">{Math.round(result.range)}</td>
+                      <td className="num">{toM(result.range)}</td>
                     </tr>
                   ))}
                 </tbody>

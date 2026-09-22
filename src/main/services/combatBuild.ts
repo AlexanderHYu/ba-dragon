@@ -1,7 +1,16 @@
 // 把解出来的原始表压成配装计算器用的那份数据（src/shared/game/combat.json）。
 // 只留计算要用的字段，全部压成数组，导出来 400 KB 左右。
 import type { RawTables } from './gameDb'
-import type { CAbility, CAmmo, CArmor, COptionEffect, CTurretMount, CUnit, CWeapon, CombatData } from '@shared/game/combat'
+import type {
+  CAbility,
+  CAmmo,
+  CArmor,
+  COptionEffect,
+  CTurretMount,
+  CUnit,
+  CWeapon,
+  CombatData
+} from '@shared/game/combat'
 
 const n = (x: unknown): number => {
   const v = Number(x)
@@ -59,9 +68,12 @@ export function buildCombat(r: RawTables): CombatData {
 
   const turretName = new Map<number, string>()
   const turretDefault = new Map<number, boolean>()
+  const turretParent = new Map<number, number>()
   for (const x of row('TurretsJson')) {
     turretName.set(n(x.Id), s(x.Name))
     turretDefault.set(n(x.Id), !!x.IsDefault)
+    // 子炮塔：配装换的是主炮塔，挂在它下面的（同轴机枪、车顶遥控武器站）跟着一起换
+    if (n(x.ParentTurretId)) turretParent.set(n(x.Id), n(x.ParentTurretId))
   }
 
   const turrets: Record<number, CTurretMount[]> = {}
@@ -69,7 +81,13 @@ export function buildCombat(r: RawTables): CombatData {
     const uid = n(x.UnitId)
     const tid = n(x.TurretId)
     const name = turretName.get(tid) || ''
-    ;(turrets[uid] ||= []).push([tid, n(x.Order), turretClass(name), b(turretDefault.get(tid))] as CTurretMount)
+    ;(turrets[uid] ||= []).push([
+      tid,
+      n(x.Order),
+      turretClass(name),
+      b(turretDefault.get(tid)),
+      turretParent.get(tid) || 0
+    ] as CTurretMount)
   }
 
   const turretWeapons: Record<number, [number, number][]> = {}
@@ -190,7 +208,10 @@ export function buildCombat(r: RawTables): CombatData {
   for (const m of row('ModificationsJson')) {
     // 槽位名：界面名是 Custom_Slot_Wing_pylons 这种，去掉前缀换成「Wing pylons」；
     // 没有就退回内部名的头一个词（Armor / MainTurret …）
-    const ui = s(m.UIName).replace(/^.*?Custom_Slot_?/i, '').replace(/_/g, ' ').trim()
+    const ui = s(m.UIName)
+      .replace(/^.*?Custom_Slot_?/i, '')
+      .replace(/_/g, ' ')
+      .trim()
     const name = ui || s(m.Name).split(/\s+/)[0] || '配装'
     modsOf.set(n(m.Id), { id: n(m.Id), unitId: n(m.UnitId), name, order: n(m.Order) })
   }

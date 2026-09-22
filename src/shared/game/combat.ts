@@ -91,7 +91,8 @@ export type CAbility = [
   0 | 1
 ]
 /** 炮塔挂在单位上：[炮塔id, 槽位序号, 炮塔类别（MainTurret/CupolaTurret…）, 是不是默认] */
-export type CTurretMount = [number, number, string, 0 | 1]
+/** [炮塔 id, 顺序, 分类, 是不是默认件, 父炮塔 id（0 = 没有）] */
+export type CTurretMount = [number, number, string, 0 | 1, number]
 /** 配装选项对单位的改动 */
 export interface COptionEffect {
   /** 换装甲 */
