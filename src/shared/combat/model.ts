@@ -702,40 +702,68 @@ export function aoeFactor(a: AmmoProfile, distFromCenter: number, boundsRadius: 
   return clamp(1 - d / radius, 0, 1)
 }
 
-/** 画曲线用：从爆心到半径外一点，每一步的伤害 */
-export function aoeCurve(a: AmmoProfile, target: UnitProfile, steps = 48): { d: number; dmg: number }[] {
+/**
+ * 溅射也要过装甲。
+ *
+ * 游戏里 `ShellHitSystem.DealAOEDamage` 最后是直接调 `DealUnitDamage` 的
+ * （`call 0x1807e9450`），所以溅射和直击走的是**同一条路**：衰减系数先乘在基础伤害上，
+ * 再过穿深/装甲的伤害公式。这和「先算出直击伤害再按比例缩」不是一回事——
+ * 动能弹有 10% 下限、破甲弹是条曲线，先缩和后缩差得出来。
+ */
+export interface AoeCtx {
+  /** 这个距离上的穿深 */
+  pen: number
+  /** 目标这一面的装甲 */
+  armor: number
+  /** 基础伤害的减伤系数（步兵抗打击 / 躲楼里 / 近炸），不给就是 1 */
+  mul?: number
+}
+
+/** 爆心离目标中心 d 米时，这一发溅射打掉多少血 */
+export function aoeDamageAt(a: AmmoProfile, target: UnitProfile, d: number, ctx: AoeCtx): number {
+  const f = aoeFactor(a, d, target.bounds)
+  if (f <= 0) return 0
+  return damageOf(a.dmg * (ctx.mul ?? 1) * f, ctx.pen, ctx.armor, a.armorType)
+}
+
+/** 画曲线用：从爆心到半径外一点，每一步打掉多少血（已经过了装甲） */
+export function aoeCurve(a: AmmoProfile, target: UnitProfile, ctx: AoeCtx, steps = 48): { d: number; dmg: number }[] {
   const R = a.aoe
   if (R <= 0) return []
   const max = R + target.bounds
   const out: { d: number; dmg: number }[] = []
   for (let i = 0; i <= steps; i++) {
     const d = (max * i) / steps
-    out.push({ d: r2(d), dmg: r2(a.dmg * aoeFactor(a, d, target.bounds)) })
+    out.push({ d: r2(d), dmg: aoeDamageAt(a, target, d, ctx) })
   }
   return out
 }
 
-/** 落点离目标中心多远还能炸死它 */
-export function lethalRadius(a: AmmoProfile, target: UnitProfile): number | null {
-  if (a.aoe <= 0 || a.dmg < target.hp) return null
-  if (a.noFalloff) return r2(a.aoe + target.bounds)
-  // 1 - d/R = hp/dmg  →  d = R(1 - hp/dmg)，再夹到引擎的 100 米上限
-  const d = Math.min(100, a.aoe * (1 - target.hp / a.dmg))
-  return r2(d + target.bounds)
+/** 落点离目标中心多远还能炸死它。过了装甲公式就没有闭式解，直接二分找交点 */
+export function lethalRadius(a: AmmoProfile, target: UnitProfile, ctx: AoeCtx): number | null {
+  if (a.aoe <= 0) return null
+  if (aoeDamageAt(a, target, target.bounds, ctx) < target.hp) return null
+  let lo = target.bounds
+  let hi = a.aoe + target.bounds
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2
+    if (aoeDamageAt(a, target, mid, ctx) >= target.hp) lo = mid
+    else hi = mid
+  }
+  return r2(lo)
 }
 
-/** 打偏了溅射还能剩多少：在散布范围里均匀取点，平均一下 */
-export function splashExpected(a: AmmoProfile, target: UnitProfile, dist: number, samples = 24): number {
+/** 打偏了溅射还能剩多少：在散布范围里均匀取点，每个落点各自过一遍装甲 */
+export function splashExpected(a: AmmoProfile, target: UnitProfile, dist: number, ctx: AoeCtx, samples = 24): number {
   if (a.aoe <= 0) return 0
   const ref = a.range || 1
   const scale = clamp(a.dispMin + (1 - a.dispMin) * clamp(dist / ref, 0, 1), 0, 1)
   const R = Math.max(a.dispH, a.dispV) * scale
-  if (R <= 0) return a.dmg
+  if (R <= 0) return aoeDamageAt(a, target, 0, ctx)
   let sum = 0
   for (let i = 1; i <= samples; i++) {
     // 面积均匀：半径按 sqrt 分布
-    const r = R * Math.sqrt(i / samples)
-    sum += a.dmg * aoeFactor(a, r, target.bounds)
+    sum += aoeDamageAt(a, target, R * Math.sqrt(i / samples), ctx)
   }
   return r2(sum / samples)
 }
@@ -851,7 +879,8 @@ export function shotAt(
   const dmg = damageOf(base, pen, armor, a.armorType)
   const hit = hitChanceOf(a, target, dist, opts)
   // 溅射同样走伤害公式（按爆心距离衰减之后再过装甲）
-  const splash = a.aoe > 0 && dmg > 0 ? r2(splashExpected(a, target, dist) * mul * (dmg / base)) : 0
+  // 溅射的每个落点各自过一遍装甲公式（和游戏一样），不是拿直击伤害按比例缩
+  const splash = a.aoe > 0 ? splashExpected(a, target, dist, { pen, armor, mul }) : 0
   const expected = r2(hit * dmg + (1 - hit) * splash)
   const per = cycleTime(w)
   const range = rangeFor(a, target)

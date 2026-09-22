@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { COMBAT, type CombatData } from '../game/combat'
 import {
   aoeCurve,
+  aoeDamageAt,
   aoeFactor,
   apsAgainst,
   armorAt,
@@ -414,15 +415,45 @@ describe('AOE（游戏的 DealAOEDamage）', () => {
     expect(aoeFactor(ammo(305), t.bounds + 120, t.bounds)).toBe(0)
   })
 
-  it('曲线从满伤降到 0，致死半径算得出来', () => {
+  it('曲线从满伤降到 0，致死半径算得出来（穿得动的时候）', () => {
     const t = tank()!
-    const c = aoeCurve(ammo(305), t)
+    // 穿深远大于装甲 → 满伤，和过装甲之前一样
+    const thru = { pen: 9999, armor: 0 }
+    const c = aoeCurve(ammo(305), t, thru)
     expect(c[0].dmg).toBe(175)
     expect(c[c.length - 1].dmg).toBe(0)
     // 175 伤害打 17 血：d = 175 × (1 − 17/175) ≈ 158，但游戏夹到 100
-    expect(lethalRadius(ammo(305), t)).toBeCloseTo(100 + t.bounds, 1)
+    expect(lethalRadius(ammo(305), t, thru)).toBeCloseTo(100 + t.bounds, 1)
     // 伤害不够就炸不死
-    expect(lethalRadius(ammo(301), t)).toBeNull()
+    expect(lethalRadius(ammo(301), t, thru)).toBeNull()
+  })
+
+  it('溅射也要过装甲：同一发炸弹打厚甲和打薄甲差很多', () => {
+    const t = tank()!
+    const bomb = ammo(305) // 175 伤、破甲弹
+    // 破甲弹曲线：穿深 300 打 800 装甲 → 175 × 300²/(300²+800²) ≈ 21.6
+    const weak = aoeCurve(bomb, t, { pen: 300, armor: 800 })
+    const strong = aoeCurve(bomb, t, { pen: 300, armor: 0 })
+    expect(weak[0].dmg).toBeLessThan(strong[0].dmg / 5)
+    expect(weak[0].dmg).toBeCloseTo(damageOf(175, 300, 800, 2), 1)
+    // 致死半径跟着缩：打厚甲得炸得很近，打没甲的老远就能带走
+    const near = lethalRadius(bomb, t, { pen: 300, armor: 800 })!
+    const far = lethalRadius(bomb, t, { pen: 300, armor: 0 })!
+    expect(near).toBeLessThan(far / 2)
+    // 装甲厚到连爆心都打不动 17 血，就真的炸不死了
+    expect(lethalRadius(bomb, t, { pen: 100, armor: 2000 })).toBeNull()
+  })
+
+  it('衰减是乘在基础伤害上再过公式，不是先算直击再按比例缩', () => {
+    const t = tank()!
+    const bomb = ammo(305)
+    const ctx = { pen: 300, armor: 800 }
+    // 半径一半处：衰减 0.5
+    const half = aoeDamageAt(bomb, t, t.bounds + bomb.aoe / 2, ctx)
+    const direct = damageOf(bomb.dmg, ctx.pen, ctx.armor, bomb.armorType)
+    // 破甲公式对基础伤害是线性的，所以这一发正好是一半——但动能弹的 10% 下限会让两者分叉
+    expect(half).toBeCloseTo(damageOf(bomb.dmg * 0.5, ctx.pen, ctx.armor, bomb.armorType), 1)
+    expect(half).toBeLessThan(direct)
   })
 })
 

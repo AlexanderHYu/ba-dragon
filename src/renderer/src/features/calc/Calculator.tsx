@@ -6,6 +6,9 @@ import {
   CLASS_NAME,
   FACE_NAME,
   aoeCurve,
+  armorAt,
+  damageMul,
+  penAt,
   canTarget,
   rangeFor,
   apsAgainst,
@@ -115,6 +118,14 @@ export default function Calculator(): React.JSX.Element {
   }, [list])
   const [aoePick, setAoePick] = useState(0)
   const aoe = aoeList[Math.min(aoePick, aoeList.length - 1)]
+  // 溅射也要过装甲：穿深按这个距离算，装甲按打哪面取，再带上减伤（步兵/楼里/近炸）
+  const aoeCtx = useMemo(
+    () =>
+      aoe && T
+        ? { pen: penAt(aoe, dist), armor: armorAt(T, aoe, facing), mul: damageMul(T, aoe, opts) }
+        : { pen: 0, armor: 0 },
+    [aoe, T, dist, facing, opts]
+  )
   const anyGuided = list.some((e) => e.best && isGuided(e.best))
   /** 只算开关打开的那些武器 */
   const onList = useMemo(() => list.filter((e, i) => !off.has(keyOf(e, i))), [list, off])
@@ -355,7 +366,7 @@ export default function Calculator(): React.JSX.Element {
               {aoe ? (
                 <>
                   <AoeChart
-                    curve={aoeCurve(aoe, T)}
+                    curve={aoeCurve(aoe, T, aoeCtx)}
                     hp={T.hp}
                     bounds={T.bounds}
                     radius={aoe.aoe}
@@ -368,8 +379,10 @@ export default function Calculator(): React.JSX.Element {
                     </span>
                     <span>
                       落点离 {T.name} 中心{' '}
-                      <b>{lethalRadius(aoe, T) == null ? '—' : toM(lethalRadius(aoe, T) as number)} m</b> 以内能一发带走
-                      （{T.hp} HP）
+                      <b>
+                        {lethalRadius(aoe, T, aoeCtx) == null ? '—' : toM(lethalRadius(aoe, T, aoeCtx) as number)} m
+                      </b>{' '}
+                      以内能一发带走 （{T.hp} HP）
                     </span>
                     <span className="dim">
                       距离是从目标外壳算的：{T.name} 外壳半径 {toM(T.bounds)} m，所以大目标更容易被溅到； 引擎只处理爆心{' '}
