@@ -7,13 +7,11 @@
 //   · 选弹种       = SelectBestShellForTarget：位图能打 + 在射程内 + 伤害最高
 //   · 目标类型位   = 单位的 Type 字段（2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船）
 //
-// 还差一块：**打中之后掉多少血**。游戏里是 DamageFormulaKinetic / DamageFormulaHEAT 两条
-// 软比值公式（HEAT 那条读出来是 伤害 × 穿深^k ÷ (穿深^k + c × 装甲^k)），系数存在 GameConfig
-// 的运行时对象里，还没拿到。所以这里暂时按「穿深 ≥ 装甲 = 满伤，否则 0」估算。
+//   · 掉多少血     = DamageFormulaKinetic / DamageFormulaHEAT（系数见 BS 常量）
+//   · 合并发射     = 飞机把同型挂架并起来打，间隔按总弹量摊
 //
 // 自己定的规则（界面上都标了「推算」）：
-//   · 穿甲判定按「穿深 ≥ 装甲」二值化（真实是软比值，见上）
-//   · 目标外壳半径怎么从长宽高算
+//   · 目标外壳半径怎么从长宽高算（游戏用碰撞体，数据里只有长宽高）
 import { A, B, COMBAT, M, U, W, type CAmmo, type CombatData, type CWeapon } from '../game/combat'
 
 export type Facing = 'front' | 'side' | 'rear' | 'top'
@@ -75,6 +73,10 @@ export interface WeaponProfile {
   from: string
   /** 发射通道：同一个通道上的武器不能同时开火（直升机火箭巢就靠这个分组） */
   channel: number
+  /** 合并了几个挂架（飞机把同型挂架并起来齐射）；1 = 没合并 */
+  pylons: number
+  /** 这把武器能不能和同型的并起来打 */
+  mergeable: boolean
 }
 
 export interface Abilities {
@@ -143,6 +145,55 @@ function classOf(cat: number, kinFront: number): UnitClass {
   if (cat === 5) return 'heli'
   if (cat === 6) return 'plane'
   return kinFront >= 50 ? 'armor' : 'light'
+}
+
+/**
+ * 游戏的 BattleSystemSettings 里的战斗常量。
+ * 这四个在机器码里是 [config+0x16c/0x170/0x174/0x178]，
+ * 值是从 globalgamemanagers.assets 里那个 BattleSystemSettings 对象读出来的
+ * （序列化偏移 +528 起连着四个 float：1.0 / 0.1 / 1.0 / 2.0），
+ * 和朋友八月那份快照一致，说明九月更新没动。
+ */
+export const BS = {
+  /** ARMOR_PENETRATION_EFFECTIVENESS */
+  armorPenEffectiveness: 1.0,
+  /** MINIMAL_DAMAGE_COEFFICIENT：动能弹打不穿时的伤害下限（占基础伤害的比例） */
+  minimalDamage: 0.1,
+  /** HE_ARMOR_EFFECTIVENESS */
+  heArmorEffectiveness: 1.0,
+  /** HEAT_CURVE_COEFFICIENT */
+  heatCurve: 2.0,
+  /** MISSILE_MERGE_POWER：合并挂架时间隔按总弹量的这个次方摊 */
+  missileMergePower: 1.0
+} as const
+
+/**
+ * 打中之后掉多少血。两条公式都是从 GameAssembly.dll 里读出来的：
+ *
+ * 破甲弹（ArmorTargeted == 2，游戏里 IsHEATFourmulaUsed 就是 `== 2`）：
+ *   伤害 = 基础 × 穿深^C ÷ (穿深^C + H × 装甲^C)          C = 2，H = 1
+ *   是条平滑曲线——穿深等于装甲时正好一半，打不穿也不是零。
+ *
+ * 动能弹：
+ *   穿深 ≥ 装甲 → 满伤（机器码里直接 return 基础伤害）
+ *   否则 d = 基础 × (1 + (穿深 − 装甲) ÷ (穿深 × APE))
+ *        d ≤ 0 → 0；0 < d < 基础×0.1 → 基础×0.1（下限）
+ *   所以动能弹掉到 0 的临界是「装甲 ≥ 2 倍穿深」（APE = 1 时）。
+ */
+export function damageOf(base: number, pen: number, armor: number, armorType: number): number {
+  if (base <= 0) return 0
+  if (armorType === 2) {
+    if (pen <= 0) return 0
+    const p = Math.pow(pen, BS.heatCurve)
+    const a = Math.pow(Math.max(0, armor), BS.heatCurve)
+    const denom = p + BS.heArmorEffectiveness * a
+    return denom > 0 ? r2((base * p) / denom) : base
+  }
+  if (pen >= armor) return base
+  if (pen <= 0) return 0
+  const d = base + (base / (pen * BS.armorPenEffectiveness)) * (pen - armor)
+  if (!(d > 0)) return 0
+  return r2(Math.max(d, base * BS.minimalDamage))
 }
 
 export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
@@ -218,6 +269,7 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
         if (w) weapons.push(w)
       }
     }
+    mergePylons(weapons)
   }
 
   const abilityIds = [...(data.unitAbilities[eff] || []), ...extraAbilities]
@@ -327,7 +379,35 @@ function weaponProfile(
     radar: !!w[W.radar],
     ammo,
     from,
-    channel
+    channel,
+    pylons: 1,
+    mergeable: !!w[W.merge]
+  }
+}
+
+/**
+ * 飞机把同型挂架并起来齐射（游戏里叫 CombinePylonsOnAircraft）：
+ *   合并后的发射间隔 = (各挂架间隔之和 ÷ 挂架数) ÷ 总弹量 ^ MISSILE_MERGE_POWER
+ * 先取平均再除总弹量，不是直接求和。MISSILE_MERGE_POWER = 1。
+ * 所以四发弹的两个挂架并起来，间隔是单挂架的四分之一——齐射就是这么快的。
+ */
+function mergePylons(weapons: WeaponProfile[]): void {
+  const groups = new Map<number, WeaponProfile[]>()
+  for (const w of weapons) {
+    if (!w.mergeable) continue
+    const g = groups.get(w.id)
+    if (g) g.push(w)
+    else groups.set(w.id, [w])
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue
+    const totalAmmo = g.reduce((s, w) => s + Math.max(1, w.ammo[0]?.qty || w.mag), 0)
+    const avgBurst = g.reduce((s, w) => s + w.dtBurst, 0) / g.length
+    const head = g[0]
+    head.pylons = g.length
+    head.mag = totalAmmo
+    head.dtBurst = r2(avgBurst / Math.pow(Math.max(1, totalAmmo), BS.missileMergePower))
+    for (const w of g.slice(1)) weapons.splice(weapons.indexOf(w), 1)
   }
 }
 
@@ -482,8 +562,9 @@ export function cycleTime(w: WeaponProfile): number {
 export interface ShotResult {
   pen: number
   armor: number
+  /** 穿深够不够（动能弹够了就是满伤；破甲弹是条曲线，不够也有伤害） */
   through: boolean
-  /** 打中了掉多少血 */
+  /** 打中了掉多少血（走游戏的伤害公式） */
   dmg: number
   /** 命中率 */
   hit: number
@@ -514,10 +595,10 @@ export function shotAt(
   const pen = penAt(a, dist)
   const armor = armorAt(target, a, facing)
   const through = pen >= armor
-  const dmg = through ? a.dmg : 0
+  const dmg = damageOf(a.dmg, pen, armor, a.armorType)
   const hit = hitChanceOf(a, target, dist, opts)
-  // 溅射也要先过穿甲判定：不然「打不穿的 HE 照样炸死坦克」，那反应装甲就没意义了
-  const splash = through && a.aoe > 0 ? splashExpected(a, target, dist) : 0
+  // 溅射同样走伤害公式（按爆心距离衰减之后再过装甲）
+  const splash = a.aoe > 0 && dmg > 0 ? r2(splashExpected(a, target, dist) * (dmg / a.dmg)) : 0
   const expected = r2(hit * dmg + (1 - hit) * splash)
   const per = cycleTime(w)
   const range = rangeFor(a, target)
@@ -551,12 +632,14 @@ export interface Engagement {
 }
 
 /**
- * 每件武器挑一种弹。这是照游戏的 SelectBestShellForTarget 来的（反汇编读出来的）：
+ * 每件武器挑一种弹。照游戏的 SelectBestShellForTarget 来（反汇编读出来的）：
  *   1. 弹药目标位图 ∩ 目标类型位 ≠ 0
  *   2. 最小射程 ≤ 距离 ≤ 这个目标对应的射程
- *   3. 剩下的里面挑 **伤害最高** 的那一发
- * 注意游戏在这一步**不看穿不穿得动**——所以自动开火经常拿破甲弹去啃正面。
- * 烟雾弹是另一条请求路径（专门放烟的时候才用），这里不当攻击手段。
+ *   3. 剩下的里面挑 **命中率 × 实际伤害** 最高的那一发
+ *
+ * 第 3 步在机器码里是：取这个距离上的穿深 → 过伤害公式拿到对这个目标的实际伤害 →
+ * 调 GetTargetAccuracy 拿命中率 → `mulss xmm0, xmm6` 两个一乘，然后和当前最好分比。
+ * 所以它会自己避开打不动的弹种，不用我们再加规则。
  */
 export function engage(
   attacker: UnitProfile,
@@ -569,10 +652,11 @@ export function engage(
     const all = w.ammo
       .map((ammo) => ({ ammo, result: shotAt(w, ammo, target, dist, facing, opts) }))
       .sort((x, y) => {
-        // 先把游戏会考虑的排前面，组内按伤害（游戏就是挑伤害最高的）
+        // 先把游戏会考虑的排前面，组内按「命中率 × 实际伤害」——游戏就是这么评分的
         const ok = (r: { result: ShotResult }): number => (r.result.usable && r.result.inRange ? 1 : 0)
         if (ok(x) !== ok(y)) return ok(y) - ok(x)
-        return y.ammo.dmg - x.ammo.dmg
+        const score = (r: { result: ShotResult }): number => r.result.hit * r.result.dmg
+        return score(y) - score(x)
       })
     const top = all.find((x) => x.result.usable && x.result.inRange)
     return { weapon: w, best: top?.ammo || null, result: top?.result || null, all }

@@ -30,7 +30,8 @@ export type CWeapon = [
   0 | 1,
   number,
   0 | 1,
-  number
+  number,
+  0 | 1
 ]
 /**
  * 弹药：[名字, 伤害, 压制伤害, 近距穿深, 地面距离穿深, 地面射程, 低空射程, 高空射程,
@@ -174,7 +175,8 @@ export const W = {
   move: 11,
   stab: 12,
   radar: 13,
-  tracking: 14
+  tracking: 14,
+  merge: 15
 } as const
 export const M = {
   name: 0,

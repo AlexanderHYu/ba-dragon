@@ -13,6 +13,7 @@ import {
   guidedHit,
   isGuided,
   lethalRadius,
+  damageOf,
   penAt,
   profileOf,
   totalDps,
@@ -28,29 +29,36 @@ const DATA: CombatData = {
     // 最后一位是目标类型位：4 = 车辆，2 = 步兵
     1: ['测试坦克', 200, 7, 3.4, 2.3, 1000, 1, 2, 0, 2, 4],
     2: ['测试步兵', 60, 4, 4, 2, 1000, 0.6, 1, 0, 1, 2],
-    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0, 1, 2]
+    3: ['步兵·火箭筒版', 70, 4, 4, 2, 1000, 0.6, 1, 0, 1, 2],
+    4: ['测试飞机', 150, 15, 10, 4, 1000, 1, 6, 0, 2, 16]
   },
   armors: {
     10: [17, 800, 150, 100, 60, 1300, 500, 200, 100, 0], // 坦克
     11: [40, 0, 0, 0, 0, 0, 0, 0, 0, 6] // 步兵
   },
-  unitArmor: { 1: 10, 2: 11, 3: 11 },
+  unitArmor: { 1: 10, 2: 11, 3: 11, 4: 11 },
   turrets: {
     1: [
       [100, 0, 'MainTurret', 1],
       [101, 0, 'MainTurret', 0],
       [102, 1, 'CupolaTurret', 1]
+    ],
+    // 两个一模一样的挂架，各带 2 发
+    4: [
+      [103, 0, 'Pylon', 1],
+      [104, 1, 'Pylon', 1]
     ]
   },
   // [武器id, 发射通道]
-  turretWeapons: { 100: [[200, 0]], 101: [[201, 0]], 102: [[202, 1]] },
+  turretWeapons: { 100: [[200, 0]], 101: [[201, 0]], 102: [[202, 1]], 103: [[205, 0]], 104: [[205, 1]] },
   weapons: {
-    // [名字, 弹匣, 装填min, max, 点射min, max, 点射内间隔, 点射间min, max, 瞄准min, max, 行进间, 稳定, 雷达, 跟踪]
-    200: ['120mm 炮', 1, 6, 7, 1, 1, 0, 1, 1, 1.5, 2.5, 0, 1, 0, 1],
-    201: ['130mm 炮', 1, 8, 8, 1, 1, 0, 1, 1, 2, 2, 0, 1, 0, 1],
-    202: ['同轴机枪', 30, 6, 8, 4, 8, 0.4, 0.8, 0.8, 1, 1, 1, 1, 0, 1],
-    203: ['步枪', 30, 4, 4, 1, 1, 0, 4, 4, 1, 1, 1, 1, 0, 1],
-    204: ['火箭筒', 1, 5, 6, 1, 1, 0, 1, 1, 1.5, 1.5, 0, 1, 0, 1]
+    // [名字, 弹匣, 装填min, max, 点射min, max, 点射内间隔, 点射间min, max, 瞄准min, max, 行进间, 稳定, 雷达, 跟踪, 可合并]
+    200: ['120mm 炮', 1, 6, 7, 1, 1, 0, 1, 1, 1.5, 2.5, 0, 1, 0, 1, 0],
+    201: ['130mm 炮', 1, 8, 8, 1, 1, 0, 1, 1, 2, 2, 0, 1, 0, 1, 0],
+    202: ['同轴机枪', 30, 6, 8, 4, 8, 0.4, 0.8, 0.8, 1, 1, 1, 1, 0, 1, 0],
+    203: ['步枪', 30, 4, 4, 1, 1, 0, 4, 4, 1, 1, 1, 1, 0, 1, 0],
+    204: ['火箭筒', 1, 5, 6, 1, 1, 0, 1, 1, 1.5, 1.5, 0, 1, 0, 1, 0],
+    205: ['挂架导弹', 1, 99, 99, 1, 1, 0, 4, 4, 1, 1, 0, 1, 0, 1, 1]
   },
   weaponAmmo: {
     '1:200': [[300, 16]],
@@ -58,7 +66,8 @@ const DATA: CombatData = {
     '1:202': [[302, 900]],
     '2:203': [[303, 200]],
     '3:203': [[303, 200]],
-    '3:204': [[304, 6]]
+    '3:204': [[304, 6]],
+    '4:205': [[304, 2]]
   },
   ammo: {
     // [名字, 伤害, 压制, 穿近, 穿远, 地面射程, 低空, 高空, 目标位图, 装甲类型, AOE, AOE压制, 超压,
@@ -199,17 +208,18 @@ describe('穿深和伤害', () => {
     expect(armorAt(inf()!, ammo(300), 'front')).toBe(6)
   })
 
-  it('穿得动才有伤害，打死要几发按血量算', () => {
+  it('穿得动满伤，穿不动按公式打折（不是直接归零）', () => {
     const p = tank()!
     const w = p.weapons.find((w) => w.name === '120mm 炮')!
+    // 500 米上穿深 586，正面装甲 800：穿不动，但动能公式还剩 10 × (1 + (586-800)/586)
     const front = shotAt(w, ammo(300), p, 500, 'front')
     expect(front.through).toBe(false)
-    expect(front.dmg).toBe(0)
-    expect(front.shots).toBeNull()
+    expect(front.dmg).toBeCloseTo(6.35, 1)
+    expect(front.shots).toBe(3)
 
     const side = shotAt(w, ammo(300), p, 500, 'side')
     expect(side.through).toBe(true)
-    expect(side.dmg).toBe(10)
+    expect(side.dmg).toBe(10) // 侧面 150，穿得动就是满伤
     expect(side.shots).toBe(2) // 17 血 ÷ 10
     expect(side.seconds).toBeGreaterThan(8) // 得等一次装填
   })
@@ -350,6 +360,46 @@ describe('发射通道', () => {
   })
 })
 
+describe('伤害公式（从 GameAssembly.dll 读出来的）', () => {
+  it('破甲弹是条曲线：穿深等于装甲时正好一半', () => {
+    // 伤害 × 穿深² ÷ (穿深² + 装甲²)
+    expect(damageOf(10, 500, 500, 2)).toBeCloseTo(5, 2)
+    expect(damageOf(10, 1000, 500, 2)).toBeCloseTo(8, 2) // 1000²/(1000²+500²) = 0.8
+    expect(damageOf(10, 250, 500, 2)).toBeCloseTo(2, 2) // 0.2
+    // 打不穿也不是零
+    expect(damageOf(10, 100, 1300, 2)).toBeGreaterThan(0)
+  })
+
+  it('动能弹：穿得动满伤，穿不动线性掉到 0（装甲 ≥ 2 倍穿深）', () => {
+    expect(damageOf(10, 800, 800, 1)).toBe(10)
+    expect(damageOf(10, 900, 800, 1)).toBe(10)
+    // 穿 800 打装甲 1200：10 × (1 + (800-1200)/800) = 5
+    expect(damageOf(10, 800, 1200, 1)).toBeCloseTo(5, 2)
+    // 装甲正好两倍穿深 → 0
+    expect(damageOf(10, 800, 1600, 1)).toBe(0)
+    expect(damageOf(10, 800, 2000, 1)).toBe(0)
+  })
+
+  it('动能弹有个 10% 的下限，但归零之后就没有了', () => {
+    // 10 × (1 + (800-1550)/800) = 0.625 < 1（基础的 10%）→ 抬到 1
+    expect(damageOf(10, 800, 1550, 1)).toBe(1)
+    expect(damageOf(10, 800, 1599, 1)).toBe(1)
+    expect(damageOf(10, 800, 1601, 1)).toBe(0)
+  })
+})
+
+describe('合并挂架', () => {
+  it('两个同型挂架并成一个，间隔按总弹量摊', () => {
+    const p = profileOf(4, [], DATA)!
+    const w = p.weapons.filter((x) => x.name === '挂架导弹')
+    expect(w.length).toBe(1) // 并成一个了
+    expect(w[0].pylons).toBe(2)
+    expect(w[0].mag).toBe(4) // 2 个挂架 × 2 发
+    // 平均间隔 4 秒 ÷ 总弹量 4 ^ 1 = 1 秒
+    expect(w[0].dtBurst).toBeCloseTo(1, 2)
+  })
+})
+
 describe('APS', () => {
   it('只有标了可拦截的弹药才受影响，拦截次数 +1 发就能穿过去', () => {
     const t = profileOf(1, [902], DATA)!
@@ -368,15 +418,13 @@ describe('自动选弹种（照游戏的 SelectBestShellForTarget）', () => {
     expect(gun.best?.name).not.toBe('尾翼稳定脱壳穿甲弹')
   })
 
-  it('剩下的里面挑伤害最高的——游戏这一步不看穿不穿得动', () => {
+  it('按「命中率 × 实际伤害」挑，所以会自己避开打不动的弹种', () => {
     const tankP = tank()!
-    const vsTank = engage(tankP, tankP, 300, 'front')
-    const gun = vsTank.find((e) => e.weapon.name === '120mm 炮')!
-    // 这门炮只带穿甲弹，所以还是它；换一门带两种弹的看伤害排序
+    const gun = engage(tankP, tankP, 300, 'front').find((e) => e.weapon.name === '120mm 炮')!
     expect(gun.best?.name).toBe('尾翼稳定脱壳穿甲弹')
-    const p2 = profileOf(1, [900], DATA)! // 换成带破甲弹的 130mm
-    const e2 = engage(p2, tankP, 300, 'front').find((e) => e.weapon.name === '130mm 炮')!
-    expect(e2.best?.name).toBe('破甲弹')
+    // 同一门炮打步兵时，穿甲弹的位图不让打，只能换别的
+    const vsInf = engage(tankP, inf()!, 200, 'front').find((e) => e.weapon.name === '120mm 炮')!
+    expect(vsInf.best?.name).not.toBe('尾翼稳定脱壳穿甲弹')
   })
 
   it('够不着的武器选不出弹药', () => {

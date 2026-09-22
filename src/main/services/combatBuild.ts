@@ -94,7 +94,8 @@ export function buildCombat(r: RawTables): CombatData {
       b(w.CanShootOnTheMove),
       n(w.StabilizerQuality),
       b(w.IsRadarDependent),
-      n(w.SimultaneousTracking)
+      n(w.SimultaneousTracking),
+      b(w.CanBeMerged)
     ] as CWeapon
   }
 

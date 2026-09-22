@@ -199,7 +199,12 @@ export default function Calculator(): React.JSX.Element {
                       命中率
                     </th>
                     <th className="num" title="这个距离上的穿深 vs 目标这一面的装甲">穿深/装甲</th>
-                    <th className="num">打中掉多少血</th>
+                    <th
+                      className="num"
+                      title="破甲弹：伤害 × 穿深² ÷ (穿深² + 装甲²)；动能弹：穿得动满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，有 10% 下限"
+                    >
+                      打中掉多少血
+                    </th>
                     <th className="num" title="命中 × 直击 + 未命中 × 溅射">一发期望</th>
                     <th className="num">打死要几发</th>
                     <th className="num" title="含瞄准和装填">几秒</th>
@@ -237,10 +242,10 @@ export default function Calculator(): React.JSX.Element {
             )}
             <div className="dim calc-note">
               每件武器用哪种弹是自动挑的（能打这类目标、够得着、期望伤害最高的那个）；点一行看这把武器的全部弹种。
-              命中率、选弹、溅射衰减、目标类型判定都是照游戏本体的机器码实现的。
-              <b>但「打中之后掉多少血」还没完全拿到</b>：游戏里是 DamageFormulaKinetic / DamageFormulaHEAT
-              两条软比值公式（大致是 穿深^k ÷ (穿深^k + c × 装甲^k) × 伤害），系数存在 GameConfig 里，还没读出来。
-              所以这里暂时按「穿深 ≥ 装甲 = 满伤，否则 0」估算——穿深和装甲的对比是真值，掉血数字要打个问号。
+              命中率、选弹、伤害、溅射、目标类型判定都是照游戏本体的机器码实现的，系数也是从游戏文件里读的。
+              <b>穿甲不是二值的</b>：破甲弹按 伤害×穿深²÷(穿深²+装甲²) 走曲线，穿深等于装甲时正好剩一半；
+              动能弹穿得动就是满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，装甲到穿深两倍才归零（中间有 10% 的下限）。
+              唯一还在估的是目标外壳半径（游戏用碰撞体，数据里只有长宽高）。
             </div>
           </div>
 
@@ -300,6 +305,12 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
         <td>
           {e.weapon.name}
           {e.weapon.count > 1 && <span className="dim"> ×{e.weapon.count}</span>}
+          {e.weapon.pylons > 1 && (
+            <span className="dim" title="同型挂架合并齐射，发射间隔按总弹量摊">
+              {' '}
+              ×{e.weapon.pylons} 挂架合并
+            </span>
+          )}
         </td>
         <td>
           {a ? (
@@ -323,7 +334,15 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
         </td>
         <td className="num">{r ? pct(r.hit) : '—'}</td>
         <td className="num">{r ? r.pen + ' / ' + r.armor : '—'}</td>
-        <td className="num">{r ? r.through ? r.dmg : <span className="lit-bad">打不穿</span> : '—'}</td>
+        <td className="num">
+          {r ? (
+            <span className={r.dmg <= 0 ? 'lit-bad' : r.through ? 'lit-ok' : ''} title={r.through ? '穿得动，满伤' : '穿不动，按公式打折'}>
+              {r.dmg <= 0 ? '打不动' : r.dmg}
+            </span>
+          ) : (
+            '—'
+          )}
+        </td>
         <td className="num">{r ? r.expected : '—'}</td>
         <td className="num">{r?.shots ?? '—'}</td>
         <td className="num">{r?.seconds ?? '—'}</td>
@@ -365,7 +384,7 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
                       <td className="num">
                         {result.pen} / {result.armor}
                       </td>
-                      <td className="num">{result.through ? result.dmg : '—'}</td>
+                      <td className="num">{result.dmg > 0 ? result.dmg : '—'}</td>
                       <td className="num">{ammo.aoe > 0 ? result.splash : '—'}</td>
                       <td className="num">{result.expected}</td>
                       <td className="num">{result.dps || '—'}</td>
