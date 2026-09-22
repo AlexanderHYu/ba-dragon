@@ -402,6 +402,17 @@ function StressPanel({
   sit: Situation
 }): React.JSX.Element {
   const sim = useMemo(() => simulate(list, target, { limit: 90, sit }), [list, target, sit])
+  // 近炸引信是全游戏唯一一处单发伤害自带随机的地方：贴脸炸最疼、擦边炸最不疼。
+  // 有近炸弹参战就把最好和最坏两条血线也算出来，画成一条带子。
+  const hasFuse = sim.firing.some((f) => usesRadioFuse(f.ammo))
+  const best = useMemo(
+    () => (hasFuse ? simulate(list, target, { limit: 90, sit: { ...sit, fuse: 'best' } }) : null),
+    [hasFuse, list, target, sit]
+  )
+  const worst = useMemo(
+    () => (hasFuse ? simulate(list, target, { limit: 90, sit: { ...sit, fuse: 'worst' } }) : null),
+    [hasFuse, list, target, sit]
+  )
   const deaths = sim.events.filter((e) => e.kind === 'soldier').map((e) => e.t)
   const tiers = useMemo(() => {
     const by = new Map<number, string[]>()
@@ -425,6 +436,17 @@ function StressPanel({
         <span>
           打死 <b>{sim.deadAt == null ? '打不死' : sim.deadAt + 's'}</b>
         </span>
+        {hasFuse && best && worst && (
+          <span className="dim" title="近炸引信的起爆距离是随机的：贴着最近处炸最疼，擦着引信边缘炸最不疼">
+            近炸浮动 <b className="lit-ok">最好 {best.deadAt == null ? '打不死' : best.deadAt + 's'}</b> ~{' '}
+            <b className="lit-bad">最坏 {worst.deadAt == null ? '打不死' : worst.deadAt + 's'}</b>
+          </span>
+        )}
+        {sim.intercepted > 0 && (
+          <span className="dim" title="APS 每 6 秒能拦一发，拦完备弹就不管用了">
+            APS 拦下 <b>{sim.intercepted}</b> 发（还剩 {sim.apsLeft}）
+          </span>
+        )}
         <span className="grow" />
         <span className="dim">
           压制 {sim.stressPerSec}/秒进账，上限 {target.maxStress}（黄 {sim.shocked} 红 {sim.panicked}）
@@ -433,6 +455,8 @@ function StressPanel({
 
       <StressChart
         samples={sim.samples}
+        best={best?.samples}
+        worst={worst?.samples}
         shocked={sim.shocked}
         panicked={sim.panicked}
         maxStress={target.maxStress}

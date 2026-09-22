@@ -247,6 +247,11 @@ export interface Situation {
   alive?: number
   /** 目标自己的压制等级：0 正常 / 1 黄 / 2 红 */
   level?: number
+  /**
+   * 近炸引信按哪一档算：平均 / 贴脸炸（最疼）/ 擦边炸（最不疼）。
+   * 这是游戏里**唯一**一处单发伤害本身带随机的地方，所以单独拎出来。
+   */
+  fuse?: FuseCase
 }
 
 export function infantryFactor(alive: number, level = 0): number {
@@ -265,8 +270,8 @@ export const bypassCover = (factor: number, ignoreCover: number): number =>
 /** 这一发打在这个目标身上，基础伤害要先乘多少 */
 export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
   let mul = 1
-  // 近炸引信：在旁边炸，按起爆距离的分布算平均能打出多少
-  if (usesRadioFuse(a)) mul *= fuseFactor(a)
+  // 近炸引信：在旁边炸，按起爆距离的分布算能打出多少
+  if (usesRadioFuse(a)) mul *= fuseFactor(a, sit.fuse || 'avg')
   if (target.klass === 'inf' && target.squad.length) {
     const alive = sit.alive ?? target.squad.length
     mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
@@ -313,14 +318,19 @@ export const RADIOFUSE = {
  * 和游戏自己写死的预估常量 0.33 对得上（见 RADIOFUSE.avgDamage），
  * 说明这个读法是对的。这里用逐弹算出来的值，不用那个粗略常量。
  */
-export function fuseFactor(a: AmmoProfile): number {
+export type FuseCase = 'avg' | 'best' | 'worst'
+
+export function fuseFactor(a: AmmoProfile, which: FuseCase = 'avg'): number {
   if (!usesRadioFuse(a)) return 1
   const hi = Math.min(1, RADIOFUSE.pMax)
+  // 擦身距离是从外壳算起的，正好就是 aoeFactor 里的 d。
+  // 贴着最近处炸（p = MIN）最疼，擦着引信边缘炸（p = 1）最不疼。
+  if (which === 'best') return r3(aoeFactor(a, RADIOFUSE.pMin * a.radioFuse, 0))
+  if (which === 'worst') return r3(aoeFactor(a, hi * a.radioFuse, 0))
   const n = 33
   let sum = 0
   for (let i = 0; i < n; i++) {
     const p = RADIOFUSE.pMin + ((hi - RADIOFUSE.pMin) * (i + 0.5)) / n
-    // 擦身距离是从外壳算起的，正好就是 aoeFactor 里的 d
     sum += aoeFactor(a, p * a.radioFuse, 0)
   }
   return r3(sum / n)
@@ -992,7 +1002,7 @@ export function stressPenalty(u: UnitProfile, level: number): StressMod {
 
 export interface SimEvent {
   t: number
-  kind: 'shocked' | 'panicked' | 'calm' | 'soldier' | 'dead' | 'dry'
+  kind: 'shocked' | 'panicked' | 'calm' | 'soldier' | 'dead' | 'dry' | 'aps'
   text: string
   hp: number
   stress: number
@@ -1030,6 +1040,10 @@ export interface Simulation {
   /** 停火后第一秒恢复多少（之后每秒再多 1） */
   recoveryFirst: number
   hpPerSoldier: number
+  /** APS 拦下来几发 */
+  intercepted: number
+  /** 打完之后 APS 还剩几发 */
+  apsLeft: number
 }
 
 /**
@@ -1074,6 +1088,13 @@ export function simulate(
     }
   })
 
+  // 主动防护：每 cooldown 秒拦一发，拦完备弹就没了。
+  // 数据里所有 APS 都是 6 秒冷却、2 或 4 发，覆盖值一律是 2（不区分单位，所以不拿它算概率）。
+  const aps = target.abilities.aps
+  let apsLeft = aps ? aps.qty : 0
+  let apsReady = 0
+  let intercepted = 0
+
   const squadSize = target.squad.length
   const hpPerSoldier = squadSize ? target.hp / squadSize : 0
   // 优先级数字大的先死，同级随机（KillSquadSolders 取最大值再随机挑一个）
@@ -1098,6 +1119,21 @@ export function simulate(
   const SAMPLE = 0.25
 
   const dt = 0.05
+  /** 这一发打完了，把这件武器的下一发排上（连发 / 连发间隔 / 打空换弹） */
+  type Gun = (typeof guns)[number]
+  const advance = (g: Gun): void => {
+    g.left--
+    if (g.left <= 0) {
+      g.next += g.w.reload + g.w.aim
+      g.left = Math.max(1, g.w.mag || 1)
+      g.inBurst = g.burst
+    } else if (--g.inBurst <= 0) {
+      g.next += g.w.dtBurst
+      g.inBurst = g.burst
+    } else {
+      g.next += g.w.dtShot
+    }
+  }
   const push = (t: number, kind: SimEvent['kind'], text: string): void => {
     events.push({ t: Math.round(t * 10) / 10, kind, text, hp: r2(Math.max(0, hp)), stress: Math.round(stress) })
   }
@@ -1107,7 +1143,21 @@ export function simulate(
       while (g.next <= t + 1e-9 && deadAt == null && g.shots < g.stock) {
         const r = g.e.result as ShotResult
         const a = g.e.best as AmmoProfile
-        const n = g.w.count
+        let n = g.w.count
+        // APS 先拦一发：拦得住的弹种（导弹、反坦克火箭），冷却好了、备弹还有，这一发就没了。
+        // 数据里所有 APS 都是 6 秒一发，所以齐射打过去只有第一发会被吃掉
+        if (a.intercept && apsLeft > 0 && t >= apsReady) {
+          apsLeft--
+          intercepted++
+          apsReady = t + (aps?.cooldown || 6)
+          g.shots += 1
+          n -= 1
+          push(t, 'aps', (aps?.name || 'APS') + ' 拦下一发 ' + a.name + '（还剩 ' + apsLeft + ' 发）')
+        }
+        if (n <= 0) {
+          advance(g)
+          continue
+        }
         // 减伤是活的：步兵一边掉人一边变，压制到红了就直接不扛打了，所以每一发重算
         const mul = damageMul(target, a, { ...sit, alive, level })
         const base = a.dmg * mul
@@ -1139,17 +1189,7 @@ export function simulate(
           push(t, 'dry', g.w.name + ' 打光了（' + g.stock + ' 发）')
           break
         }
-        g.left--
-        if (g.left <= 0) {
-          g.next += g.w.reload + g.w.aim
-          g.left = Math.max(1, g.w.mag || 1)
-          g.inBurst = g.burst
-        } else if (--g.inBurst <= 0) {
-          g.next += g.w.dtBurst
-          g.inBurst = g.burst
-        } else {
-          g.next += g.w.dtShot
-        }
+        advance(g)
       }
     }
 
@@ -1216,6 +1256,8 @@ export function simulate(
     firing,
     stressPerSec,
     recoveryFirst: STRESS.recovery + 1,
-    hpPerSoldier: r2(hpPerSoldier)
+    hpPerSoldier: r2(hpPerSoldier),
+    intercepted,
+    apsLeft
   }
 }

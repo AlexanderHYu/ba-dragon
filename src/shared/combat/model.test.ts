@@ -702,3 +702,35 @@ describe('近炸引信', () => {
     expect(withFuse).toBeLessThan(full * 0.5)
   })
 })
+
+describe('APS 和近炸的浮动', () => {
+  it('APS 每次冷却拦一发，拦完就不管用了', () => {
+    const shooter = profileOf(3, [], DATA)! // 带火箭筒的步兵班，火箭弹可被拦
+    const guarded = profileOf(1, [901, 902], DATA)! // 纸装甲 + Trophy（4 发 / 6 秒）
+    const sim = simulate(engage(shooter, guarded, 200, 'front'), guarded, { limit: 40 })
+    expect(sim.intercepted).toBeGreaterThan(0)
+    expect(sim.intercepted).toBeLessThanOrEqual(4)
+    expect(sim.apsLeft).toBe(4 - sim.intercepted)
+    // 拦截之间至少隔着一个冷却
+    const aps = sim.events.filter((e) => e.kind === 'aps').map((e) => e.t)
+    for (let i = 1; i < aps.length; i++) expect(aps[i] - aps[i - 1]).toBeGreaterThanOrEqual(6 - 0.1)
+  })
+
+  it('没有 APS 就不该有拦截', () => {
+    const shooter = profileOf(3, [], DATA)!
+    const plain = profileOf(1, [901], DATA)!
+    expect(simulate(engage(shooter, plain, 200, 'front'), plain, { limit: 40 }).intercepted).toBe(0)
+  })
+
+  it('近炸的最好 / 平均 / 最坏依次变小', () => {
+    const sam = ammo(306)
+    const bestF = fuseFactor(sam, 'best')
+    const avgF = fuseFactor(sam, 'avg')
+    const worstF = fuseFactor(sam, 'worst')
+    expect(bestF).toBeGreaterThan(avgF)
+    expect(avgF).toBeGreaterThan(worstF)
+    // 贴脸炸 = 1 − 0.6×0.8 = 0.52；擦边炸 = 1 − 1×0.8 = 0.2
+    expect(bestF).toBeCloseTo(0.52, 2)
+    expect(worstF).toBeCloseTo(0.2, 2)
+  })
+})

@@ -8,6 +8,8 @@ import type { SimSample } from '@shared/combat/model'
  */
 export default function StressChart({
   samples,
+  best,
+  worst,
   shocked,
   panicked,
   maxStress,
@@ -15,6 +17,10 @@ export default function StressChart({
   deaths
 }: {
   samples: SimSample[]
+  /** 近炸引信贴脸炸（最疼）时的血线 */
+  best?: SimSample[]
+  /** 近炸引信擦边炸（最不疼）时的血线 */
+  worst?: SimSample[]
   shocked: number
   panicked: number
   maxStress: number
@@ -51,7 +57,7 @@ export default function StressChart({
       <g>
         <line x1={pad.l} y1={10} x2={pad.l + 20} y2={10} stroke="var(--good)" strokeWidth="2" />
         <text x={pad.l + 25} y={13} fontSize="10.5" fill="var(--good)">
-          血量（右轴，满血 {hp}）
+          血量（右轴，满血 {hp}）{best && worst ? '｜浅带 = 近炸最好~最坏' : ''}
         </text>
         <line
           x1={pad.l + 150}
@@ -84,6 +90,33 @@ export default function StressChart({
         黄线 {shocked}
       </text>
 
+      {/* 近炸的浮动范围：最好和最坏两条血线之间填一条带子 */}
+      {best && worst && best.length > 1 && worst.length > 1 && (
+        <>
+          <path
+            d={
+              best.map((s, i) => (i ? 'L' : 'M') + x(s.t).toFixed(1) + ',' + yh(s.hp).toFixed(1)).join(' ') +
+              ' ' +
+              worst
+                .slice()
+                .reverse()
+                .map((s) => 'L' + x(s.t).toFixed(1) + ',' + yh(s.hp).toFixed(1))
+                .join(' ') +
+              ' Z'
+            }
+            fill="var(--good)"
+            opacity="0.14"
+          />
+          <path
+            d={worst.map((s, i) => (i ? 'L' : 'M') + x(s.t).toFixed(1) + ',' + yh(s.hp).toFixed(1)).join(' ')}
+            fill="none"
+            stroke="var(--good)"
+            strokeWidth="1"
+            strokeDasharray="2 3"
+            opacity="0.7"
+          />
+        </>
+      )}
       <path d={area} fill="var(--accent)" opacity="0.12" />
       <path d={sPath} fill="none" stroke="var(--accent)" strokeWidth="2" strokeDasharray="5 3" />
       <path d={line((s) => yh(s.hp))} fill="none" stroke="var(--good)" strokeWidth="2" />
