@@ -353,7 +353,13 @@ export default function Calculator(): React.JSX.Element {
               </h2>
               {aoe ? (
                 <>
-                  <AoeChart curve={aoeCurve(aoe, T)} hp={T.hp} bounds={T.bounds} radius={aoe.aoe} />
+                  <AoeChart
+                    curve={aoeCurve(aoe, T)}
+                    hp={T.hp}
+                    bounds={T.bounds}
+                    radius={aoe.aoe}
+                    fuse={aoe.radioFuse}
+                  />
                   <div className="calc-aoe-info">
                     <span>
                       爆心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{toM(aoe.aoe)} m</b>
@@ -578,12 +584,16 @@ function Row({
                 ) : null}
                 {a.aoe > 0 && <i className="tag aoe">溅射 {toM(a.aoe)}m</i>}
                 {a.topAttack && <i className="tag">顶攻</i>}
-                {usesRadioFuse(a, target) && (
+                {usesRadioFuse(a) && (
                   <i
                     className="tag warn"
-                    title="近炸引信：导弹在目标旁边炸，吃不到直击伤害。游戏自己的常量是平均 33%（推算：这一发的近炸距离要等数据重新导出才有）"
+                    title={
+                      '近炸引信：导弹在离目标 ' +
+                      toM(a.radioFuse) +
+                      ' m 处起爆，吃不到直击伤害。游戏自己的常量是平均打出 33%'
+                    }
                   >
-                    近炸 ×{RADIOFUSE.avgDamage}
+                    近炸 {toM(a.radioFuse)}m · ×{RADIOFUSE.avgDamage}
                   </i>
                 )}
                 {a.intercept && <i className="tag warn">可被拦</i>}

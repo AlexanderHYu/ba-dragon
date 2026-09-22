@@ -6,13 +6,16 @@ export default function AoeChart({
   curve,
   hp,
   radius,
-  bounds
+  bounds,
+  fuse = 0
 }: {
   curve: { d: number; dmg: number }[]
   hp: number
   radius: number
   /** 目标外壳半径：这一段里是满伤 */
   bounds: number
+  /** 近炸引信的起爆距离（0 = 撞上才炸） */
+  fuse?: number
 }): React.JSX.Element {
   const W = 520
   const H = 170
@@ -45,6 +48,14 @@ export default function AoeChart({
         />
       )}
 
+      {fuse > 0 && fuse <= span && (
+        <>
+          <line x1={x(fuse)} y1={pad.t} x2={x(fuse)} y2={H - pad.b} stroke="var(--warn)" strokeDasharray="4 3" />
+          <text x={x(fuse) + 4} y={pad.t + 9} fontSize="10" fill="var(--warn)">
+            近炸在这儿起爆
+          </text>
+        </>
+      )}
       <path d={area} fill="var(--accent)" opacity="0.16" />
       <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" />
 

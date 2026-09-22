@@ -266,7 +266,7 @@ export const bypassCover = (factor: number, ignoreCover: number): number =>
 export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
   let mul = 1
   // 近炸引信：在旁边炸，平均只打出三分之一
-  if (usesRadioFuse(a, target)) mul *= RADIOFUSE.avgDamage
+  if (usesRadioFuse(a)) mul *= RADIOFUSE.avgDamage
   if (target.klass === 'inf' && target.squad.length) {
     const alive = sit.alive ?? target.squad.length
     mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
@@ -293,15 +293,19 @@ export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
 export const RADIOFUSE = { avgDamage: 0.33, missTrigger: 0.5 } as const
 
 /**
- * 这一发打这个目标走不走近炸引信。
+ * 这一发走不走近炸引信。
  *
- * 准的判据是弹药表的 `RadioFuseDistance > 0`，但那个字段要重新导出一次数据才有。
- * 在那之前退回推算：**制导 + 有溅射 + 打飞行目标**——防空弹和空空弹都符合，界面上标了「推算」。
+ * 判据是**制导 + 有 `RadioFuseDistance`**。光看 `RadioFuseDistance > 0` 不行：
+ * 数据里 118 种弹药有这个值，其中 58 种是非制导的——7.62 步枪弹也写着 5，
+ * 那显然不是引信而是命中检测半径。剩下 60 种制导的**全都能打空中目标**，
+ * 没有一种是纯打地面的，正好就是防空弹和空空弹这一批。
+ *
+ * 起爆距离一律是溅射半径的 **0.8 倍**（40N6：溅射 40、近炸 32；AIM-7M：15 / 12）。
+ *
+ * 没算进来的：非制导的高炮近炸弹（130mm AA 之类也带这个字段），
+ * 游戏怎么处理它们还没验，宁可少算不要乱算。
  */
-export function usesRadioFuse(a: AmmoProfile, target: UnitProfile): boolean {
-  if (a.radioFuse > 0) return true
-  return isGuided(a) && a.aoe > 0 && (target.klass === 'plane' || target.klass === 'heli')
-}
+export const usesRadioFuse = (a: AmmoProfile): boolean => a.radioFuse > 0 && a.seeker > 0
 
 /**
  * 这发弹药能不能锁这个目标：弹药的目标位图和目标的类型位做与运算。
@@ -359,25 +363,52 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     }
   } else {
     const mounts = data.turrets[eff] || []
-    const picked = new Map<string, number>()
+
+    // 「这个位置空着」和「这条配装没提到这个位置」在数据里都是 0，分不出来。
+    // 但同一个槽位里别的选项用到了哪些位是知道的：本选项没提到、别的选项用到的，
+    // 就是明确空着（「两个火箭巢」对上「四个火箭巢」、「不挂吊舱」都是这么来的）。
+    // 只清非默认件，免得把单位的基础武器也清掉。
+    const mountKey = new Map<number, string>()
+    const notDefault = new Set<number>()
+    for (const [tid, order, cls, isDefault] of mounts) {
+      mountKey.set(tid, cls + '#' + order)
+      if (!isDefault) notDefault.add(tid)
+    }
+    const emptyKeys = new Set<string>()
+    for (const [, list] of data.unitOptions[unitId] || []) {
+      const chosen = list.find(([id]) => optionIds.includes(id))
+      if (!chosen) continue
+      const mine = new Set(Object.keys(data.options[chosen[0]]?.t || {}))
+      for (const [oid] of list) {
+        for (const [slot, tid] of Object.entries(data.options[oid]?.t || {})) {
+          const k = mountKey.get(tid)
+          if (!mine.has(slot) && k && notDefault.has(tid)) emptyKeys.add(k)
+        }
+      }
+    }
+    // 配装明确选的先进去——**可以重复**：四联火箭巢就是同一个炮塔挂在四个位置上
+    const final: number[] = []
+    const taken = new Set<string>()
+    for (const tid of Object.values(slotTurret)) {
+      final.push(tid)
+      const k = mountKey.get(tid)
+      if (k) taken.add(k)
+    }
+    // 剩下的位置拿默认件补。有父炮塔的不参与——它上不上场只看父炮塔选没选；
+    // 被配装明确空出来的位置也不要
     for (const [tid, order, cls, isDefault, parent] of mounts) {
       const key = cls + '#' + order
-      const chosen = Object.values(slotTurret).includes(tid)
-      if (chosen) picked.set(key, tid)
-      // 有父炮塔的不参与「默认件」评选——它上不上场只看父炮塔选没选
-      else if (!parent && !picked.has(key) && isDefault) picked.set(key, tid)
+      if (parent || !isDefault || taken.has(key) || emptyKeys.has(key)) continue
+      taken.add(key)
+      final.push(tid)
     }
-    for (const tid of Object.values(slotTurret)) {
-      if (![...picked.values()].includes(tid) && data.turretWeapons[tid]) picked.set('opt#' + tid, tid)
-    }
-    // 子炮塔跟着父炮塔走：配装换的是主炮塔，挂在它下面的同轴机枪、遥控武器站也要跟着换。
-    // 没有 ParentTurretId 的老数据就退回原来的规则（默认件）。
-    const roots = new Set(picked.values())
+    // 子炮塔跟着父炮塔走：配装换的是主炮塔，挂在它下面的同轴机枪、遥控武器站也要跟着换
+    const roots = new Set(final)
     for (const [tid, , , , parent] of mounts) {
       if (!parent || roots.has(tid)) continue
-      if (roots.has(parent) && data.turretWeapons[tid]) picked.set('child#' + tid, tid)
+      if (roots.has(parent) && data.turretWeapons[tid]) final.push(tid)
     }
-    for (const tid of picked.values()) {
+    for (const tid of final) {
       for (const [wid, channel] of data.turretWeapons[tid] || []) {
         const w = weaponProfile(data, eff, wid, 1, '', channel)
         if (w) weapons.push(w)
