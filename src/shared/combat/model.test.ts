@@ -19,6 +19,9 @@ import {
   totalDps,
   buildingFactor,
   bypassCover,
+  fuseFactor,
+  RADIOFUSE,
+  usesRadioFuse,
   infantryFactor,
   shotAt,
   simulate,
@@ -151,7 +154,8 @@ const DATA: CombatData = {
       0,
       0,
       0,
-      12
+      // 近炸距离照真实数据取溅射半径的 0.8 倍
+      32
     ]
   },
   abilities: {
@@ -672,5 +676,29 @@ describe('步兵减伤和楼房', () => {
     // 机枪单发 0.75 < 5：两条都吃
     const small = shotAt(t.weapons[0], ammo(302, { ignoreCover: 0 }), squad, 200, 'front', { building: 10 })
     expect(small.mul).toBeCloseTo(infantryFactor(3, 0) * buildingFactor(10), 3)
+  })
+})
+
+describe('近炸引信', () => {
+  it('擦身距离按 p × 近炸距离，取 p ≤ 1 那一支积分', () => {
+    const sam = ammo(306) // 近炸 12、溅射 40… 用 fixture 里那发防空弹
+    expect(usesRadioFuse(sam)).toBe(true)
+    // 近炸 32 / 溅射 40：平均 = 1 − 0.8 × avg(p)，p 在 [0.6, 1] 上均匀 → 0.36
+    expect(fuseFactor(sam)).toBeCloseTo(0.36, 2)
+    // 和游戏自己写死的预估常量对得上（0.33），说明这个读法没错
+    expect(Math.abs(fuseFactor(sam) - RADIOFUSE.avgDamage)).toBeLessThan(0.05)
+  })
+
+  it('非制导的不算近炸：步枪弹也带这个字段，那是命中检测半径', () => {
+    expect(usesRadioFuse(ammo(303, { radioFuse: 5 }))).toBe(false)
+    expect(fuseFactor(ammo(303, { radioFuse: 5 }))).toBe(1)
+  })
+
+  it('近炸会把伤害打到三分之一上下，不再一发秒飞机', () => {
+    const plane = profileOf(4, [], DATA)!
+    const sam = ammo(306)
+    const full = damageOf(sam.dmg, 250, 0, sam.armorType)
+    const withFuse = damageOf(sam.dmg * fuseFactor(sam), 250, 0, sam.armorType)
+    expect(withFuse).toBeLessThan(full * 0.5)
   })
 })

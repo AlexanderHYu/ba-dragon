@@ -265,8 +265,8 @@ export const bypassCover = (factor: number, ignoreCover: number): number =>
 /** 这一发打在这个目标身上，基础伤害要先乘多少 */
 export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
   let mul = 1
-  // 近炸引信：在旁边炸，平均只打出三分之一
-  if (usesRadioFuse(a)) mul *= RADIOFUSE.avgDamage
+  // 近炸引信：在旁边炸，按起爆距离的分布算平均能打出多少
+  if (usesRadioFuse(a)) mul *= fuseFactor(a)
   if (target.klass === 'inf' && target.squad.length) {
     const alive = sit.alive ?? target.squad.length
     mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
@@ -290,7 +290,41 @@ export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
  *   MISSILE_MISS_RADIOFUSE_TRIGGER_CHANCE = 0.5
  *       就算判定脱靶，引信还有一半概率照样起爆
  */
-export const RADIOFUSE = { avgDamage: 0.33, missTrigger: 0.5 } as const
+export const RADIOFUSE = {
+  /** MISSILE_RADIOFUSE_HIT_PREDICTED_AVERAGE_DAMAGE_PROPORTION：游戏 AI 预估用的平均伤害比例 */
+  avgDamage: 0.33,
+  /** MISSILE_MISS_RADIOFUSE_TRIGGER_CHANCE：判脱靶之后引信照样起爆的概率 */
+  missTrigger: 0.5,
+  /** RADIUFUSE_MISS_DISTANCE_PROPORTION_MIN / MAX（BattleSystemSettings 字段 55/56，九月版本 0.6 / 1.4） */
+  pMin: 0.6,
+  pMax: 1.4
+} as const
+
+/**
+ * 近炸命中平均打出多少伤害。
+ *
+ * `SeekerSystem.GenerateMissVectorOnTarget` 给每发导弹掷一个
+ * `p = random(MIN, MAX)`（九月版本 0.6 ~ 1.4），擦身距离 = `p × RadioFuseDistance`，
+ * 从**目标外壳**算起。`p > 1` 就是擦过了触发半径（引擎把它标成 isCMMiss），
+ * `p ≤ 1` 才在引信半径里起爆——所以算「命中」这一支的时候取 p ∈ [MIN, 1]，
+ * 按溅射衰减曲线积分出平均伤害比例。
+ *
+ * 交叉验证：防空弹的近炸距离一律是溅射半径的 0.8 倍，代进去平均得 0.36，
+ * 和游戏自己写死的预估常量 0.33 对得上（见 RADIOFUSE.avgDamage），
+ * 说明这个读法是对的。这里用逐弹算出来的值，不用那个粗略常量。
+ */
+export function fuseFactor(a: AmmoProfile): number {
+  if (!usesRadioFuse(a)) return 1
+  const hi = Math.min(1, RADIOFUSE.pMax)
+  const n = 33
+  let sum = 0
+  for (let i = 0; i < n; i++) {
+    const p = RADIOFUSE.pMin + ((hi - RADIOFUSE.pMin) * (i + 0.5)) / n
+    // 擦身距离是从外壳算起的，正好就是 aoeFactor 里的 d
+    sum += aoeFactor(a, p * a.radioFuse, 0)
+  }
+  return r3(sum / n)
+}
 
 /**
  * 这一发走不走近炸引信。

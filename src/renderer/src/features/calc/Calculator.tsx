@@ -17,6 +17,7 @@ import {
   buildingFactor,
   infantryFactor,
   profileOf,
+  fuseFactor,
   RADIOFUSE,
   simulate,
   toM,
@@ -588,12 +589,19 @@ function Row({
                   <i
                     className="tag warn"
                     title={
-                      '近炸引信：导弹在离目标 ' +
+                      '近炸引信：擦身距离 = random(' +
+                      RADIOFUSE.pMin +
+                      '~' +
+                      RADIOFUSE.pMax +
+                      ') × ' +
                       toM(a.radioFuse) +
-                      ' m 处起爆，吃不到直击伤害。游戏自己的常量是平均打出 33%'
+                      ' m，在引信半径内起爆，吃不到直击伤害。' +
+                      '按溅射衰减积分出来平均打 ' +
+                      Math.round(fuseFactor(a) * 100) +
+                      '%，游戏自己的预估常量是 33%'
                     }
                   >
-                    近炸 {toM(a.radioFuse)}m · ×{RADIOFUSE.avgDamage}
+                    近炸 {toM(a.radioFuse)}m · ×{fuseFactor(a)}
                   </i>
                 )}
                 {a.intercept && <i className="tag warn">可被拦</i>}

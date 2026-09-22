@@ -443,12 +443,25 @@ je  → return true          // 通道 0 直接放行
 和空空弹这一批。非制导的高炮近炸弹（130mm AA 之类）也带这个字段，但游戏怎么处理它们
 还没验，所以没算进来。
 
-还差一步才能算准确值而不是用平均数：`RADIUFUSE_MISS_DISTANCE_PROPORTION_MIN/MAX`
-（起爆距离在 `RadioFuseDistance` 的哪一段里随机）。它们在 `BattleSystemSettings` 的
-字段 55/56，但那一段的序列化偏移对不上——字段 87 往后每个 4 字节能对上
-（+528 = 1.0/0.1/1.0/2.0，+552 = MISSILE_MERGE_POWER 1.0），往前推到 50 左右就错位了，
-中间有非 4 字节的字段。按均匀分布反推，平均起爆距离大约是 `RadioFuseDistance` 的 0.84 倍
-（这样平均衰减才等于 0.33），也就是说引信基本上一进触发半径就炸。
+起爆距离的分布也拿到了。`SeekerSystem.GenerateMissVectorOnTarget`（RVA 0x809AC0）：
+
+```
+p = random(MIN, MAX)
+擦身距离（到外壳） = p × 弹药的 RadioFuseDistance
+擦身向量半径 = 目标 RoughRadius + 擦身距离
+p > 1 → 标记 isCMMiss（擦出了触发半径）
+```
+
+`MIN / MAX` = `RADIUFUSE_MISS_DISTANCE_PROPORTION_MIN / MAX`，在 `BattleSystemSettings`
+序列化偏移 **+396 / +400 = 0.6 / 1.4**（字段 55/56）。那一段的对齐是这么定下来的：
+往前数 +376 = 0.8（`MAX_MISSILE_MISS_DISTANCE_PROPORTION`）、+380 = 200（`..._CAP`）、
++392 = 0.25（`MISSILE_OVERKILL_CLEAR_DELAY`）、+404 = 10（`MISSILE_MISS_ADDITIONAL_CLEARENCE`），
+名字和数值全都对得上号。
+
+所以计算器按 **p ∈ [MIN, 1]** 那一支（真在引信半径里起爆的）对溅射衰减曲线积分，
+逐弹算出平均伤害比例。防空弹的近炸距离一律是溅射半径的 0.8 倍，积出来
+**0.345 ~ 0.36**——和游戏自己写死的预估常量 **0.33** 对得上，两条独立的路子互相印证。
+计算器用逐弹算出来的值，不用那个粗略常量。
 
 ## 顺带能做的
 
