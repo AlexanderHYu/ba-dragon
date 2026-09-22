@@ -32,7 +32,7 @@ export function UnitBrowser({
   const [country, setCountry] = useState<number | null>(null)
   const [cat, setCat] = useState<number | null>(null)
   const [spec, setSpec] = useState<number | null>(null)
-  /** 军械库里不显示的那些：跳伞的飞行员、船、测试假人、降落态的飞机 */
+  /** 藏起来的那些：军械库里不显示的 + 母单位换配装换出来的变体 */
   const [showHidden, setShowHidden] = useState(false)
 
   const countries = useMemo(
@@ -48,13 +48,17 @@ export function UnitBrowser({
     [data]
   )
 
-  // 有些单位是别的单位「换配装」换出来的变体（比如 Rangers Mk47 AGL），
-  // 它们自己没有配装槽——槽位在母单位身上。列表里标一下，免得以为是漏了。
+  // 有些单位是别的单位「换配装」换出来的变体：步兵里 194 个有 73 个是这样，
+  // 母单位的「Squad loadout」一换就变成它，它自己没有配装槽。名字还经常和母单位一样
+  // （Rangers RRC ← Rangers RRC/Squad loadout），列在一起像重复项，所以默认不列。
   const variants = useMemo(() => {
     const out = new Set<number>()
     for (const e of Object.values(data.options || {})) if (e?.u) out.add(e.u)
     return out
   }, [data])
+  /** 这个单位该不该默认藏起来 */
+  const isHidden = (id: number, armory: boolean): boolean =>
+    !armory || (variants.has(id) && !(data.unitOptions[id] || []).length)
 
   const list = useMemo(() => {
     const text = q.trim().toLowerCase()
@@ -68,13 +72,13 @@ export function UnitBrowser({
         armory: u[U.armory] !== 0
       }))
       .filter((u) => u.name && u.cost > 0)
-      .filter((u) => showHidden || u.armory)
+      .filter((u) => showHidden || !isHidden(u.id, u.armory))
       .filter((u) => (country == null ? true : u.country === country))
       .filter((u) => (cat == null ? true : u.cat === cat))
       .filter((u) => (spec == null ? true : (data.unitSpecs[u.id] || []).includes(spec)))
       .filter((u) => !text || u.name.toLowerCase().includes(text))
       .sort((a, b) => a.cat - b.cat || b.cost - a.cost)
-  }, [data, q, country, cat, spec, showHidden])
+  }, [data, q, country, cat, spec, showHidden, variants])
 
   return (
     <div className="ub-mask" onClick={onClose}>
@@ -82,9 +86,12 @@ export function UnitBrowser({
         <div className="ub-head">
           <input autoFocus value={q} placeholder="搜单位名" onChange={(e) => setQ(e.target.value)} />
           <span className="dim">{list.length} 个</span>
-          <label className="ub-hidden" title="游戏军械库里不显示的单位：跳伞的飞行员、船、测试假人、降落在机场上的飞机">
+          <label
+            className="ub-hidden"
+            title="默认藏起来的两类：① 军械库里不显示的（跳伞的飞行员、船、测试假人、降落在机场上的飞机）② 母单位换配装换出来的变体（槽位在母单位身上）"
+          >
             <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
-            连隐藏单位一起列
+            连变体和隐藏单位一起列
           </label>
           <span className="grow" />
           <button onClick={onClose}>✕</button>
@@ -152,8 +159,8 @@ export function UnitBrowser({
                     隐藏
                   </i>
                 )}
-                {variants.has(u.id) && !(data.unitOptions[u.id] || []).length && (
-                  <i className="tag dimtag" title="这是别的单位换配装换出来的版本，所以它自己没有配装槽">
+                {u.armory && variants.has(u.id) && !(data.unitOptions[u.id] || []).length && (
+                  <i className="tag dimtag" title="母单位换配装换出来的版本，配装槽在母单位身上">
                     变体
                   </i>
                 )}
