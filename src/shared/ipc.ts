@@ -208,7 +208,14 @@ export interface IpcMap {
   'tracker:bond': [string, Bond | null]
   'ban:get': [void, BanResult | null]
   'ban:check': [void, BanResult | { error: string }]
-  'replay:status': [void, { active: boolean; current: { fid: string; map: string; startedAt: number; sourceId: string } | null; error?: string }]
+  'replay:status': [
+    void,
+    {
+      active: boolean
+      current: { fid: string; map: string; startedAt: number; sourceId: string } | null
+      error?: string
+    }
+  ]
   'replay:list': [void, ReplayItem[]]
   'replay:delete': [string, { ok: boolean; message: string }]
   'replay:clean': [number, number]
@@ -283,13 +290,10 @@ export interface UnitStatRow {
   /** 出现在几局里 */
   matches: number
   /** 多少个不同的人用过 */
-  users: number
 }
 
 export interface UnitStatsFilter {
   mapId?: number | null
-  /** me = 只看本机账号，others = 只看别人，all/不给 = 都算 */
-  who?: 'all' | 'me' | 'others'
   result?: 'win' | 'lose' | null
   rankedOnly?: boolean
   sinceDays?: number
@@ -340,8 +344,12 @@ export interface EventMap {
   'query:state': QueryState
   'query:card': PlayerCard
   'update:available': UpdateInfo
-  'toast': { kind: 'info' | 'warn' | 'error'; text: string }
-  'replay:status': { active: boolean; current: { fid: string; map: string; startedAt: number; sourceId: string } | null; error?: string }
+  toast: { kind: 'info' | 'warn' | 'error'; text: string }
+  'replay:status': {
+    active: boolean
+    current: { fid: string; map: string; startedAt: number; sourceId: string } | null
+    error?: string
+  }
   'replay:changed': void
   'replay:log': string
 }

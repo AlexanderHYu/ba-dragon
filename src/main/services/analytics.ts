@@ -35,7 +35,6 @@ interface Agg {
   kills: number
   lives: number[]
   matches: Set<string>
-  users: Set<string>
 }
 
 const median = (xs: number[]): number | null => {
@@ -100,10 +99,8 @@ export class Analytics {
       if (!players.length) continue
       matches++
       for (const p of players) {
-        const id = String(p.Id)
-        const isMine = mine.has(id)
-        if (f.who === 'me' && !isMine) continue
-        if (f.who === 'others' && isMine) continue
+        // 只统计本机账号出的兵——别人的配装看不全，也不是这页要回答的问题
+        if (!mine.has(String(p.Id))) continue
         const team = teamOf(p)
         if (f.result && m.winner_team != null) {
           const won = team === m.winner_team
@@ -131,8 +128,7 @@ export class Analytics {
               dmg: 0,
               kills: 0,
               lives: [],
-              matches: new Set(),
-              users: new Set()
+              matches: new Set()
             }
             agg.set(key, a)
           }
@@ -145,7 +141,6 @@ export class Analytics {
           a.dmg += Number(u.TotalDamageDealt) || 0
           a.kills += Number(u.KilledCount) || 0
           a.matches.add(m.fid)
-          a.users.add(p.Name || id)
         }
       }
     }
@@ -173,8 +168,7 @@ export class Analytics {
           killsPer1k: spent ? r2((a.kills / spent) * 1000) : null,
           dmgPerSortie: a.deployed ? Math.round(a.dmg / a.deployed) : 0,
           killsPerSortie: a.deployed ? r1(a.kills / a.deployed) : 0,
-          matches: a.matches.size,
-          users: a.users.size
+          matches: a.matches.size
         }
       })
       .sort((x, y) => y.deployed - x.deployed)

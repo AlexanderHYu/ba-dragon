@@ -4,32 +4,55 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { UnitStatRow, UnitStatsFilter, UnitStatsResult } from '@shared/ipc'
 import './stats.css'
 
-const num = (n: number | null | undefined): string =>
-  n == null ? '—' : Math.round(n).toLocaleString('zh-CN')
+const num = (n: number | null | undefined): string => (n == null ? '—' : Math.round(n).toLocaleString('zh-CN'))
 const sec = (n: number | null): string => {
   if (n == null) return '—'
   const m = Math.floor(n / 60)
   return m + '′' + String(Math.round(n % 60)).padStart(2, '0') + '″'
 }
 
-type Col = [key: string, label: string, get: (u: UnitStatRow) => number | null, render?: (u: UnitStatRow) => React.ReactNode, tip?: string]
+type Col = [
+  key: string,
+  label: string,
+  get: (u: UnitStatRow) => number | null,
+  render?: (u: UnitStatRow) => React.ReactNode,
+  tip?: string
+]
 
 const COLS: Col[] = [
   ['cost', '单价', (u) => u.cost, (u) => num(u.cost), '含配装的精确单价'],
-  ['deployed', '出动', (u) => u.deployed, (u) => (
-    <>
-      {u.deployed}
-      {u.refunded > 0 && <span className="dim">（回收 {u.refunded}）</span>}
-    </>
-  ), '这些对局里一共出动了多少次（飞机按架次）'],
-  ['deathRate', '死亡率', (u) => u.deathRate, (u) => (
-    <span className={(u.deathRate ?? 0) >= 80 ? 'lit-bad' : (u.deathRate ?? 100) <= 30 ? 'lit-ok' : ''}>
-      {u.deathRate == null ? '—' : u.deathRate + '%'}
-    </span>
-  ), '阵亡 ÷ 出动'],
+  [
+    'deployed',
+    '出动',
+    (u) => u.deployed,
+    (u) => (
+      <>
+        {u.deployed}
+        {u.refunded > 0 && <span className="dim">（回收 {u.refunded}）</span>}
+      </>
+    ),
+    '这些对局里一共出动了多少次（飞机按架次）'
+  ],
+  [
+    'deathRate',
+    '死亡率',
+    (u) => u.deathRate,
+    (u) => (
+      <span className={(u.deathRate ?? 0) >= 80 ? 'lit-bad' : (u.deathRate ?? 100) <= 30 ? 'lit-ok' : ''}>
+        {u.deathRate == null ? '—' : u.deathRate + '%'}
+      </span>
+    ),
+    '阵亡 ÷ 出动'
+  ],
   ['lifeMedian', '存活·中位', (u) => u.lifeMedian, (u) => sec(u.lifeMedian), '阵亡的那些从出兵到死了多久，取中位数'],
   ['dmgPerSortie', '伤害/次', (u) => u.dmgPerSortie, (u) => num(u.dmgPerSortie), '平均每出动一次打出多少伤害'],
-  ['dmgPer100', '伤害/100花费', (u) => u.dmgPer100, (u) => num(u.dmgPer100), '每 100 点花费打出多少伤害——横向比不同价位的单位就看这个'],
+  [
+    'dmgPer100',
+    '伤害/100花费',
+    (u) => u.dmgPer100,
+    (u) => num(u.dmgPer100),
+    '每 100 点花费打出多少伤害——横向比不同价位的单位就看这个'
+  ],
   ['killsPerSortie', '击杀/次', (u) => u.killsPerSortie, (u) => (u.killsPerSortie || 0).toFixed(1)],
   ['killsPer1k', '击杀/1000花费', (u) => u.killsPer1k, (u) => (u.killsPer1k ?? 0).toFixed(2)],
   ['dmg', '总伤害', (u) => u.dmg, (u) => num(u.dmg)],
@@ -39,8 +62,8 @@ const COLS: Col[] = [
 export default function UnitStats(): React.JSX.Element {
   const [res, setRes] = useState<UnitStatsResult | null>(null)
   const [maps, setMaps] = useState<{ id: number; name: string; matches: number }[]>([])
-  // 默认只看自己出的兵——别人的配装参考价值有限，而且样本混在一起不好比
-  const [f, setF] = useState<UnitStatsFilter>({ who: 'me', minDeployed: 3 })
+  // 这一页只统计自己出的兵（别人的配装看不全，混在一起也没法比）
+  const [f, setF] = useState<UnitStatsFilter>({ minDeployed: 3 })
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'dmgPer100', dir: -1 })
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
@@ -82,20 +105,20 @@ export default function UnitStats(): React.JSX.Element {
         <span className="ico">📊</span>
         单位效能
         <span className="dim">
-          {res ? res.matches + ' 局 · ' + res.records.toLocaleString('zh-CN') + ' 条出兵记录' : '算着…'}
+          {res
+            ? '只算我自己出的兵 · ' + res.matches + ' 局 · ' + res.records.toLocaleString('zh-CN') + ' 条出兵记录'
+            : '算着…'}
         </span>
         {busy && <span className="spin" />}
         <span className="grow" />
-        <input
-          value={q}
-          placeholder="搜单位或挂载"
-          onChange={(e) => setQ(e.target.value)}
-          style={{ width: 160 }}
-        />
+        <input value={q} placeholder="搜单位或挂载" onChange={(e) => setQ(e.target.value)} style={{ width: 160 }} />
       </h2>
 
       <div className="st-filters">
-        <select value={String(f.mapId ?? '')} onChange={(e) => patch({ mapId: e.target.value ? Number(e.target.value) : null })}>
+        <select
+          value={String(f.mapId ?? '')}
+          onChange={(e) => patch({ mapId: e.target.value ? Number(e.target.value) : null })}
+        >
           <option value="">所有地图</option>
           {maps.map((m) => (
             <option key={m.id} value={m.id}>
@@ -103,12 +126,10 @@ export default function UnitStats(): React.JSX.Element {
             </option>
           ))}
         </select>
-        <select value={f.who || 'me'} onChange={(e) => patch({ who: e.target.value as UnitStatsFilter['who'] })}>
-          <option value="me">只看我出的兵</option>
-          <option value="all">所有人</option>
-          <option value="others">只看别人</option>
-        </select>
-        <select value={f.result || ''} onChange={(e) => patch({ result: (e.target.value || null) as UnitStatsFilter['result'] })}>
+        <select
+          value={f.result || ''}
+          onChange={(e) => patch({ result: (e.target.value || null) as UnitStatsFilter['result'] })}
+        >
           <option value="">胜负都算</option>
           <option value="win">只看赢的那一方</option>
           <option value="lose">只看输的那一方</option>
@@ -126,9 +147,7 @@ export default function UnitStats(): React.JSX.Element {
         </label>
       </div>
 
-      {res && res.priced === 'none' && (
-        <div className="lit-bad st-note">没有游戏单位表，配装名字和单价都用不了。</div>
-      )}
+      {res && res.priced === 'none' && <div className="lit-bad st-note">没有游戏单位表，配装名字和单价都用不了。</div>}
       {res && res.unpriced > 0 && (
         <div className="dim st-note">
           有 {res.unpriced} 条记录在单位表里查不到（游戏更新后新加的单位），这些行的单价是老表里的估算。
@@ -146,7 +165,9 @@ export default function UnitStats(): React.JSX.Element {
                   key={k}
                   title={tip}
                   className={'rp-sort' + (sort.key === k ? ' sorted' : '')}
-                  onClick={() => setSort((s) => (s.key === k ? { key: k, dir: (-s.dir) as 1 | -1 } : { key: k, dir: -1 }))}
+                  onClick={() =>
+                    setSort((s) => (s.key === k ? { key: k, dir: -s.dir as 1 | -1 } : { key: k, dir: -1 }))
+                  }
                 >
                   {label}
                   {sort.key === k ? (sort.dir === -1 ? ' ▾' : ' ▴') : ''}
@@ -164,7 +185,11 @@ export default function UnitStats(): React.JSX.Element {
                     key={u.unitId + '|' + u.options}
                     className={'st-row' + (open ? ' open' : '')}
                     onClick={() => setOpenUnit(open ? null : u.unitId)}
-                    title={variants.length > 1 ? '点一下：和这个单位的其它 ' + (variants.length - 1) + ' 套配装并排比' : '这个单位只有这一套配装'}
+                    title={
+                      variants.length > 1
+                        ? '点一下：和这个单位的其它 ' + (variants.length - 1) + ' 套配装并排比'
+                        : '这个单位只有这一套配装'
+                    }
                   >
                     <td>
                       <b>{u.name}</b>
@@ -211,9 +236,7 @@ export default function UnitStats(): React.JSX.Element {
                               ))}
                             </tbody>
                           </table>
-                          <div className="dim st-cmp-note">
-                            样本少的时候别当真——出动个位数的行只能算个印象。
-                          </div>
+                          <div className="dim st-cmp-note">样本少的时候别当真——出动个位数的行只能算个印象。</div>
                         </div>
                       </td>
                     </tr>
