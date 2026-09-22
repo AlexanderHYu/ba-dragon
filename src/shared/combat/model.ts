@@ -52,6 +52,8 @@ export interface AmmoProfile {
   noFalloff: boolean
   /** 导引头类型，0 = 无制导 */
   seeker: number
+  /** 无视掩体的比例（0~1 的浮点，不是开关）：1 = 完全无视楼房和步兵减伤 */
+  ignoreCover: number
   /** 抛射角：反坦克导弹里 36° 那一组就是攻顶的（标枪、地狱火、长钉…） */
   loftAngle: number
   loftHeight: number
@@ -208,6 +210,66 @@ export function damageOf(base: number, pen: number, armor: number, armorType: nu
 export const DIST_SCALE = 2
 /** 世界单位 → 界面上的米 */
 export const toM = (x: number): number => Math.round(x * DIST_SCALE)
+
+/**
+ * 受伤害乘数：步兵自己的抗打击 + 躲在楼里的加成。两条都是乘在**基础伤害**上的，
+ * 乘完才过装甲公式（机器码里就是先把一串乘数乘进 xmm6，再拿它当基础伤害调伤害公式）。
+ *
+ *   步兵：M = clamp01(floor + 每人加成 × 存活人数)   floor/每人加成来自 BuffConfig，跟压制等级走
+ *   楼里：B = clamp01(0.18 + 0.02 × 楼里总人数)      BuildingsConfig，人越多越不禁打
+ *   无视掩体：effective(f) = f + (1 − f) × clamp01(弹药的 IgnoreCover)
+ *
+ * 平地和林区都没有额外减伤——林区只挡视野，那是红龙的设定，这个游戏没有。
+ * 楼房那条还有个门槛：单发伤害够大就直接不吃减伤（BuildingsConfig.BuildingDamageThreshold = 5）。
+ */
+export const BUILDING = { floor: 0.18, perSoldier: 0.02, threshold: 5 } as const
+
+/** 步兵抗打击的两个系数，跟压制等级走（BuffConfig.StressModifiers） */
+export const INF_DMG: Record<number, { floor: number; perSoldier: number }> = {
+  0: { floor: 0.36, perSoldier: 0.02 },
+  1: { floor: 0.36, perSoldier: 0.02 },
+  2: { floor: 0.1, perSoldier: 0.1 }
+}
+
+/** 现场情况：目标在不在楼里、还剩几个人、被压成什么样 */
+export interface Situation {
+  flares?: number
+  /** 射手自己的状态（压制会降命中） */
+  stress?: number
+  /** 目标躲的那栋楼里一共几个人（0 = 不在楼里） */
+  building?: number
+  /** 目标班组还剩几个人（不给就按满编） */
+  alive?: number
+  /** 目标自己的压制等级：0 正常 / 1 黄 / 2 红 */
+  level?: number
+}
+
+export function infantryFactor(alive: number, level = 0): number {
+  const c = INF_DMG[level] || INF_DMG[0]
+  return clamp(c.floor + c.perSoldier * Math.max(0, alive), 0, 1)
+}
+
+export function buildingFactor(occupants: number): number {
+  return clamp(BUILDING.floor + BUILDING.perSoldier * Math.max(0, occupants), 0, 1)
+}
+
+/** 无视掩体：弹药的 IgnoreCover 越高，减伤越接近失效 */
+export const bypassCover = (factor: number, ignoreCover: number): number =>
+  factor + (1 - factor) * clamp(ignoreCover, 0, 1)
+
+/** 这一发打在这个目标身上，基础伤害要先乘多少 */
+export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
+  let mul = 1
+  if (target.klass === 'inf' && target.squad.length) {
+    const alive = sit.alive ?? target.squad.length
+    mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
+  }
+  // 楼房那条只对够小的单发伤害生效
+  if (sit.building && a.dmg < BUILDING.threshold) {
+    mul *= bypassCover(buildingFactor(sit.building), a.ignoreCover)
+  }
+  return mul
+}
 
 export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
 
@@ -406,6 +468,7 @@ function weaponProfile(
       minRange: a[M.minRange],
       noFalloff: !!a[M.noFalloff],
       seeker: a[M.seeker],
+      ignoreCover: a[M.ignoreCover] || 0,
       loftAngle: a[M.loftAngle],
       loftHeight: a[M.loftHeight]
     })
@@ -496,11 +559,7 @@ export interface GuidedHit {
  *   干扰弹效果 = 没放就是 1，放了 n 发就是 ((1 - 抗干扰) × 干扰弹乘数)^n
  * 制导弹药把「散布」两个字段挪作他用：水平 = 基础命中，垂直 = 抗干扰。
  */
-export function guidedHit(
-  a: AmmoProfile,
-  target: UnitProfile,
-  opts: { flares?: number; stress?: number } = {}
-): GuidedHit {
+export function guidedHit(a: AmmoProfile, target: UnitProfile, opts: Situation = {}): GuidedHit {
   const accuracy = a.dispH || 1
   const resist = a.dispV || 0
   const ecm = target.abilities.ecm || 1
@@ -513,12 +572,7 @@ export function guidedHit(
 }
 
 /** 不管制导不制导，给一个命中率 */
-export function hitChanceOf(
-  a: AmmoProfile,
-  target: UnitProfile,
-  dist: number,
-  opts: { flares?: number; stress?: number } = {}
-): number {
+export function hitChanceOf(a: AmmoProfile, target: UnitProfile, dist: number, opts: Situation = {}): number {
   return isGuided(a) ? guidedHit(a, target, opts).total : unguidedHit(a, target, dist)
 }
 
@@ -610,6 +664,8 @@ export function cycleTime(w: WeaponProfile): number {
 }
 
 export interface ShotResult {
+  /** 基础伤害先乘了多少（步兵抗打击 / 楼房减伤），1 = 没打折 */
+  mul: number
   pen: number
   armor: number
   /** 穿深够不够（动能弹够了就是满伤；破甲弹是条曲线，不够也有伤害） */
@@ -640,20 +696,24 @@ export function shotAt(
   target: UnitProfile,
   dist: number,
   facing: Facing,
-  opts: { flares?: number; stress?: number } = {}
+  opts: Situation = {}
 ): ShotResult {
   const pen = penAt(a, dist)
   const armor = armorAt(target, a, facing)
   const through = pen >= armor
-  const dmg = damageOf(a.dmg, pen, armor, a.armorType)
+  // 先把基础伤害乘上减伤（步兵抗打击、躲楼里），再过装甲公式——游戏就是这个顺序
+  const mul = damageMul(target, a, opts)
+  const base = a.dmg * mul
+  const dmg = damageOf(base, pen, armor, a.armorType)
   const hit = hitChanceOf(a, target, dist, opts)
   // 溅射同样走伤害公式（按爆心距离衰减之后再过装甲）
-  const splash = a.aoe > 0 && dmg > 0 ? r2(splashExpected(a, target, dist) * (dmg / a.dmg)) : 0
+  const splash = a.aoe > 0 && dmg > 0 ? r2(splashExpected(a, target, dist) * mul * (dmg / base)) : 0
   const expected = r2(hit * dmg + (1 - hit) * splash)
   const per = cycleTime(w)
   const range = rangeFor(a, target)
   const shots = expected > 0 ? Math.ceil(target.hp / expected) : null
   return {
+    mul: r3(mul),
     pen,
     armor,
     through,
@@ -696,7 +756,7 @@ export function engage(
   target: UnitProfile,
   dist: number,
   facing: Facing,
-  opts: { flares?: number; stress?: number } = {}
+  opts: Situation = {}
 ): Engagement[] {
   return attacker.weapons.map((w) => {
     const all = w.ammo
@@ -875,8 +935,13 @@ export interface Simulation {
  * 开火节奏按武器的弹匣结构走（连发内 dtShot，连发之间 dtBurst，打空 reload + aim），
  * 单发伤害用 shotAt 的期望值（命中 × 直击 + 未命中 × 溅射），弹种是 engage 按游戏规则挑的。
  */
-export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?: number } = {}): Simulation {
+export function simulate(
+  list: Engagement[],
+  target: UnitProfile,
+  opts: { limit?: number; sit?: Situation } = {}
+): Simulation {
   const limit = opts.limit ?? 90
+  const sit = opts.sit || {}
   const lv = stressLevels(target)
   // 同一个非零通道上的武器不能同时开火；通道 0 不占通道，各打各的（和 totalDps 一个规则）
   const byCh = new Map<string, Engagement>()
@@ -936,7 +1001,13 @@ export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?
         const r = g.e.result as ShotResult
         const a = g.e.best as AmmoProfile
         const n = g.w.count
-        const dealt = Math.min(hp, r.expected * n)
+        // 减伤是活的：步兵一边掉人一边变，压制到红了就直接不扛打了，所以每一发重算
+        const mul = damageMul(target, a, { ...sit, alive, level })
+        const base = a.dmg * mul
+        const dmg = damageOf(base, r.pen, r.armor, a.armorType)
+        const splash = a.aoe > 0 && dmg > 0 ? (r.splash / Math.max(1e-9, r.mul)) * mul : 0
+        const expected = r.hit * dmg + (1 - r.hit) * splash
+        const dealt = Math.min(hp, expected * n)
         hp -= dealt
         g.shots += n
         // 压制 = 弹药自带的（按命中率打折）+ 掉血换算过来的

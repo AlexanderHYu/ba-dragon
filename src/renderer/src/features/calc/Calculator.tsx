@@ -14,6 +14,8 @@ import {
   isGuided,
   lethalRadius,
   defaultOpts,
+  buildingFactor,
+  infantryFactor,
   profileOf,
   simulate,
   toM,
@@ -23,6 +25,7 @@ import {
   type AmmoProfile,
   type Engagement,
   type Facing,
+  type Situation,
   type UnitProfile
 } from '@shared/combat/model'
 import UnitPicker from './UnitPicker'
@@ -49,6 +52,8 @@ export default function Calculator(): React.JSX.Element {
   const [dist, setDist] = useState(500)
   const [facing, setFacing] = useState<Facing>('front')
   const [flares, setFlares] = useState(1)
+  /** 目标躲的那栋楼里一共几个人（0 = 在平地上） */
+  const [building, setBuilding] = useState(0)
   const [stress, setStress] = useState(1)
   const [open, setOpen] = useState<number | null>(null)
   /** 关掉的武器，不参与「同时开火」的总输出和曲线 */
@@ -70,7 +75,7 @@ export default function Calculator(): React.JSX.Element {
 
   const A = useMemo(() => profileOf(attacker.unit, attacker.opts, data), [attacker, data])
   const T = useMemo(() => profileOf(target.unit, target.opts, data), [target, data])
-  const opts = useMemo(() => ({ flares, stress }), [flares, stress])
+  const opts = useMemo(() => ({ flares, stress, building }), [flares, stress, building])
   const list = useMemo(() => (A && T ? engage(A, T, dist, facing, opts) : []), [A, T, dist, facing, opts])
 
   // 滑条的上限 = 这个攻击方能够着这类目标的最远射程（打飞机看高空射程，打直升机看低空）
@@ -137,6 +142,20 @@ export default function Calculator(): React.JSX.Element {
             />
             <span className="dim">最远 {toM(maxRange)} m</span>
           </label>
+          {T?.klass === 'inf' && (
+            <label className="calc-range">
+              楼里 <b>{building === 0 ? '不在楼里' : building + ' 人'}</b>
+              <input
+                type="range"
+                min={0}
+                max={20}
+                step={1}
+                value={building}
+                onChange={(e) => setBuilding(Number(e.target.value))}
+              />
+              <span className="dim">楼里人越多越不禁打</span>
+            </label>
+          )}
           <div className="calc-faces">
             打哪面
             {FACES.map((f) => (
@@ -205,6 +224,23 @@ export default function Calculator(): React.JSX.Element {
                     T.kin[FACES.indexOf(facing)] +
                     ' / 破甲 ' +
                     T.heat[FACES.indexOf(facing)]}
+                {T.klass === 'inf' && T.squad.length > 0 && (
+                  <>
+                    {' · '}
+                    <b title="步兵抗打击：clamp01(0.36 + 0.02 × 存活人数)，压成红的时候换成 0.1 + 0.1 × 人数">
+                      受伤害 ×{infantryFactor(T.squad.length, 0).toFixed(2)}
+                    </b>
+                    <span className="dim">（{T.squad.length} 人满编）</span>
+                    {building > 0 && (
+                      <>
+                        {' · '}
+                        <b title="楼里：clamp01(0.18 + 0.02 × 楼里总人数)，只对单发伤害小于 5 的弹生效">
+                          楼里再 ×{buildingFactor(building).toFixed(2)}
+                        </b>
+                      </>
+                    )}
+                  </>
+                )}
               </span>
             </h2>
 
@@ -293,7 +329,7 @@ export default function Calculator(): React.JSX.Element {
 
           <div className="card">
             <h2>伤害与压制曲线</h2>
-            <StressPanel target={T} list={onList} />
+            <StressPanel target={T} list={onList} sit={opts} />
           </div>
 
           <div className="cols">
@@ -349,8 +385,16 @@ export default function Calculator(): React.JSX.Element {
  * 压制与掉人：把所有能同时开火的武器沿时间轴打一遍，
  * 看目标什么时候变黄、什么时候变红、步兵按什么顺序掉人。
  */
-function StressPanel({ target, list }: { target: UnitProfile; list: Engagement[] }): React.JSX.Element {
-  const sim = useMemo(() => simulate(list, target, { limit: 90 }), [list, target])
+function StressPanel({
+  target,
+  list,
+  sit
+}: {
+  target: UnitProfile
+  list: Engagement[]
+  sit: Situation
+}): React.JSX.Element {
+  const sim = useMemo(() => simulate(list, target, { limit: 90, sit }), [list, target, sit])
   const deaths = sim.events.filter((e) => e.kind === 'soldier').map((e) => e.t)
   const tiers = useMemo(() => {
     const by = new Map<number, string[]>()
@@ -551,6 +595,12 @@ function Row({
             </span>
           ) : (
             '—'
+          )}
+          {r && r.mul < 1 && (
+            <span className="dim" title="基础伤害先乘了减伤（步兵抗打击 / 躲楼里），再过装甲公式">
+              {' '}
+              ×{r.mul}
+            </span>
           )}
         </td>
         <td className="num">{r ? r.expected : '—'}</td>

@@ -17,6 +17,9 @@ import {
   penAt,
   profileOf,
   totalDps,
+  buildingFactor,
+  bypassCover,
+  infantryFactor,
   shotAt,
   simulate,
   STRESS,
@@ -185,6 +188,7 @@ const ammo = (id: number, over: Partial<AmmoProfile> = {}): AmmoProfile => {
     minRange: a[18],
     noFalloff: !!a[21],
     seeker: a[22],
+    ignoreCover: a[20] || 0,
     dispMin: a[23],
     loftAngle: a[24],
     loftHeight: a[25],
@@ -533,7 +537,7 @@ describe('压制与掉人', () => {
     const t = tank()!
     const squad = profileOf(3, [], DATA)!
     expect(squad.squad.map((m) => m.death)).toEqual([1, 2, 3])
-    const sim = simulate(engage(t, squad, 200, 'front'), squad, { limit: 120 })
+    const sim = simulate(engage(t, squad, 200, 'front'), squad, { limit: 400 })
     const fallen = sim.events.filter((e) => e.kind === 'soldier')
     expect(fallen.length).toBe(3)
     expect(fallen[0].text).toContain('步枪')
@@ -590,5 +594,51 @@ describe('子炮塔跟着父炮塔换', () => {
     const swapped = profileOf(1, [900], DATA)!
     expect(swapped.weapons.map((w) => w.id).sort()).toEqual([201, 202])
     expect(swapped.weapons.length).toBe(2)
+  })
+})
+
+describe('步兵减伤和楼房', () => {
+  it('步兵抗打击：clamp01(floor + 每人 × 存活人数)，压到红就不扛打了', () => {
+    // 冷静/黄：0.36 + 0.02×人数；红：0.1 + 0.1×人数
+    expect(infantryFactor(10, 0)).toBeCloseTo(0.56, 6)
+    expect(infantryFactor(10, 1)).toBeCloseTo(0.56, 6)
+    expect(infantryFactor(10, 2)).toBeCloseTo(1, 6)
+    // 人越死越少，剩下的反而越扛打
+    expect(infantryFactor(3, 0)).toBeCloseTo(0.42, 6)
+    // 封顶 1，不会放大伤害
+    expect(infantryFactor(50, 0)).toBe(1)
+  })
+
+  it('楼里：0.18 + 0.02 × 楼里总人数', () => {
+    expect(buildingFactor(10)).toBeCloseTo(0.38, 6)
+    expect(buildingFactor(0)).toBeCloseTo(0.18, 6)
+    expect(buildingFactor(100)).toBe(1)
+  })
+
+  it('无视掩体按比例抵消减伤', () => {
+    expect(bypassCover(0.5, 0)).toBeCloseTo(0.5, 6)
+    expect(bypassCover(0.5, 1)).toBeCloseTo(1, 6)
+    expect(bypassCover(0.5, 0.5)).toBeCloseTo(0.75, 6)
+  })
+
+  it('朋友那个例子：10 人班组独占一栋楼、IgnoreCover 0 → 21.28%', () => {
+    expect(infantryFactor(10, 0) * buildingFactor(10)).toBeCloseTo(0.2128, 4)
+  })
+
+  it('平地上的车辆不吃这套减伤', () => {
+    const t = tank()!
+    const r = shotAt(t.weapons[0], ammo(300), profileOf(1, [901], DATA)!, 300, 'side')
+    expect(r.mul).toBe(1)
+  })
+
+  it('伤害够大就不吃楼房减伤（BuildingDamageThreshold = 5）', () => {
+    const t = tank()!
+    const squad = inf()!
+    // 120mm 单发 10 > 5：楼房那条不生效，只剩步兵自己的
+    const big = shotAt(t.weapons[0], ammo(300, { ignoreCover: 0 }), squad, 200, 'front', { building: 10 })
+    expect(big.mul).toBeCloseTo(infantryFactor(3, 0), 3)
+    // 机枪单发 0.75 < 5：两条都吃
+    const small = shotAt(t.weapons[0], ammo(302, { ignoreCover: 0 }), squad, 200, 'front', { building: 10 })
+    expect(small.mul).toBeCloseTo(infantryFactor(3, 0) * buildingFactor(10), 3)
   })
 })

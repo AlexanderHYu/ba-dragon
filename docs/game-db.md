@@ -377,22 +377,43 @@ je  → return true          // 通道 0 直接放行
 和游戏本体的公式一致），只在显示的时候乘 2（`DIST_SCALE`）。
 单位的长宽高是例外：那本来就是真实米数（艾布拉姆斯 7.6 m），不乘。
 
-### 掩体（还没做完）
+### 掩体和步兵减伤
 
-`DealUnitDamage` 里有一段掩体折算，读出来是：
+**林区不减伤**——那是红龙的设定，这个游戏没有。林区只挡视野。平地也没有额外减伤。
+真正压低伤害的是两条，都乘在**基础伤害**上，乘完才过装甲公式
+（机器码里就是把一串乘数乘进 xmm6，再拿它当基础伤害调伤害公式）：
 
 ```
-掩体系数 = 目标当前地形的 cover 值（≤ 1）
-ignore   = clamp(弹药的 IgnoreCover, 0, 1)      // 是个 0~1 的浮点，不是开关
-伤害 ×= 掩体系数 + (1 − 掩体系数) × ignore
+步兵自己抗打击   M = clamp01(floor + 每人加成 × 存活人数)
+楼里             B = clamp01(0.18 + 0.02 × 楼里总人数)
+无视掩体         effective(f) = f + (1 − f) × clamp01(弹药的 IgnoreCover)
+两条都吃的时候   effective(M) × effective(B)
 ```
 
-`IgnoreCover = 1` 就是完全无视掩体。这一段前面还有个门槛判断：单发伤害超过某个配置值
-（`[config+0x2c]`）的时候直接跳过掩体折算——大口径弹不吃掩体。
+`M` 那两个系数在 `BuffConfig.StressModifiers` 里，**跟压制等级走**：
 
-还差最后一步：每种地形（林区 / 楼区 / 无掩体）具体的 cover 数值还没定位到
-（`FogOfWarConfig.TerrainTypeSettings` 里的 `Cover` 字段看着像，但它的值是 1 和 2，
-更像视野用的等级，不是伤害乘数）。没定下来之前计算器里不放这一项，免得编数字。
+| 目标状态 | floor | 每人加成 | 10 人班组 |
+| --- | --- | --- | --- |
+| 正常 / 黄 | 0.36 | 0.02 | ×0.56 |
+| 红（崩溃） | 0.1 | 0.1 | **×1.00** |
+
+两个结论：**被压成红的步兵不但打不准，还直接不扛打了**；班组掉人之后剩下的反而更耐打
+（3 个人是 ×0.42）。`BuffDebuffSystem.SetStressModifiers` 里是
+`xmm1 = 人数 × [cfg+0x4c] + [cfg+0x48]`，再 clamp 到 [0,1]，乘进单位的受伤害乘数。
+
+`B` 的两个数读自 `BuildingsConfig`（九月版本：`DamageModifierFloor` 0.18、
+`DamageModifierPerSoldier` 0.02、`BuildingDamageThreshold` 5）。楼里的人数算的是
+**这栋楼里所有班组**，不只是挨打的那一个。单发伤害超过门槛（5）的弹直接跳过楼房减伤——
+大口径炮弹不吃楼。
+
+`IgnoreCover` 是弹药表里的一个 **0~1 浮点**（不是开关）：数据里 493 种弹是 0，
+22 种是 1，中间还有 0.08 ~ 0.5 的一堆。1 = 完全无视这两条减伤。
+
+出处：`ShellHitSystem.DealUnitDamage` 里的 `effective()` 那一段和 `BuffDebuffSystem.SetStressModifiers`
+是我自己反汇编核的；`BuildingsConfig`、`BuffConfig` 的数值是从 `globalgamemanagers.assets` 里读的。
+两条乘数各自的公式和常量都对得上朋友那份提取。**还没完全核实的**：楼房那条的门槛具体接在哪、
+`IgnoreCover` 是不是对 M 和 B 各抵消一次（我只在其中一处看到了 `effective()`，
+另一处按朋友那份写的）。
 
 ## 顺带能做的
 
