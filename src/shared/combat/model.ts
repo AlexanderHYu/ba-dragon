@@ -769,7 +769,37 @@ export function rangeFor(a: AmmoProfile, target: UnitProfile): number {
   return target.klass === 'plane' ? a.highAlt || a.range : target.klass === 'heli' ? a.lowAlt || a.range : a.range
 }
 
-/** 打一发平均占多少时间（弹匣打完 + 装填 + 瞄准，摊到每一发） */
+/**
+ * 打到第 n 发是第几秒——按武器真正的节奏走，不是拿平均值乘出来的。
+ *
+ * 像布莱德利的双联 TOW：弹匣 2 发、两发之间 3.5 秒、打完要装 10 秒，
+ * 所以前两发来得很快（1.5s、5s），第三发要等到 16.5s。按平均节奏（每发 7.5 秒）
+ * 算出来的「击杀时间」会把这种「先急后慢」抹平。
+ */
+export function timeForShots(w: WeaponProfile, n: number): number {
+  if (n <= 0) return 0
+  const burst = Math.max(1, w.burst || w.mag || 1)
+  const mag = Math.max(1, w.mag || 1)
+  let t = w.aim
+  let left = mag
+  let inBurst = burst
+  for (let i = 1; i < n; i++) {
+    left--
+    if (left <= 0) {
+      t += w.reload + w.aim
+      left = mag
+      inBurst = burst
+    } else if (--inBurst <= 0) {
+      t += w.dtBurst
+      inBurst = burst
+    } else {
+      t += w.dtShot
+    }
+  }
+  return Math.round(t * 10) / 10
+}
+
+/** 打一发平均占多少时间（弹匣打完 + 装填 + 瞄准，摊到每一发）——算秒伤用 */
 export function cycleTime(w: WeaponProfile): number {
   const bursts = Math.max(1, Math.ceil(w.mag / w.burst))
   const inBurst = (w.burst - 1) * w.dtShot
@@ -837,7 +867,7 @@ export function shotAt(
     splash,
     expected,
     shots,
-    seconds: shots == null ? null : Math.round((w.aim + (shots - 1) * per) * 10) / 10,
+    seconds: shots == null ? null : timeForShots(w, shots),
     dps: r2((expected * w.count) / per),
     stressShots: a.stress > 0 ? Math.ceil(target.maxStress / a.stress) : null,
     inRange: dist >= a.minRange && dist <= range,

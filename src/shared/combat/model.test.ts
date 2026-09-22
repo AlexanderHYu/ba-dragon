@@ -25,6 +25,7 @@ import {
   infantryFactor,
   shotAt,
   simulate,
+  timeForShots,
   STRESS,
   stressLevels,
   stressPenalty,
@@ -732,5 +733,27 @@ describe('APS 和近炸的浮动', () => {
     // 贴脸炸 = 1 − 0.6×0.8 = 0.52；擦边炸 = 1 − 1×0.8 = 0.2
     expect(bestF).toBeCloseTo(0.52, 2)
     expect(worstF).toBeCloseTo(0.2, 2)
+  })
+})
+
+describe('弹匣节奏', () => {
+  it('击杀时间按真实节奏走，不是拿平均值乘的', () => {
+    // 造一件「两连发 + 长装填」的武器，和布莱德利的双联 TOW 一个结构
+    const t = tank()!
+    const w = { ...t.weapons[0], mag: 2, burst: 1, dtShot: 0, dtBurst: 3.5, reload: 10, aim: 1.5 }
+    // 前两发在装填之前打完
+    expect(timeForShots(w, 1)).toBe(1.5)
+    expect(timeForShots(w, 2)).toBe(5)
+    // 第三发要等装填 + 重新瞄准
+    expect(timeForShots(w, 3)).toBe(16.5)
+    expect(timeForShots(w, 4)).toBe(20)
+    // 按平均节奏（每发 7.5 秒）算的话第二发会变成 9 秒，差了快一倍
+    expect(cycleTime(w)).toBeCloseTo(7.5, 2)
+  })
+
+  it('单发武器两种算法一致', () => {
+    const t = tank()!
+    const gun = { ...t.weapons[0], mag: 1, burst: 1, dtShot: 0, dtBurst: 1, reload: 6.5, aim: 2 }
+    expect(timeForShots(gun, 3)).toBeCloseTo(2 + 2 * cycleTime(gun), 2)
   })
 })

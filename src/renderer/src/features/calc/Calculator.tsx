@@ -589,6 +589,24 @@ function Row({
         <td>
           {e.weapon.name}
           {e.weapon.count > 1 && <span className="dim"> ×{e.weapon.count}</span>}
+          {/* 双联 TOW 那种「先急后慢」的节奏：弹匣打完要长装填，前几发来得快 */}
+          {e.weapon.mag > 1 && e.weapon.reload > 0 && (
+            <span
+              className="dim calc-mag"
+              title={
+                '弹匣 ' +
+                e.weapon.mag +
+                ' 发，打空要装 ' +
+                e.weapon.reload +
+                ' 秒。前几发来得快，第 ' +
+                (e.weapon.mag + 1) +
+                ' 发要等装填——「击杀时间」是按这个节奏走的，不是拿平均值乘的'
+              }
+            >
+              {' '}
+              {e.weapon.mag} 发 / 装 {e.weapon.reload}s
+            </span>
+          )}
           {e.weapon.pylons > 1 && (
             <span className="dim" title="同型挂架合并齐射，发射间隔按总弹量摊">
               {' '}
