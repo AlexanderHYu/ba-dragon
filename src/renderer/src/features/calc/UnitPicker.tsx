@@ -32,6 +32,8 @@ export function UnitBrowser({
   const [country, setCountry] = useState<number | null>(null)
   const [cat, setCat] = useState<number | null>(null)
   const [spec, setSpec] = useState<number | null>(null)
+  /** 军械库里不显示的那些：跳伞的飞行员、船、测试假人、降落态的飞机 */
+  const [showHidden, setShowHidden] = useState(false)
 
   const countries = useMemo(
     () => Object.entries(data.countries || {}).map(([id, name]) => ({ id: Number(id), name })),
@@ -62,15 +64,17 @@ export function UnitBrowser({
         name: u[U.name],
         cost: u[U.cost],
         cat: u[U.cat],
-        country: u[U.country]
+        country: u[U.country],
+        armory: u[U.armory] !== 0
       }))
       .filter((u) => u.name && u.cost > 0)
+      .filter((u) => showHidden || u.armory)
       .filter((u) => (country == null ? true : u.country === country))
       .filter((u) => (cat == null ? true : u.cat === cat))
       .filter((u) => (spec == null ? true : (data.unitSpecs[u.id] || []).includes(spec)))
       .filter((u) => !text || u.name.toLowerCase().includes(text))
       .sort((a, b) => a.cat - b.cat || b.cost - a.cost)
-  }, [data, q, country, cat, spec])
+  }, [data, q, country, cat, spec, showHidden])
 
   return (
     <div className="ub-mask" onClick={onClose}>
@@ -78,6 +82,10 @@ export function UnitBrowser({
         <div className="ub-head">
           <input autoFocus value={q} placeholder="搜单位名" onChange={(e) => setQ(e.target.value)} />
           <span className="dim">{list.length} 个</span>
+          <label className="ub-hidden" title="游戏军械库里不显示的单位：跳伞的飞行员、船、测试假人、降落在机场上的飞机">
+            <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+            连隐藏单位一起列
+          </label>
           <span className="grow" />
           <button onClick={onClose}>✕</button>
         </div>
@@ -139,6 +147,11 @@ export function UnitBrowser({
             >
               <span className="ub-name">
                 {u.name}
+                {!u.armory && (
+                  <i className="tag warn" title="游戏军械库里不显示的单位，出不了兵，一般也打不着">
+                    隐藏
+                  </i>
+                )}
                 {variants.has(u.id) && !(data.unitOptions[u.id] || []).length && (
                   <i className="tag dimtag" title="这是别的单位换配装换出来的版本，所以它自己没有配装槽">
                     变体

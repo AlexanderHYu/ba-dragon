@@ -8,7 +8,8 @@ import raw from './combat.json'
  * 目标类型位就是游戏里的 Type 字段：2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船，
  * 弹药的 TargetType 位图和它做与运算，有交集才打得了。
  */
-export type CUnit = [string, number, number, number, number, number, number, number, number, number, number]
+/** 单位：[名字, 花费, 长, 宽, 高, 压制上限, 隐蔽, 分类, 定位, 国家, 目标类型位, 在不在军械库里] */
+export type CUnit = [string, number, number, number, number, number, number, number, number, number, number, 0 | 1]
 /** 装甲：[血量, 动能前, 动能侧, 动能后, 动能顶, 破甲前, 破甲侧, 破甲后, 破甲顶, 步兵护甲值] */
 export type CArmor = [number, number, number, number, number, number, number, number, number, number]
 /**
@@ -159,7 +160,8 @@ export const U = {
   cat: 7,
   role: 8,
   country: 9,
-  targetBit: 10
+  targetBit: 10,
+  armory: 11
 } as const
 export const A = { hp: 0, kf: 1, ks: 2, kr: 3, kt: 4, hf: 5, hs: 6, hr: 7, ht: 8, inf: 9 } as const
 export const W = {

@@ -28,8 +28,12 @@ export function buildCombat(r: RawTables): CombatData {
 
   const units: Record<number, CUnit> = {}
   for (const u of row('Units')) {
+    // 军械库里不显示的那些（跳伞的飞行员、船、测试假人、降落态的飞机）用库里的真名，
+    // 它们的 HUDName 常常和正常单位撞名——「F-15EX Eagle II (landed)」的 HUDName 就是
+    // 「F-15EX Eagle II」，混在列表里看着像重复
+    const armory = b(u.DisplayInArmory)
     units[n(u.Id)] = [
-      s(u.HUDName) || s(u.Name),
+      armory ? s(u.HUDName) || s(u.Name) : s(u.Name) || s(u.HUDName),
       n(u.Cost),
       n(u.Length),
       n(u.Width),
@@ -39,7 +43,8 @@ export function buildCombat(r: RawTables): CombatData {
       n(u.CategoryType),
       n(u.Role),
       n(u.CountryId),
-      n(u.Type)
+      n(u.Type),
+      armory
     ] as CUnit
   }
 
