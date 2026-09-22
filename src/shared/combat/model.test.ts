@@ -18,6 +18,10 @@ import {
   profileOf,
   totalDps,
   shotAt,
+  simulate,
+  STRESS,
+  stressLevels,
+  stressPenalty,
   unguidedHit,
   type AmmoProfile
 } from './model'
@@ -72,7 +76,34 @@ const DATA: CombatData = {
   ammo: {
     // [名字, 伤害, 压制, 穿近, 穿远, 地面射程, 低空, 高空, 目标位图, 装甲类型, AOE, AOE压制, 超压,
     //  顶攻, 可拦, 激光, 散布H, V, 最小射程, 暴击, 无视掩体, 伤害不衰减, 导引头, 最小散布, 抛射角, 抛射高度]
-    300: ['尾翼稳定脱壳穿甲弹', 10, 120, 800, 500, 700, 0, 0, 36, 1, 0, 0, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0],
+    300: [
+      '尾翼稳定脱壳穿甲弹',
+      10,
+      120,
+      800,
+      500,
+      700,
+      0,
+      0,
+      36,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1.8,
+      1.5,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
     301: ['破甲弹', 11.5, 120, 400, 400, 700, 0, 0, 39, 2, 9, 9, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0],
     302: ['7.62 机枪弹', 0.75, 16, 20, 10, 300, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0],
     303: ['5.56 步枪弹', 1.2, 12, 15, 7, 250, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0],
@@ -462,5 +493,69 @@ describe('拿软件自带的真数据兜一遍', () => {
       ok++
     }
     expect(ok).toBeGreaterThan(100)
+  })
+})
+
+describe('压制与掉人', () => {
+  it('黄线红线按 MaxStress 折算，步兵的黄线更低', () => {
+    expect(stressLevels(tank()!)).toEqual({ shocked: 500, panicked: 800 })
+    expect(stressLevels(inf()!)).toEqual({ shocked: 400, panicked: 800 })
+  })
+
+  it('挨打先变黄再变红，红的时刻不早于黄', () => {
+    const t = tank()!
+    const victim = profileOf(1, [901], DATA)! // 纸装甲的坦克，打得动
+    const sim = simulate(engage(t, victim, 300, 'side'), victim, { limit: 60 })
+    expect(sim.shockedAt).not.toBeNull()
+    if (sim.shockedAt != null && sim.panickedAt != null) expect(sim.panickedAt).toBeGreaterThanOrEqual(sim.shockedAt)
+    const kinds = sim.events.map((e) => e.kind)
+    expect(kinds.indexOf('shocked')).toBeLessThan(kinds.indexOf('panicked') < 0 ? 99 : kinds.indexOf('panicked'))
+  })
+
+  it('同一个发射通道只出一件武器', () => {
+    const t = tank()!
+    const victim = profileOf(1, [901], DATA)!
+    const sim = simulate(engage(t, victim, 300, 'side'), victim, { limit: 30 })
+    const channels = sim.firing.map((f) => f.weapon.channel)
+    expect(new Set(channels).size).toBe(channels.length)
+  })
+
+  it('步兵按 DeathPriority 掉人：数字大的先死，火箭筒手最后走', () => {
+    const t = tank()!
+    const squad = profileOf(3, [], DATA)!
+    expect(squad.squad.map((m) => m.death)).toEqual([1, 2, 3])
+    const sim = simulate(engage(t, squad, 200, 'front'), squad, { limit: 120 })
+    const fallen = sim.events.filter((e) => e.kind === 'soldier')
+    expect(fallen.length).toBe(3)
+    expect(fallen[0].text).toContain('步枪')
+    expect(fallen[2].text).toContain('火箭筒')
+    // 每死一个人，血量正好跨过一格
+    expect(sim.hpPerSoldier).toBeCloseTo(squad.hp / 3, 2)
+  })
+
+  it('停火之后恢复是加速的：第一秒 2 点，之后每秒多 1 点', () => {
+    expect(STRESS.recovery).toBe(1)
+    const sim = simulate([], inf()!, { limit: 5 })
+    expect(sim.recoveryFirst).toBe(2)
+    // 没人开火就一直是 0，也不会掉到负数
+    expect(sim.samples.every((s) => s.stress === 0)).toBe(true)
+  })
+
+  it('压制惩罚按兵种取：步兵红了瞄准要 3 倍时间', () => {
+    expect(stressPenalty(inf()!, 2).aim).toBe(3)
+    expect(stressPenalty(tank()!, 2).aim).toBe(2)
+    expect(stressPenalty(tank()!, 0).reload).toBe(1)
+  })
+})
+
+describe('班组同时开火', () => {
+  it('班组里不同的枪各占一个通道，能一起打', () => {
+    const squad = profileOf(3, [], DATA)!
+    const channels = squad.weapons.map((w) => w.channel)
+    expect(new Set(channels).size).toBe(channels.length)
+    // 步枪 + 火箭筒都算进总输出，不是只算最能打的那件
+    const t = profileOf(1, [901], DATA)!
+    const total = totalDps(engage(squad, t, 200, 'front'))
+    expect(total.byChannel.length).toBeGreaterThan(1)
   })
 })

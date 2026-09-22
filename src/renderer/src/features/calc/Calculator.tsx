@@ -13,15 +13,20 @@ import {
   guidedHit,
   isGuided,
   lethalRadius,
+  defaultOpts,
   profileOf,
+  simulate,
+  stressPenalty,
+  STRESS_NAME,
   totalDps,
   type AmmoProfile,
   type Engagement,
   type Facing,
   type UnitProfile
 } from '@shared/combat/model'
-import UnitPicker, { defaultOpts } from './UnitPicker'
+import UnitPicker from './UnitPicker'
 import AoeChart from './AoeChart'
+import StressChart from './StressChart'
 import './calc.css'
 
 const FACES: Facing[] = ['front', 'side', 'rear', 'top']
@@ -96,9 +101,7 @@ export default function Calculator(): React.JSX.Element {
         <h2>
           <span className="ico">🧮</span>
           配装计算器
-          <span className="dim">
-            按游戏本体的算法算{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}
-          </span>
+          <span className="dim">按游戏本体的算法算{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}</span>
         </h2>
 
         <div className="calc-pickers">
@@ -198,17 +201,25 @@ export default function Calculator(): React.JSX.Element {
                     <th className="num" title="非制导按散布和目标投影面积算；制导 = 基础命中 × ECM × 干扰弹 × 状态">
                       命中率
                     </th>
-                    <th className="num" title="这个距离上的穿深 vs 目标这一面的装甲">穿深/装甲</th>
+                    <th className="num" title="这个距离上的穿深 vs 目标这一面的装甲">
+                      穿深/装甲
+                    </th>
                     <th
                       className="num"
                       title="破甲弹：伤害 × 穿深² ÷ (穿深² + 装甲²)；动能弹：穿得动满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，有 10% 下限"
                     >
                       打中掉多少血
                     </th>
-                    <th className="num" title="命中 × 直击 + 未命中 × 溅射">一发期望</th>
+                    <th className="num" title="命中 × 直击 + 未命中 × 溅射">
+                      一发期望
+                    </th>
                     <th className="num">打死要几发</th>
-                    <th className="num" title="含瞄准和装填">几秒</th>
-                    <th className="num" title="期望伤害 ÷ 每发耗时，班组按人数乘">每秒</th>
+                    <th className="num" title="含瞄准和装填">
+                      几秒
+                    </th>
+                    <th className="num" title="期望伤害 ÷ 每发耗时，班组按人数乘">
+                      每秒
+                    </th>
                     <th className="num">射程</th>
                   </tr>
                 </thead>
@@ -249,6 +260,11 @@ export default function Calculator(): React.JSX.Element {
             </div>
           </div>
 
+          <div className="card">
+            <h2>压制与掉人</h2>
+            <StressPanel target={T} list={list} />
+          </div>
+
           <div className="cols">
             <div className="card">
               <h2>干扰与拦截</h2>
@@ -280,8 +296,8 @@ export default function Calculator(): React.JSX.Element {
                       落点离 {T.name} 中心 <b>{lethalRadius(aoe, T) ?? '—'} m</b> 以内能一发带走（{T.hp} HP）
                     </span>
                     <span className="dim">
-                      距离是从目标外壳算的：{T.name} 外壳半径 {T.bounds} m，所以大目标更容易被溅到；
-                      引擎只处理爆心 100 m 以内的单位。
+                      距离是从目标外壳算的：{T.name} 外壳半径 {T.bounds} m，所以大目标更容易被溅到； 引擎只处理爆心 100
+                      m 以内的单位。
                     </span>
                   </div>
                 </>
@@ -293,6 +309,124 @@ export default function Calculator(): React.JSX.Element {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * 压制与掉人：把所有能同时开火的武器沿时间轴打一遍，
+ * 看目标什么时候变黄、什么时候变红、步兵按什么顺序掉人。
+ */
+function StressPanel({ target, list }: { target: UnitProfile; list: Engagement[] }): React.JSX.Element {
+  const sim = useMemo(() => simulate(list, target, { limit: 90 }), [list, target])
+  const deaths = sim.events.filter((e) => e.kind === 'soldier').map((e) => e.t)
+  const tiers = useMemo(() => {
+    const by = new Map<number, string[]>()
+    for (const m of target.squad) by.set(m.death, [...(by.get(m.death) || []), m.name])
+    return [...by.entries()].sort((a, b) => b[0] - a[0])
+  }, [target])
+
+  if (!sim.firing.length) {
+    return <div className="empty">这个距离上没有武器能打到它，自然也压不住</div>
+  }
+
+  return (
+    <>
+      <div className="calc-stress-top">
+        <span className={sim.shockedAt == null ? 'dim' : 'lit-warn'}>
+          变黄 <b>{sim.shockedAt == null ? '压不黄' : sim.shockedAt + 's'}</b>
+        </span>
+        <span className={sim.panickedAt == null ? 'dim' : 'lit-bad'}>
+          变红 <b>{sim.panickedAt == null ? '压不红' : sim.panickedAt + 's'}</b>
+        </span>
+        <span>
+          打死 <b>{sim.deadAt == null ? '打不死' : sim.deadAt + 's'}</b>
+        </span>
+        <span className="grow" />
+        <span className="dim">
+          压制 {sim.stressPerSec}/秒进账，上限 {target.maxStress}（黄 {sim.shocked} 红 {sim.panicked}）
+        </span>
+      </div>
+
+      <StressChart
+        samples={sim.samples}
+        shocked={sim.shocked}
+        panicked={sim.panicked}
+        maxStress={target.maxStress}
+        hp={target.hp}
+        deaths={deaths}
+      />
+
+      <div className="calc-stress-cols">
+        <div>
+          <div className="calc-sub">时间轴</div>
+          <ul className="calc-timeline">
+            {sim.events.map((e, i) => (
+              <li key={i} className={'ev-' + e.kind}>
+                <b>{e.t}s</b> {e.text}
+              </li>
+            ))}
+            {!sim.events.length && <li className="dim">一直打不出反应</li>}
+          </ul>
+        </div>
+
+        <div>
+          <div className="calc-sub">
+            {target.squad.length ? '掉人顺序（DeathPriority 大的先走，同级随机）' : '压制之后它会变成什么样'}
+          </div>
+          {target.squad.length ? (
+            <ul className="calc-tiers">
+              {tiers.map(([p, names]) => (
+                <li key={p}>
+                  <b>优先级 {p}</b>
+                  <span className="dim">{names.join('、')}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <table className="t calc-mod">
+            <thead>
+              <tr>
+                <th>状态</th>
+                <th className="num">瞄准</th>
+                <th className="num">装填</th>
+                <th className="num">散布</th>
+                <th className="num">导弹命中</th>
+                <th className="num">移动</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[0, 1, 2].map((lv) => {
+                const m = stressPenalty(target, lv)
+                return (
+                  <tr key={lv} className={lv === 1 ? 'lit-warn' : lv === 2 ? 'lit-bad' : ''}>
+                    <td>{STRESS_NAME[lv]}</td>
+                    <td className="num">×{m.aim}</td>
+                    <td className="num">×{m.reload}</td>
+                    <td className="num">×{m.dispersion}</td>
+                    <td className="num">×{m.missile}</td>
+                    <td className="num">×{m.move}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="dim calc-note">
+        压制每 1 秒结算一次：这一秒挨了打就把伤害折成压制值加上去（弹药自带的 StressDamage + 上限 × 掉血比例），
+        没挨打就往回退——停火第一秒退 {sim.recoveryFirst} 点，之后每多熬一秒再多退 1 点，所以断断续续打是压不住的。
+        变红之后要等压制值掉回红线以下才会降级。
+        {target.squad.length > 0 && (
+          <>
+            {' '}
+            步兵按血量掉人：{target.squad.length} 人分 {target.hp} 血，每人 {sim.hpPerSoldier}，
+            血量每跨过一格就走一个，走谁看 SquadMembers 表里的 DeathPriority。
+          </>
+        )}{' '}
+        没算进去的：弹丸飞行时间、导弹中途丢失、溅射给旁边单位的压制。
+      </div>
+    </>
   )
 }
 
@@ -336,7 +470,10 @@ function Row({ e, open, onToggle }: { e: Engagement; open: boolean; onToggle: ()
         <td className="num">{r ? r.pen + ' / ' + r.armor : '—'}</td>
         <td className="num">
           {r ? (
-            <span className={r.dmg <= 0 ? 'lit-bad' : r.through ? 'lit-ok' : ''} title={r.through ? '穿得动，满伤' : '穿不动，按公式打折'}>
+            <span
+              className={r.dmg <= 0 ? 'lit-bad' : r.through ? 'lit-ok' : ''}
+              title={r.through ? '穿得动，满伤' : '穿不动，按公式打折'}
+            >
               {r.dmg <= 0 ? '打不动' : r.dmg}
             </span>
           ) : (
@@ -465,9 +602,9 @@ function Missiles({
       </div>
 
       <div className="dim calc-note">
-        干扰弹按发数指数衰减：放 n 发就是 <code>((1 − 弹药抗干扰) × 干扰弹乘数)ⁿ</code>，所以连放两发比一发狠得多。
-        APS 只拦得住标了「可被拦」的弹药（导弹、反坦克火箭之类），动能弹和炸弹拦不住；
-        拦截次数用完、或者还在 6 秒冷却里，后面的就直接进来了。
+        干扰弹按发数指数衰减：放 n 发就是 <code>((1 − 弹药抗干扰) × 干扰弹乘数)ⁿ</code>，所以连放两发比一发狠得多。 APS
+        只拦得住标了「可被拦」的弹药（导弹、反坦克火箭之类），动能弹和炸弹拦不住； 拦截次数用完、或者还在 6
+        秒冷却里，后面的就直接进来了。
       </div>
     </div>
   )

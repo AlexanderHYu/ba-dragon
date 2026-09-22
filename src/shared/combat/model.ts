@@ -105,6 +105,8 @@ export interface UnitProfile {
   /** 在弹药目标位图里占哪一位（2 步兵 / 4 车辆 / 8 直升机 / 16 飞机 / 32 船） */
   targetBit: number
   weapons: WeaponProfile[]
+  /** 班组成员（只有步兵有）。death 是 DeathPriority，数字大的先死 */
+  squad: { name: string; death: number }[]
   abilities: Abilities
   sensor: { name: string; ground: number; lowAlt: number; highAlt: number } | null
   mobility: { name: string; road: number; cross: number; loiter: number; afterburner: number } | null
@@ -247,8 +249,10 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (primary) count.set(primary, (count.get(primary) || 0) + 1)
       if (special) count.set(special, (count.get(special) || 0) + 1)
     }
+    // 班组里不同的枪是不同的人在打，能同时开火，所以各占一个发射通道
+    let ch = 0
     for (const [wid, c] of count) {
-      const w = weaponProfile(data, eff, wid, c, c + ' 人', 0)
+      const w = weaponProfile(data, eff, wid, c, c + ' 人', ch++)
       if (w) weapons.push(w)
     }
   } else {
@@ -306,13 +310,37 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     bounds: r2(Math.sqrt(len * len + wid * wid) / 2),
     targetBit: u[U.targetBit] || CLASS_BIT[klass],
     weapons: weapons.sort((a, c) => topDamage(c) - topDamage(a)),
+    squad: squadRoster(data, squad),
     abilities: ab,
     sensor: sens ? { name: sens[0], ground: sens[1], lowAlt: sens[2], highAlt: sens[3] } : null,
     mobility: mob ? { name: mob[0], road: mob[1], cross: mob[2], loiter: mob[7], afterburner: mob[8] } : null
   }
 }
 
+/** 某个单位每个槽位默认选哪个配件（游戏里打开单位时的默认配装） */
+export function defaultOpts(data: CombatData, unitId: number): number[] {
+  const out: number[] = []
+  for (const [, list] of data.unitOptions[unitId] || []) {
+    const def = list.find(([, isDefault]) => isDefault) || list[0]
+    if (def) out.push(def[0])
+  }
+  return out
+}
+
 const topDamage = (w: WeaponProfile): number => Math.max(0, ...w.ammo.map((a) => a.dmg))
+
+/** 班组名单：一人一行，带上他手里的家伙和 DeathPriority（SquadMembers 表里就有） */
+function squadRoster(
+  data: CombatData,
+  squad: [number, number, number][] | undefined
+): { name: string; death: number }[] {
+  if (!squad?.length) return []
+  return squad.map(([primary, special, death]) => {
+    const s = special ? data.weapons[special]?.[W.name] : ''
+    const p = primary ? data.weapons[primary]?.[W.name] : ''
+    return { name: p && s ? p + ' + ' + s : s || p || '步枪手', death }
+  })
+}
 
 function weaponProfile(
   data: CombatData,
@@ -544,7 +572,11 @@ export function penAt(a: AmmoProfile, dist: number): number {
 export function armorAt(target: UnitProfile, a: AmmoProfile, facing: Facing): number {
   if (target.klass === 'inf') return target.infArmor
   const i = a.topAttack ? FACE_IDX.top : FACE_IDX[facing]
-  return a.armorType === 1 ? target.kin[i] : a.armorType === 2 ? target.heat[i] : Math.min(target.kin[i], target.heat[i])
+  return a.armorType === 1
+    ? target.kin[i]
+    : a.armorType === 2
+      ? target.heat[i]
+      : Math.min(target.kin[i], target.heat[i])
 }
 
 export function rangeFor(a: AmmoProfile, target: UnitProfile): number {
@@ -667,7 +699,10 @@ export function engage(
  * 一个单位的总输出。同一个发射通道上的武器不能同时开火（`CanUseFiringChannel`），
  * 所以每个通道只取最能打的那一件，再把各通道加起来。
  */
-export function totalDps(list: Engagement[]): { dps: number; byChannel: { channel: number; dps: number; weapon: string }[] } {
+export function totalDps(list: Engagement[]): {
+  dps: number
+  byChannel: { channel: number; dps: number; weapon: string }[]
+} {
   const best = new Map<number, { channel: number; dps: number; weapon: string }>()
   for (const e of list) {
     if (!e.result) continue
@@ -693,4 +728,255 @@ export function apsAgainst(a: AmmoProfile, target: UnitProfile): ApsInfo {
   const aps = target.abilities.aps
   if (!a.intercept || !aps) return { interceptable: a.intercept, aps: null, saturate: null }
   return { interceptable: true, aps, saturate: aps.qty + 1 }
+}
+
+// ---------- 压制（Stress）----------
+// 机制来自 StressSystem：Update / StressRecovery / ApplyStressDamage / SetStressLevel。
+// 阈值倍率和三档惩罚读自 globalgamemanagers.assets 里的「Buff Config」资产。
+//
+//   每 1 秒（STRESS_TICK）结算一次：
+//     这一秒挨打了 → 压制值 = clamp(压制值 + 这一秒累计, 0, MaxStress)，挨打计时清零
+//     没挨打       → 挨打计时 +1，压制值 −= (挨打计时 × 恢复倍率 + 1)，不低于 0
+//   单次命中加的压制 = CalculateStressDamage(maxStress, 掉的血, 弹药 StressDamage, 目标满血)
+//                    = 弹药 StressDamage + MaxStress × 掉的血 / 满血
+//   定级 = SetStressLevel：压制值 ≥ 红线就是红，否则 ≥ 黄线是黄；红了要等掉回红线以下才降级
+
+export const STRESS = {
+  /** StressSystem.STRESS_TICK：压制系统 1 秒结算一次 */
+  tick: 1,
+  /** BuffConfig.StressRecoveryMultiplier */
+  recovery: 1,
+  shocked: 0.5,
+  panicked: 0.8,
+  shockedInf: 0.4,
+  panickedInf: 0.8
+} as const
+
+export interface StressMod {
+  /** 导弹命中率乘数 */
+  missile: number
+  /** 瞄准时间乘数 */
+  aim: number
+  /** 连发间隔乘数 */
+  burst: number
+  /** 装填时间乘数 */
+  reload: number
+  /** 散布乘数 */
+  dispersion: number
+  /** 移动速度乘数 */
+  move: number
+}
+
+/** BuffConfig.StressModifiers：0 正常 / 1 黄（Shocked）/ 2 红（Panicked） */
+export const STRESS_MOD: Record<number, { veh: StressMod; inf: StressMod; air: StressMod }> = {
+  0: {
+    veh: { missile: 1, aim: 1, burst: 1, reload: 1, dispersion: 1, move: 1 },
+    inf: { missile: 1, aim: 1, burst: 1, reload: 1, dispersion: 1, move: 1 },
+    air: { missile: 1, aim: 1, burst: 1, reload: 1, dispersion: 1, move: 1 }
+  },
+  1: {
+    veh: { missile: 0.85, aim: 1.5, burst: 1, reload: 1.25, dispersion: 1.15, move: 0.6 },
+    inf: { missile: 0.85, aim: 2, burst: 1.25, reload: 1.25, dispersion: 1.15, move: 0.6 },
+    air: { missile: 1, aim: 1.5, burst: 1, reload: 1, dispersion: 1.5, move: 0.6 }
+  },
+  2: {
+    veh: { missile: 0.5, aim: 2, burst: 1, reload: 1.5, dispersion: 1.52, move: 0.2 },
+    inf: { missile: 0.5, aim: 3, burst: 1.5, reload: 1.5, dispersion: 1.52, move: 0.2 },
+    air: { missile: 1, aim: 1.5, burst: 1, reload: 1, dispersion: 2, move: 0.2 }
+  }
+}
+
+export const STRESS_NAME: Record<number, string> = { 0: '正常', 1: '黄（动摇）', 2: '红（崩溃）' }
+
+/** 变黄、变红的压制值门槛（步兵的黄线更低，更容易被打趴） */
+export function stressLevels(u: UnitProfile): { shocked: number; panicked: number } {
+  const inf = u.klass === 'inf'
+  return {
+    shocked: Math.round(u.maxStress * (inf ? STRESS.shockedInf : STRESS.shocked)),
+    panicked: Math.round(u.maxStress * (inf ? STRESS.panickedInf : STRESS.panicked))
+  }
+}
+
+/** 这个单位受压制之后自己吃的惩罚（车辆 / 步兵 / 飞机三套数值） */
+export function stressPenalty(u: UnitProfile, level: number): StressMod {
+  const set = STRESS_MOD[level] || STRESS_MOD[0]
+  return u.klass === 'inf' ? set.inf : u.klass === 'plane' || u.klass === 'heli' ? set.air : set.veh
+}
+
+export interface SimEvent {
+  t: number
+  kind: 'shocked' | 'panicked' | 'calm' | 'soldier' | 'dead'
+  text: string
+  hp: number
+  stress: number
+}
+
+export interface SimSample {
+  t: number
+  hp: number
+  stress: number
+  level: number
+  alive: number
+}
+
+export interface Simulation {
+  events: SimEvent[]
+  samples: SimSample[]
+  shockedAt: number | null
+  panickedAt: number | null
+  deadAt: number | null
+  shocked: number
+  panicked: number
+  /** 真正开火的武器（每个发射通道只留最能打的一件） */
+  firing: { weapon: WeaponProfile; ammo: AmmoProfile; result: ShotResult; shots: number }[]
+  /** 稳定开火时每秒进账多少压制 */
+  stressPerSec: number
+  /** 停火后第一秒恢复多少（之后每秒再多 1） */
+  recoveryFirst: number
+  hpPerSoldier: number
+}
+
+/**
+ * 沿时间轴打一遍：能同时开火的武器各按自己的弹匣节奏射击，
+ * 累计掉血、掉人、压制值，记下变黄变红和被打死的时刻。
+ *
+ * 开火节奏按武器的弹匣结构走（连发内 dtShot，连发之间 dtBurst，打空 reload + aim），
+ * 单发伤害用 shotAt 的期望值（命中 × 直击 + 未命中 × 溅射），弹种是 engage 按游戏规则挑的。
+ */
+export function simulate(list: Engagement[], target: UnitProfile, opts: { limit?: number } = {}): Simulation {
+  const limit = opts.limit ?? 90
+  const lv = stressLevels(target)
+  // 同一发射通道不能同时开火，和 totalDps 一个规则
+  const byCh = new Map<number, Engagement>()
+  for (const e of list) {
+    const r = e.result
+    if (!r || !e.best || r.expected <= 0) continue
+    const cur = byCh.get(e.weapon.channel)
+    if (!cur || r.dps > (cur.result?.dps ?? 0)) byCh.set(e.weapon.channel, e)
+  }
+  const guns = [...byCh.values()].map((e) => {
+    const w = e.weapon
+    const burst = Math.max(1, w.burst || w.mag || 1)
+    return { e, w, next: w.aim, left: Math.max(1, w.mag || 1), inBurst: burst, burst, shots: 0 }
+  })
+
+  const squadSize = target.squad.length
+  const hpPerSoldier = squadSize ? target.hp / squadSize : 0
+  // 优先级数字大的先死，同级随机（KillSquadSolders 取最大值再随机挑一个）
+  const order = target.squad.slice().sort((a, b) => b.death - a.death)
+
+  const events: SimEvent[] = []
+  const samples: SimSample[] = []
+  let hp = target.hp
+  let stress = 0
+  let level = 0
+  let sinceHit = 0
+  let alive = squadSize
+  let pending = 0
+  let deadAt: number | null = null
+  let shockedAt: number | null = null
+  let panickedAt: number | null = null
+
+  const dt = 0.05
+  const push = (t: number, kind: SimEvent['kind'], text: string): void => {
+    events.push({ t: Math.round(t * 10) / 10, kind, text, hp: r2(Math.max(0, hp)), stress: Math.round(stress) })
+  }
+
+  for (let t = 0; t <= limit + 1e-9 && deadAt == null; t += dt) {
+    for (const g of guns) {
+      while (g.next <= t + 1e-9 && deadAt == null) {
+        const r = g.e.result as ShotResult
+        const a = g.e.best as AmmoProfile
+        const n = g.w.count
+        const dealt = Math.min(hp, r.expected * n)
+        hp -= dealt
+        g.shots += n
+        // 压制 = 弹药自带的（按命中率打折）+ 掉血换算过来的
+        pending += r.hit * a.stress * n + (target.maxStress * dealt) / (target.hp || 1)
+
+        if (squadSize) {
+          const now = Math.max(0, Math.min(squadSize, Math.ceil(hp / hpPerSoldier)))
+          while (alive > now) {
+            const m = order[squadSize - alive]
+            alive--
+            push(t, 'soldier', '倒下 1 人（剩 ' + alive + '）：' + (m ? m.name : '步枪手'))
+          }
+        }
+        if (hp <= 0) {
+          hp = 0
+          deadAt = t
+          push(t, 'dead', '目标被打死')
+          break
+        }
+        g.left--
+        if (g.left <= 0) {
+          g.next += g.w.reload + g.w.aim
+          g.left = Math.max(1, g.w.mag || 1)
+          g.inBurst = g.burst
+        } else if (--g.inBurst <= 0) {
+          g.next += g.w.dtBurst
+          g.inBurst = g.burst
+        } else {
+          g.next += g.w.dtShot
+        }
+      }
+    }
+
+    // 整秒结算一次压制（已经打死了就不用再算了）
+    if (deadAt == null && t > 0 && Math.abs(t / STRESS.tick - Math.round(t / STRESS.tick)) < dt / 2) {
+      if (pending > 0) {
+        stress = clamp(stress + pending, 0, target.maxStress)
+        sinceHit = 0
+        pending = 0
+      } else {
+        sinceHit += STRESS.tick
+        stress = Math.max(0, stress - (Math.floor(sinceHit) * STRESS.recovery + 1))
+      }
+      const before = level
+      level = stress < lv.panicked ? (stress >= lv.shocked ? 1 : 0) : 2
+      if (level !== before) {
+        if (level === 2) {
+          panickedAt = panickedAt ?? t
+          push(t, 'panicked', '压制 ' + Math.round(stress) + '（红线 ' + lv.panicked + '），变红：崩溃')
+        } else if (level === 1 && before === 0) {
+          shockedAt = shockedAt ?? t
+          push(t, 'shocked', '压制 ' + Math.round(stress) + '（黄线 ' + lv.shocked + '），变黄：动摇')
+        } else {
+          push(t, 'calm', '压制掉到 ' + Math.round(stress) + '，回到' + (level === 1 ? '黄' : '正常'))
+        }
+      }
+      samples.push({ t: Math.round(t), hp: r2(hp), stress: Math.round(stress), level, alive })
+    }
+  }
+
+  const firing = guns
+    .filter((g) => g.shots > 0)
+    .map((g) => ({
+      weapon: g.w,
+      ammo: g.e.best as AmmoProfile,
+      result: g.e.result as ShotResult,
+      shots: g.shots
+    }))
+  const stressPerSec =
+    Math.round(
+      firing.reduce((s, f) => {
+        const per = cycleTime(f.weapon)
+        const dealt = f.result.expected * f.weapon.count
+        return s + (f.result.hit * f.ammo.stress * f.weapon.count + (target.maxStress * dealt) / (target.hp || 1)) / per
+      }, 0) * 10
+    ) / 10
+
+  return {
+    events,
+    samples,
+    shockedAt: shockedAt == null ? null : Math.round(shockedAt * 10) / 10,
+    panickedAt: panickedAt == null ? null : Math.round(panickedAt * 10) / 10,
+    deadAt: deadAt == null ? null : Math.round(deadAt * 10) / 10,
+    shocked: lv.shocked,
+    panicked: lv.panicked,
+    firing,
+    stressPerSec,
+    recoveryFirst: STRESS.recovery + 1,
+    hpPerSoldier: r2(hpPerSoldier)
+  }
 }

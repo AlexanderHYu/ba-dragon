@@ -250,10 +250,116 @@ MISSILE_MERGE_POWER = 1，所以两个挂架各带两发并起来，间隔是单
 - **溅射也要过穿甲判定**：不然「打不穿的 HE 照样炸死坦克」，反应装甲就没意义了。
 - **打死要几秒**：瞄准 + 后面每发按弹匣节奏（点射间隔、装填）平摊。
 
+## 压制（Stress）和步兵掉人
+
+两套机制都是从 `GameAssembly.dll` 里读出来的，数值来自 `globalgamemanagers.assets`
+里的「Buff Config」资产（和 `BattleSystemSettings` 同一片区域，用同样的办法读）。
+
+### 压制组件
+
+`BrokenArrow.Client.Ecs.BattleSystem.Components.StressComponent`，七个字段，
+偏移是从 `StressSystem.SetStressLevel` 的机器码里对出来的：
+
+| 偏移 | 字段 | 说明 |
+| --- | --- | --- |
+| +0x00 | `MaxStress` | 单位表里的 `MaxStress` |
+| +0x04 | `ShockedStressValue` | 黄线 |
+| +0x08 | `PanickedStressValue` | 红线 |
+| +0x10 | `PendingDamages` | 这一秒里待结算的压制伤害 |
+| +0x18 | `CurrentStressValue` | 当前压制值 |
+| +0x1c | `CurrentStressLevel` | 0 正常 / 1 Shocked（黄）/ 2 Panicked（红） |
+| +0x20 | `TimeAfterLastDamage` | 离上次挨打多久 |
+
+### 每秒怎么算
+
+`StressSystem.Update` 每 `STRESS_TICK` 跑一次，`.cctor` 里把它写成 `1.0`，也就是一秒一次。
+一秒之内有没有挨打是二选一的（`cmp [PendingDamages+0x18], 0`）：
+
+```
+挨打了（ApplyStressDamage）：
+    压制值 = min(压制值 + Σ这一秒的压制伤害, MaxStress)，再夹到 ≥ 0
+    TimeAfterLastDamage = 0
+    清空 PendingDamages
+
+没挨打（StressRecovery）：
+    TimeAfterLastDamage += STRESS_TICK
+    压制值 = max(0, 压制值 − (floor(TimeAfterLastDamage) × StressRecoveryMultiplier + 1))
+```
+
+恢复是**加速**的：停火第一秒退 2 点，第二秒 3 点，第三秒 4 点……所以断断续续地打压不住人，
+一梭子打满才有意义。
+
+单次命中加多少，`BattleSystemHelpers.CalculateStressDamage(maxStress, healthDamage, stressDamage, targetMaxHealth)`
+只有四条指令：
+
+```
+压制伤害 = 弹药的 StressDamage + MaxStress × (这一下掉的血 ÷ 目标满血)
+```
+
+第二项意味着**掉血本身就是压制**：削掉 10% 的血就等于加 10% 的压制上限，
+所以大口径弹在压制上是双重收益。`HitDamageInfo` 里另有 `StressAOEDamageModifier`，
+溅射范围用弹药的 `StressAOERadius`（一般比 `HealthAOERadius` 大），这部分我们只算了直击的目标。
+
+### 定级
+
+`SetStressLevel`：
+
+```
+压制值 < 红线 → 等级 = 压制值 ≥ 黄线 ? 1 : 0
+压制值 ≥ 红线 → 等级 = 2（已经是 2 就什么都不做）
+```
+
+红了之后必须等压制值掉回红线**以下**才会降级。黄线红线 = `MaxStress ×` Buff Config 里的倍率：
+
+| | 黄线倍率 | 红线倍率 |
+| --- | --- | --- |
+| 车辆 / 飞机 | `ShockedLevelMultiplier` 0.5 | `PanickedLevelMultiplier` 0.8 |
+| 步兵 | `ShockedLevelMultiplierInfantry` 0.4 | `PanickedLevelMultiplierInfantry` 0.8 |
+
+`StressRecoveryMultiplier` = 1。这三条是本文里唯一**没有**直接读到赋值现场的：
+组件是在生成单位时内联初始化的，没有单独的函数可抓；但单位表里除了 `MaxStress`
+再没有别的压制字段，组件也只有这两个阈值，所以只可能是这么乘出来的。
+
+### 黄红两档的惩罚
+
+Buff Config 的 `StressModifiers` 是个 `键 → 17 个 float` 的字典，序列化下来键的顺序是 1、2、0：
+
+| 乘数 | 黄（车辆） | 红（车辆） | 黄（步兵） | 红（步兵） | 黄（飞机） | 红（飞机） |
+| --- | --- | --- | --- | --- | --- | --- |
+| 瞄准时间 | 1.5 | 2 | 2 | 3 | 1.5 | 1.5 |
+| 装填时间 | 1.25 | 1.5 | 1.25 | 1.5 | 1 | 1 |
+| 连发间隔 | 1 | 1 | 1.25 | 1.5 | 1 | 1 |
+| 散布 | 1.15 | 1.52 | 1.15 | 1.52 | 1.5 | 2 |
+| 导弹命中 | 0.85 | 0.5 | 同左 | 同左 | 1 | 1 |
+| 移动速度 | 0.6 | 0.2 | 同左 | 同左 | 同左 | 同左 |
+
+（导弹命中和移动速度是三类共用的一项；飞机的导弹命中不受压制影响。）
+
+### 步兵掉人
+
+`InfantryUnitComponent` 里 `HealthPerSoldier` 在 `UnitBuilder.InitUnitHealth` 里写成
+`满血 ÷ 班组人数`。`InfantryDeathHealSystem.InternalUpdate` 每帧算一次：
+
+```
+活着的人数 = clamp(ceil(当前血量 ÷ HealthPerSoldier), 0, 班组人数)
+```
+
+（`ceil` 是 `roundsd xmm0, xmm0, 0xa`，向上取整。）少了就调 `KillSquadSolders`，多了就 `HealSquad`。
+
+谁先倒下看 `SquadMembers` 表里的 `DeathPriority`：`KillSquadSolders` 先把 `edi` 置成
+`INT_MIN` 扫一遍取**最大值**，再把所有等于这个值的人收进一个列表，从里面**随机**挑一个。
+所以是「优先级数字大的先走，同级随机」——没有特殊武器的普通步枪手通常是 3 或 4，
+班长和扛反坦克的通常是 1，最后才轮到他们。
+
+计算器把这两套机制接了起来：`simulate()` 让所有能同时开火的武器（每个发射通道一件，
+班组里每种枪各占一个通道）按各自的弹匣节奏打，逐秒结算压制、掉血、掉人，
+给出变黄、变红、打死的时刻和整条时间轴。还没算进去的：弹丸飞行时间、导弹中途丢失、
+溅射给旁边单位的压制。
+
 ## 顺带能做的
 
 `.dek` 解出来是卡组内容：分类 → 每张卡的单位 ID、配装选项、运输载具、张数，
 所以「卡组工具」里能直接看一副卡组带了什么、每张多少钱（前提同样是填了密钥）。
 
-还没用上的：弹道细节（初速、加速度、导引头角度）、炮塔转向死角、补给消耗、
-班组成员的死亡顺序——要做更细的模拟的话数据都是现成的。
+还没用上的：弹道细节（初速、加速度、导引头角度）、炮塔转向死角、补给消耗——
+要做更细的模拟的话数据都是现成的。

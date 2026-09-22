@@ -9,3 +9,4 @@ data/cache/
 scratch/
 *.tsbuildinfo
 vendor/
+__pycache__/

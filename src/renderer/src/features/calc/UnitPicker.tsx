@@ -3,22 +3,11 @@
 import { useMemo, useState } from 'react'
 import { BUNDLED } from '@shared/game'
 import { U, type CombatData } from '@shared/game/combat'
-import { CAT_NAME, CLASS_NAME, type UnitProfile } from '@shared/combat/model'
+import { CAT_NAME, CLASS_NAME, defaultOpts, type UnitProfile } from '@shared/combat/model'
 
 export interface Pick {
   unit: number
   opts: number[]
-}
-
-/** 这个单位每个槽位默认选哪个 */
-export function defaultOpts(data: CombatData, unitId: number): number[] {
-  const slots = data.unitOptions[unitId] || []
-  const out: number[] = []
-  for (const [, list] of slots) {
-    const def = list.find(([, isDefault]) => isDefault) || list[0]
-    if (def) out.push(def[0])
-  }
-  return out
 }
 
 const optLabel = (id: number): string => {
