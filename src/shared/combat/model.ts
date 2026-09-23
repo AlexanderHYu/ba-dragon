@@ -710,11 +710,21 @@ export interface GuidedHit {
  *   干扰弹效果 = 没放就是 1，放了 n 发就是 ((1 - 抗干扰) × 干扰弹乘数)^n
  * 制导弹药把「散布」两个字段挪作他用：水平 = 基础命中，垂直 = 抗干扰。
  */
+/**
+ * 反辐射 / 激光这两种导引头不吃干扰弹。`SeekerSystem.CalculateMissileDivertion` 一进去就是
+ *
+ *   cmp dword ptr [seeker], 0xC8 (200) / je  → 直接 `mov [rax+0x1c], 1; ret`
+ *   cmp dword ptr [seeker], 0x12C (300) / je → 同上
+ *
+ * 整段偏移计算被跳过，所以干扰弹对它们不起作用（数据里 200 是 HARM / Kh-31P 那一批反辐射弹）。
+ */
+export const ignoresCountermeasures = (a: AmmoProfile): boolean => a.seeker === 200 || a.seeker === 300
+
 export function guidedHit(a: AmmoProfile, target: UnitProfile, opts: Situation = {}): GuidedHit {
   const accuracy = a.dispH || 1
   const resist = a.dispV || 0
   const ecm = target.abilities.ecm || 1
-  const n = Math.max(0, Math.round(opts.flares ?? (target.abilities.decoy ? 1 : 0)))
+  const n = ignoresCountermeasures(a) ? 0 : Math.max(0, Math.round(opts.flares ?? (target.abilities.decoy ? 1 : 0)))
   const mul = target.abilities.decoy?.mul ?? 1
   const cm = n === 0 ? 1 : Math.pow((1 - resist) * mul, n)
   const stress = opts.stress ?? 1

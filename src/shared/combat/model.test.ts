@@ -24,6 +24,7 @@ import {
   RADIOFUSE,
   usesRadioFuse,
   usesTopAttack,
+  ignoresCountermeasures,
   infantryFactor,
   shotAt,
   simulate,
@@ -901,5 +902,19 @@ describe('审计复核第二批', () => {
     const merged = plane.weapons.find((w) => w.pylons > 1)
     expect(merged).toBeTruthy()
     expect(merged!.dtBurst).toBeLessThan(4)
+  })
+})
+
+describe('反辐射 / 激光不吃干扰弹', () => {
+  it('导引头 200 / 300 跳过干扰弹那一项', () => {
+    const t = profileOf(1, [902], DATA)! // 带干扰弹的目标
+    const withDecoy = { ...t, abilities: { ...t.abilities, decoy: { qty: 4, mul: 0.5, duration: 3, cooldown: 1 } } }
+    const normal = ammo(304, { seeker: 100 })
+    const harm = ammo(304, { seeker: 200 })
+    expect(guidedHit(normal, withDecoy, { flares: 2 }).cm).toBeLessThan(1)
+    expect(guidedHit(harm, withDecoy, { flares: 2 }).cm).toBe(1)
+    // ECM 还是照吃
+    expect(ignoresCountermeasures(harm)).toBe(true)
+    expect(ignoresCountermeasures(normal)).toBe(false)
   })
 })

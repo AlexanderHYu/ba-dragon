@@ -14,6 +14,7 @@ import {
   apsAgainst,
   engage,
   guidedHit,
+  ignoresCountermeasures,
   isGuided,
   lethalRadius,
   defaultOpts,
@@ -772,8 +773,8 @@ function Missiles({
             ECM <b>{h.ecm === 1 ? '无' : h.ecm}</b>
           </span>
           <span>×</span>
-          <span>
-            干扰弹 <b>{h.cm === 1 ? '无' : Math.round(h.cm * 1000) / 1000}</b>
+          <span title={ignoresCountermeasures(sample) ? '反辐射 / 激光导引头会跳过整段干扰计算' : undefined}>
+            干扰弹 <b>{ignoresCountermeasures(sample) ? '免疫' : h.cm === 1 ? '无' : Math.round(h.cm * 1000) / 1000}</b>
           </span>
           <span>×</span>
           <span>

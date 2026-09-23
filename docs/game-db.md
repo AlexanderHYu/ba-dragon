@@ -637,6 +637,29 @@ cmp  dword [armor+0x28], 0 / jg   ; **目标 ArmorValue > 0 → 也走破甲曲�
 `CombinePylonsOnAircraft`（间隔按总弹量摊，就是我们实现的那条），地面走
 `MergeWeaponsOnGroundTurrets`——**只并弹药和弹匣，发射节奏不变**。之前地面也在摊间隔。
 
+### 复核第三批：反辐射不吃干扰弹，以及两条只记不改的
+
+**反辐射 / 激光导引头跳过整段干扰计算。** `SeekerSystem.CalculateMissileDivertion` 一进去就是：
+
+```asm
+cmp dword ptr [seeker], 0xC8  (200) / je → mov [rax+0x1c], 1 ; ret
+cmp dword ptr [seeker], 0x12C (300) / je → 同上
+```
+
+直接返回，后面那套「偏移概率」根本不跑。数据里导引头 200 是 HARM / Kh-31P / Kh-58UShK /
+AGM-122 那一批反辐射弹（6 种），300 在当前数据里没有。所以这些弹**不吃干扰弹**，
+界面上那一项显示「免疫」。ECM 仍然照乘（那是 `CalculateMissileHitChance` 里的另一件事）。
+
+**干扰弹的「几发」是当前活着的数量，不是库存。** `ActiveCountermeasuresCount` 返回的是一个
+`List<float>` 的长度，每发有自己的存活时间，`UpdateLocalUnits` 每帧减时间、到点移除。
+我们的滑条本来就是「目标现在放了几发」，含义对得上。另外初次判定和重掷的上限不同：
+`MAX_FLARES_COUNT_MISSILE_INITIAL = 100`、`MAX_FLARES_COUNT_MISSILE_REROLL = 1`——
+**重掷时放再多也只按 1 发算**。我们算的是初次判定，没建模重掷。
+飞机/直升机的自动放干扰弹延迟是 1.5 / 0.5 秒，也没建模。
+
+**PAC-2 那条（BA-21）是他自己模型里的假设**，和我们无关：他想确认 PAC-2 是不是有个
+5% 的终端特例，静态里找不到依据。我们没有这种特例。
+
 ## 顺带能做的
 
 `.dek` 解出来是卡组内容：分类 → 每张卡的单位 ID、配装选项、运输载具、张数，
