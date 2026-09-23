@@ -51,6 +51,8 @@ export interface LogSnapshot {
   accountKey: string | null
   loginSeen: boolean
   lobbyPlayers: Record<string, string>
+  /** 有没有从头看到自己进大厅那一行；没看到就不该反推房主（信息不全） */
+  sawLobbyEnter: boolean
   currentDeck: string
   current: LogMatch | null
   archivedCount: number
@@ -88,6 +90,7 @@ export class LogParser {
   localName: string | null = null
   /** 大厅里的人：uid → 名字（开战前就能看到） */
   lobbyPlayers: Record<string, string> = {}
+  sawLobbyEnter = false
   currentDeck = ''
   /** 当前对局（进行中或最近一次） */
   current: LogMatch | null = null
@@ -106,6 +109,7 @@ export class LogParser {
   reset(keepLocalName?: boolean): void {
     if (!keepLocalName) this.localName = null
     this.lobbyPlayers = {}
+    this.sawLobbyEnter = false
     this.currentDeck = ''
     this.current = null
     this.archived = []
@@ -140,6 +144,8 @@ export class LogParser {
     if (RE.lobbyEnter.test(line) || RE.lobbyExit.test(line)) {
       // 进入新大厅 = 清空上一局状态（存档过的已经存过）
       this.lobbyPlayers = {}
+      // 进厅那行看到了，说明这个房间从头跟到尾，之后才有资格反推房主
+      this.sawLobbyEnter = RE.lobbyEnter.test(line)
       this.current = null
       this.inPlayerList = false
       ev('lobbyReset')
@@ -279,6 +285,7 @@ export class LogParser {
       accountKey: this.sessionPersona ? 'persona:' + this.sessionPersona : null,
       loginSeen: this.sessionLogin,
       lobbyPlayers: { ...this.lobbyPlayers },
+      sawLobbyEnter: this.sawLobbyEnter,
       currentDeck: this.currentDeck,
       current: this.current ? { ...this.current } : null,
       archivedCount: this.archived.length

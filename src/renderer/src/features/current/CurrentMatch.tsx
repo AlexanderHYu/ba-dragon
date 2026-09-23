@@ -5,6 +5,7 @@ import type { PlayerCard } from '@shared/ipc'
 import { useStore } from '../../store'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import PlayerRow, { PlayerRowHead } from './PlayerRow'
+import { guessHost } from '@shared/log/host'
 
 export default function CurrentMatch(): React.JSX.Element {
   const { query, session, status, openPlayer, setOpenPlayer } = useStore()
@@ -27,6 +28,13 @@ export default function CurrentMatch(): React.JSX.Element {
   // 游戏只在有人**加入**时写一行 Incoming client，你进房之前就在里面的人（房主必然是）
   // 日志里根本没有。翻了十份日志，进厅两秒内一条补播都没有，只能等开打时的完整名单。
   const partialRoster = !cur && cards.length > 0
+  // 反推房主：名单里既不是「我进来之后才加入的」也不是我自己的人，就是我进房之前就在的
+  const host = guessHost(
+    cards.map((c) => ({ id: c.id, name: c.name, team: c.team || null })),
+    session?.snapshot.lobbyPlayers || {},
+    meName || null,
+    !!session?.snapshot.sawLobbyEnter
+  )
 
   return (
     <div className="card">
@@ -49,6 +57,25 @@ export default function CurrentMatch(): React.JSX.Element {
         <div className="dim cm-note">
           房间里只认得出「你进来之后才加入的人」和你自己——游戏日志只在有人加入时写一行，
           <b>先在房里的（房主一般就是）它不写</b>。等开打时的完整名单出来就全了。
+        </div>
+      )}
+
+      {host.known && (
+        <div className="dim cm-note">
+          {host.me ? (
+            <>
+              👑 <b>你就是房主</b>——你进来的时候房里没别人。
+            </>
+          ) : host.id ? (
+            <>
+              👑 房主是 <b>{host.candidates[0].name}</b>：开打的完整名单里，只有他不是「你进来之后才加入的」。
+            </>
+          ) : (
+            <>
+              👑 房主在这几个人里：<b>{host.candidates.map((c) => c.name).join('、')}</b>
+              ——他们在你进房之前就在了，日志分不出谁先谁后。
+            </>
+          )}
         </div>
       )}
 

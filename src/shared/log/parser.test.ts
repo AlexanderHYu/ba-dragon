@@ -67,7 +67,13 @@ describe.runIf(ready)('日志解析和 4.0.x 对拍', () => {
       // 所以新版会多发几次 lobbyReset。对拍时两边都把它滤掉，其余必须一模一样。
       const noReset = (xs: unknown[]): unknown[] => xs.filter((x) => (x as [string])[0] !== 'lobbyReset')
       expect(noReset(a), f).toEqual(noReset(b))
-      expect(strip(pa.snapshot()), f).toEqual(strip(pb.snapshot()))
+      // sawLobbyEnter 是新版为了反推房主加的，老版没有，比较时摘掉
+      const snap = (d: unknown): unknown => {
+        const o = strip(d) as Record<string, unknown>
+        delete o.sawLobbyEnter
+        return o
+      }
+      expect(snap(pa.snapshot()), f).toEqual(snap(pb.snapshot()))
     }
   })
 })
