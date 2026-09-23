@@ -65,12 +65,13 @@ const DATA: CombatData = {
   },
   // [武器id, 发射通道]
   turretWeapons: {
-    100: [[200, 0]],
-    101: [[201, 0]],
-    102: [[202, 1]],
-    105: [[202, 1]],
-    103: [[205, 0]],
-    104: [[205, 1]]
+    // [武器 id, 发射通道, 抢占优先级（小的赢）]
+    100: [[200, 0, 0]],
+    101: [[201, 0, 0]],
+    102: [[202, 1, 0]],
+    105: [[202, 1, 0]],
+    103: [[205, 0, 0]],
+    104: [[205, 1, 0]]
   },
   weapons: {
     // [名字, 弹匣, 装填min, max, 点射min, max, 点射内间隔, 点射间min, max, 瞄准min, max, 行进间, 稳定, 雷达, 跟踪, 可合并]
@@ -306,11 +307,11 @@ describe('穿深和伤害', () => {
     expect(side.seconds).toBeGreaterThan(8) // 得等一次装填
   })
 
-  it('打一发平均要多久：弹匣 + 装填 + 瞄准', () => {
+  it('打一发平均要多久：弹匣打完取 max(装填, 连发间隔)，不叠瞄准', () => {
     const p = tank()!
     const gun = p.weapons.find((w) => w.name === '120mm 炮')!
-    // 弹匣 1 发：装填 6.5 + 瞄准 2 = 8.5
-    expect(cycleTime(gun)).toBeCloseTo(8.5, 1)
+    // 弹匣 1 发：max(装填 6.5, 连发间隔 1) = 6.5。瞄准只在第一次开火前算一次
+    expect(cycleTime(gun)).toBeCloseTo(6.5, 1)
     const mg = p.weapons.find((w) => w.name === '同轴机枪')!
     // 30 发的弹匣打完再装填，平均每发远小于 1 秒
     expect(cycleTime(mg)).toBeLessThan(1)
@@ -779,16 +780,53 @@ describe('弹匣节奏', () => {
     // 前两发在装填之前打完
     expect(timeForShots(w, 1)).toBe(1.5)
     expect(timeForShots(w, 2)).toBe(5)
-    // 第三发要等装填 + 重新瞄准
-    expect(timeForShots(w, 3)).toBe(16.5)
-    expect(timeForShots(w, 4)).toBe(20)
-    // 按平均节奏（每发 7.5 秒）算的话第二发会变成 9 秒，差了快一倍
-    expect(cycleTime(w)).toBeCloseTo(7.5, 2)
+    // 第三发要等装填。装填和连发是独立计时器，不叠加瞄准时间：+ max(10, 3.5) = 15
+    expect(timeForShots(w, 3)).toBe(15)
+    expect(timeForShots(w, 4)).toBe(18.5)
+    // 平均每发 (3.5 + 10) / 2 = 6.75 秒
+    expect(cycleTime(w)).toBeCloseTo(6.75, 2)
   })
 
-  it('单发武器两种算法一致', () => {
+  it('单发武器：瞄准只算第一次，之后每发就是装填', () => {
     const t = tank()!
     const gun = { ...t.weapons[0], mag: 1, burst: 1, dtShot: 0, dtBurst: 1, reload: 6.5, aim: 2 }
-    expect(timeForShots(gun, 3)).toBeCloseTo(2 + 2 * cycleTime(gun), 2)
+    // 第一发 2s（瞄准），之后每发 +6.5
+    expect(timeForShots(gun, 1)).toBe(2)
+    expect(timeForShots(gun, 3)).toBe(15)
+    expect(cycleTime(gun)).toBeCloseTo(6.5, 2)
+  })
+})
+
+describe('按机器码审计修正的几处', () => {
+  it('通用装甲值的目标，动能弹也走破甲曲线（CalculateHitDamage 的派发顺序）', () => {
+    // 动能弹 D10 穿100 打通用甲 100：动能公式会给满伤 10，破甲曲线给一半
+    expect(damageOf(10, 100, 100, 1, false)).toBe(10)
+    expect(damageOf(10, 100, 100, 1, true)).toBeCloseTo(5, 3)
+    // 破甲弹两种情况一样
+    expect(damageOf(10, 100, 100, 2, false)).toBeCloseTo(5, 3)
+    // 装甲类型 0 在最前面短路，一律满伤
+    expect(damageOf(10, 1, 9999, 0, true)).toBe(10)
+  })
+
+  it('步兵吃动能弹时按破甲曲线算', () => {
+    const t = tank()!
+    const squad = inf()! // 通用甲 6
+    expect(squad.armorValue).toBeGreaterThan(0)
+    const mg = shotAt(t.weapons[1], ammo(302), squad, 100, 'front')
+    // 穿深 > 装甲，但走的是曲线，所以打不出满伤
+    expect(mg.dmg).toBeLessThan(ammo(302).dmg * mg.mul)
+  })
+
+  it('穿深：分母是参考射程减最小射程，破甲弹不随距离衰减', () => {
+    const kin = ammo(300, { penMin: 800, penFar: 500, range: 700, minRange: 100, armorType: 1 })
+    // 700 − 100 = 600 的分母；300 米处 = 800 − 300×300/600 = 650
+    expect(penAt(kin, 300)).toBeCloseTo(650, 2)
+    expect(penAt(kin, 0)).toBeCloseTo(800, 2)
+    // 破甲弹一律用 penFar
+    const heat = ammo(301, { penMin: 400, penFar: 400, armorType: 2 })
+    expect(penAt(heat, 0)).toBe(400)
+    expect(penAt(heat, 9999)).toBe(400)
+    // 装甲类型 0 = 无视装甲
+    expect(penAt(ammo(300, { armorType: 0 }), 500)).toBe(Infinity)
   })
 })

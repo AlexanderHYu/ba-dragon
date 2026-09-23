@@ -75,8 +75,10 @@ export interface WeaponProfile {
   radar: boolean
   ammo: AmmoProfile[]
   from: string
-  /** 发射通道：同一个通道上的武器不能同时开火（直升机火箭巢就靠这个分组） */
+  /** 发射通道：同一个非零通道上的武器不能同时开火（直升机火箭巢就靠这个分组） */
   channel: number
+  /** 抢占优先级：同通道时数字**小**的赢（CanUseFiringChannel 里 `lower numeric priority wins`） */
+  priority: number
   /** 合并了几个挂架（飞机把同型挂架并起来齐射）；1 = 没合并 */
   pylons: number
   /** 这把武器能不能和同型的并起来打 */
@@ -177,9 +179,14 @@ export const BS = {
 } as const
 
 /**
- * 打中之后掉多少血。两条公式都是从 GameAssembly.dll 里读出来的：
+ * 打中之后掉多少血。公式和**分支顺序**都来自伤害派发器 `CalculateHitDamage`（RVA 0x7B3070）：
  *
- * 破甲弹（ArmorTargeted == 2，游戏里 IsHEATFourmulaUsed 就是 `== 2`）：
+ *   装甲类型 0            → 满伤（最前面就短路）
+ *   装甲类型 2            → 破甲曲线
+ *   目标 ArmorValue > 0   → **也走破甲曲线**（哪怕弹药是动能的）
+ *   否则（方向装甲）      → 动能公式
+ *
+ * 破甲曲线：
  *   伤害 = 基础 × 穿深^C ÷ (穿深^C + H × 装甲^C)          C = 2，H = 1
  *   是条平滑曲线——穿深等于装甲时正好一半，打不穿也不是零。
  *
@@ -189,9 +196,15 @@ export const BS = {
  *        d ≤ 0 → 0；0 < d < 基础×0.1 → 基础×0.1（下限）
  *   所以动能弹掉到 0 的临界是「装甲 ≥ 2 倍穿深」（APE = 1 时）。
  */
-export function damageOf(base: number, pen: number, armor: number, armorType: number): number {
+export function damageOf(base: number, pen: number, armor: number, armorType: number, commonArmor = false): number {
   if (base <= 0) return 0
-  if (armorType === 2) {
+  // 装甲类型 0（无视装甲）在派发器最前面就短路了：`test edi, edi / je`
+  if (armorType === 0) return r2(base)
+  // **目标的通用装甲值 > 0 时，动能弹也走破甲曲线**。派发器里是
+  //   cmp edi, 2 / je 破甲分支
+  //   cmp dword ptr [armor+0x28], 0 / jg 破甲分支   ← +0x28 就是 Armors.ArmorValue
+  // 步兵、飞机、轻甲车（没有方向装甲的那一批）全吃这一条。
+  if (armorType === 2 || commonArmor) {
     if (pen <= 0) return 0
     const p = Math.pow(pen, BS.heatCurve)
     const a = Math.pow(Math.max(0, armor), BS.heatCurve)
@@ -402,7 +415,7 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
     }
     for (const [wid, c] of count) {
       // 班组的枪不占发射通道，不同的人各打各的
-      const w = weaponProfile(data, eff, wid, c, c + ' 人', 0)
+      const w = weaponProfile(data, eff, wid, c, c + ' 人', 0, 0)
       if (w) weapons.push(w)
     }
   } else {
@@ -453,8 +466,8 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
       if (roots.has(parent) && data.turretWeapons[tid]) final.push(tid)
     }
     for (const tid of final) {
-      for (const [wid, channel] of data.turretWeapons[tid] || []) {
-        const w = weaponProfile(data, eff, wid, 1, '', channel)
+      for (const [wid, channel, priority] of data.turretWeapons[tid] || []) {
+        const w = weaponProfile(data, eff, wid, 1, '', channel, priority || 0)
         if (w) weapons.push(w)
       }
     }
@@ -534,7 +547,8 @@ function weaponProfile(
   weaponId: number,
   count: number,
   from: string,
-  channel: number
+  channel: number,
+  priority = 0
 ): WeaponProfile | null {
   const w: CWeapon | undefined = data.weapons[weaponId]
   if (!w) return null
@@ -596,6 +610,7 @@ function weaponProfile(
     ammo,
     from,
     channel,
+    priority,
     pylons: 1,
     mergeable: !!w[W.merge]
   }
@@ -724,7 +739,7 @@ export interface AoeCtx {
 export function aoeDamageAt(a: AmmoProfile, target: UnitProfile, d: number, ctx: AoeCtx): number {
   const f = aoeFactor(a, d, target.bounds)
   if (f <= 0) return 0
-  return damageOf(a.dmg * (ctx.mul ?? 1) * f, ctx.pen, ctx.armor, a.armorType)
+  return damageOf(a.dmg * (ctx.mul ?? 1) * f, ctx.pen, ctx.armor, a.armorType, target.armorValue > 0)
 }
 
 /** 画曲线用：从爆心到半径外一点，每一步打掉多少血（已经过了装甲） */
@@ -771,10 +786,23 @@ export function splashExpected(a: AmmoProfile, target: UnitProfile, dist: number
 
 // ---------- 穿甲和结果 ----------
 
+/**
+ * 这个距离上的穿深。`GetPenetration`（RVA 0x7B6DD0）：
+ *
+ *   装甲类型 0  → FLT_MAX（无视装甲）
+ *   装甲类型 1  → Pmin − (Pmin − Pfar) × 实际距离 ÷ (参考射程 − 最小射程)，夹到 ≥ 0
+ *   其它（破甲）→ **不随距离变**，一直是 Pfar（PenetrationAtGroundRange）
+ *
+ * 三处和原来的写法不一样：分母要减最小射程、破甲弹不衰减、结果不取整。
+ * 参考射程是 `GetDispersionReferenceRange`：地面 / 低空 / 高空里第一个正数。
+ */
 export function penAt(a: AmmoProfile, dist: number): number {
-  if (a.penFar === a.penMin || a.range <= 0) return a.penMin
-  const t = clamp(dist / a.range, 0, 1)
-  return Math.round(a.penMin + (a.penFar - a.penMin) * t)
+  if (a.armorType === 0) return Infinity
+  if (a.armorType !== 1) return a.penFar
+  const ref = a.range || a.lowAlt || a.highAlt || 0
+  const denom = ref - a.minRange
+  if (!(denom > 0)) return Math.max(0, a.penMin)
+  return Math.max(0, r2(a.penMin - ((a.penMin - a.penFar) * dist) / denom))
 }
 
 /**
@@ -815,7 +843,9 @@ export function timeForShots(w: WeaponProfile, n: number): number {
   for (let i = 1; i < n; i++) {
     left--
     if (left <= 0) {
-      t += w.reload + w.aim
+      // 装填和连发节奏是**各自独立的计时器**（ShotCycleAndReload 里分别挂 blocker），
+      // 而且一直盯着同一个目标时不会重新瞄准——所以是 max(装填, 连发间隔)，不是装填 + 瞄准
+      t += Math.max(w.reload, w.dtBurst)
       left = mag
       inBurst = burst
     } else if (--inBurst <= 0) {
@@ -832,7 +862,8 @@ export function timeForShots(w: WeaponProfile, n: number): number {
 export function cycleTime(w: WeaponProfile): number {
   const bursts = Math.max(1, Math.ceil(w.mag / w.burst))
   const inBurst = (w.burst - 1) * w.dtShot
-  const total = bursts * inBurst + (bursts - 1) * w.dtBurst + w.reload + w.aim
+  // 装填和连发间隔是独立计时器，取大的那个；瞄准只在第一次开火前算一次，不摊进稳态节奏
+  const total = bursts * inBurst + (bursts - 1) * w.dtBurst + Math.max(w.reload, w.dtBurst)
   return total / w.mag
 }
 
@@ -877,7 +908,7 @@ export function shotAt(
   // 先把基础伤害乘上减伤（步兵抗打击、躲楼里），再过装甲公式——游戏就是这个顺序
   const mul = damageMul(target, a, opts)
   const base = a.dmg * mul
-  const dmg = damageOf(base, pen, armor, a.armorType)
+  const dmg = damageOf(base, pen, armor, a.armorType, target.armorValue > 0)
   const hit = hitChanceOf(a, target, dist, opts)
   // 溅射同样走伤害公式（按爆心距离衰减之后再过装甲）
   // 溅射的每个落点各自过一遍装甲公式（和游戏一样），不是拿直击伤害按比例缩
@@ -951,21 +982,29 @@ export function engage(
  * 一个单位的总输出。
  *
  * `CanUseFiringChannel` 进门第一件事是 `mov esi, [weapon+0xc0]; test esi, esi; je 返回true`——
- * **通道 0 等于不占通道**，直接放行；只有同一个**非零**通道上的武器才互相挡着不能同时开火
- * （直升机火箭巢、飞机的某些挂架就是这么分组的）。数据里 1191 件武器是通道 0，非零的只有 88 件。
- * 所以：通道 0 的各算各的，非零通道每组只取最能打的那一件。
+ * **通道 0 等于不占通道**，直接放行；只有同一个**非零**通道上的武器才互相挡着。
+ *
+ * 抢占谁赢看的是 **WeaponPriority，数字小的赢**（0x7B4753/767 处比的是优先级，
+ * 不是伤害），平手再比 TargetComponent+8 的那个分数——那个分数我们算不出来，
+ * 平手就退回按秒伤挑，界面上标了。
  */
 export function totalDps(list: Engagement[]): {
   dps: number
-  byChannel: { channel: number; dps: number; weapon: string }[]
+  byChannel: { channel: number; dps: number; weapon: string; priority: number }[]
 } {
-  const best = new Map<string, { channel: number; dps: number; weapon: string }>()
+  const best = new Map<string, { channel: number; dps: number; weapon: string; priority: number }>()
   for (const [i, e] of list.entries()) {
     if (!e.result) continue
     const ch = e.weapon.channel
     const key = ch ? 'c' + ch : 'w' + e.weapon.id + '#' + i
     const cur = best.get(key)
-    if (!cur || e.result.dps > cur.dps) best.set(key, { channel: ch, dps: e.result.dps, weapon: e.weapon.name })
+    // 非零通道：优先级数字小的赢；平手才比秒伤
+    const better =
+      !cur ||
+      (ch
+        ? e.weapon.priority < cur.priority || (e.weapon.priority === cur.priority && e.result.dps > cur.dps)
+        : e.result.dps > cur.dps)
+    if (better) best.set(key, { channel: ch, dps: e.result.dps, weapon: e.weapon.name, priority: e.weapon.priority })
   }
   const byChannel = [...best.values()].sort((a, b) => b.dps - a.dps)
   return { dps: Math.round(byChannel.reduce((s, x) => s + x.dps, 0) * 100) / 100, byChannel }
@@ -1128,7 +1167,13 @@ export function simulate(
     if (!r || !e.best || r.expected <= 0) continue
     const key = e.weapon.channel ? 'c' + e.weapon.channel : 'w' + e.weapon.id + '#' + i
     const cur = byCh.get(key)
-    if (!cur || r.dps > (cur.result?.dps ?? 0)) byCh.set(key, e)
+    const better =
+      !cur ||
+      (e.weapon.channel
+        ? e.weapon.priority < cur.weapon.priority ||
+          (e.weapon.priority === cur.weapon.priority && r.dps > (cur.result?.dps ?? 0))
+        : r.dps > (cur.result?.dps ?? 0))
+    if (better) byCh.set(key, e)
   }
   const guns = [...byCh.values()].map((e) => {
     const w = e.weapon
@@ -1184,7 +1229,8 @@ export function simulate(
   const advance = (g: Gun): void => {
     g.left--
     if (g.left <= 0) {
-      g.next += g.w.reload + g.w.aim
+      // 见 timeForShots：装填和连发是独立计时器，不额外加瞄准
+      g.next += Math.max(g.w.reload, g.w.dtBurst)
       g.left = Math.max(1, g.w.mag || 1)
       g.inBurst = g.burst
     } else if (--g.inBurst <= 0) {
@@ -1221,7 +1267,7 @@ export function simulate(
         // 减伤是活的：步兵一边掉人一边变，压制到红了就直接不扛打了，所以每一发重算
         const mul = damageMul(target, a, { ...sit, alive, level })
         const base = a.dmg * mul
-        const dmg = damageOf(base, r.pen, r.armor, a.armorType)
+        const dmg = damageOf(base, r.pen, r.armor, a.armorType, target.armorValue > 0)
         const splash = a.aoe > 0 && dmg > 0 ? (r.splash / Math.max(1e-9, r.mul)) * mul : 0
         const expected = r.hit * dmg + (1 - r.hit) * splash
         const dealt = Math.min(hp, expected * n)

@@ -120,7 +120,8 @@ export interface CombatData {
   /** 单位能挂的炮塔（含各种变体） */
   turrets: Record<number, CTurretMount[]>
   /** 炮塔上的武器：[武器id, 发射通道]。同一个通道上的武器不能同时开火 */
-  turretWeapons: Record<number, [number, number][]>
+  /** 炮塔挂的武器：[武器 id, 发射通道, 抢占优先级（小的赢）] */
+  turretWeapons: Record<number, [number, number, number][]>
   weapons: Record<number, CWeapon>
   /** "单位id:武器id" → [[弹药id, 携带量], …] */
   weaponAmmo: Record<string, [number, number][]>

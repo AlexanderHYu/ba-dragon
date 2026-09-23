@@ -95,9 +95,10 @@ export function buildCombat(r: RawTables): CombatData {
     ] as CTurretMount)
   }
 
-  const turretWeapons: Record<number, [number, number][]> = {}
+  const turretWeapons: Record<number, [number, number, number][]> = {}
   for (const x of row('TurretWeaponsJson')) {
-    ;(turretWeapons[n(x.TurretId)] ||= []).push([n(x.WeaponId), n(x.WeaponChannel)])
+    // WeaponPriority：同一个非零通道上抢占发射权时，数字**小**的赢（CanUseFiringChannel）
+    ;(turretWeapons[n(x.TurretId)] ||= []).push([n(x.WeaponId), n(x.WeaponChannel), n(x.WeaponPriority)])
   }
 
   const weapons: Record<number, CWeapon> = {}
