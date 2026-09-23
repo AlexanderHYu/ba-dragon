@@ -10,6 +10,14 @@ import './archive.css'
 const PAGE_SIZE = 30
 
 /** 今天的只给时分（22:49），别的日子前面补个日期（09/19 22:49） */
+/** 时长：38:24 这样；不到一分钟就只写秒 */
+function fmtDur(sec: number | null): string {
+  if (!sec || sec <= 0) return '—'
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return m ? m + ':' + String(s).padStart(2, '0') : s + '秒'
+}
+
 function fmtTime(ms: number | null): string {
   if (!ms) return '—'
   const d = new Date(ms)
@@ -109,6 +117,9 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                 <th>ELO</th>
                 <th>账号</th>
                 <th>时间</th>
+                <th className="num" title="这一局打了多久。和 BATrace 的 TotalPlayTimeInSec 逐条核对过，完全一致">
+                  时长
+                </th>
                 <th />
               </tr>
             </thead>
@@ -137,6 +148,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                       {m.mine?.account || <span className="dim">—</span>}
                     </td>
                     <td className="archive-time">{fmtTime(m.startTime)}</td>
+                    <td className="archive-dur num">{fmtDur(m.durationSec)}</td>
                     <td className="archive-play">
                       {rid && (
                         <button

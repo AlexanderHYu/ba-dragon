@@ -116,3 +116,9 @@ button.archive-play-btn {
     display: none;
   }
 }
+
+.archive-dur {
+  white-space: nowrap;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
