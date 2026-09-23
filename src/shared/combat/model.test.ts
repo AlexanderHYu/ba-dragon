@@ -410,9 +410,13 @@ describe('AOE（游戏的 DealAOEDamage）', () => {
     expect(aoeFactor(flat, t.bounds + 100, t.bounds)).toBe(1)
   })
 
-  it('距离超过 100 米一律没伤害（游戏里夹到 100）', () => {
+  it('没有 100 米截断：超出溅射半径才归零', () => {
     const t = tank()!
-    expect(aoeFactor(ammo(305), t.bounds + 120, t.bounds)).toBe(0)
+    const bomb = ammo(305) // 半径 175
+    // 120 米还在半径里，照样有伤害（早先按 clamp(d,0,100) 写过，会把这里算成满伤）
+    expect(aoeFactor(bomb, t.bounds + 120, t.bounds)).toBeCloseTo(1 - 120 / 175, 4)
+    // 超出半径才是 0
+    expect(aoeFactor(bomb, t.bounds + 175, t.bounds)).toBe(0)
   })
 
   it('曲线从满伤降到 0，致死半径算得出来（穿得动的时候）', () => {
@@ -422,8 +426,8 @@ describe('AOE（游戏的 DealAOEDamage）', () => {
     const c = aoeCurve(ammo(305), t, thru)
     expect(c[0].dmg).toBe(175)
     expect(c[c.length - 1].dmg).toBe(0)
-    // 175 伤害打 17 血：d = 175 × (1 − 17/175) ≈ 158，但游戏夹到 100
-    expect(lethalRadius(ammo(305), t, thru)).toBeCloseTo(100 + t.bounds, 1)
+    // 175 伤害打 17 血：d = 175 × (1 − 17/175) ≈ 158
+    expect(lethalRadius(ammo(305), t, thru)).toBeCloseTo(175 * (1 - 17 / 175) + t.bounds, 1)
     // 伤害不够就炸不死
     expect(lethalRadius(ammo(301), t, thru)).toBeNull()
   })

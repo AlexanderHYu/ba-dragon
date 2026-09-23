@@ -385,8 +385,8 @@ export default function Calculator(): React.JSX.Element {
                       以内能一发带走 （{T.hp} HP）
                     </span>
                     <span className="dim">
-                      距离是从目标外壳算的：{T.name} 外壳半径 {toM(T.bounds)} m，所以大目标更容易被溅到； 引擎只处理爆心{' '}
-                      {toM(100)} m 以内的单位。
+                      距离是从目标外壳算的：{T.name} 外壳半径 {toM(T.bounds)} m，所以大目标更容易被溅到；
+                      出了溅射半径就没伤害了。
                     </span>
                   </div>
                 </>

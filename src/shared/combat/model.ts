@@ -692,11 +692,12 @@ export function hitChanceOf(a: AmmoProfile, target: UnitProfile, dist: number, o
  */
 export function aoeFactor(a: AmmoProfile, distFromCenter: number, boundsRadius: number, radius = a.aoe): number {
   if (radius <= 0) return 0
-  const raw = distFromCenter - boundsRadius
-  // 游戏把 d 夹在 [0, 100]。夹上限是因为引擎只会去查爆点周围一圈里的单位，
-  // 再远的根本不参与计算，所以这里超过 100 米直接当没伤害。
-  if (raw > 100) return 0
-  const d = clamp(raw, 0, 100)
+  // 到外壳的距离。**没有 100 米截断**——`DealAOEDamage` 里那个 100
+  // （`AOE_SEARCH_EXTRA_RADIUS`）是拿去当空间查询半径余量的（`半径 + 100` 传给查询），
+  // 不在伤害公式里。衰减本身只有「超出半径就是 0」：
+  //   d >= 半径 → 0；NoDamageFalloff → 1；否则 clamp(1 − d / 半径, 0, 1)
+  // 早先按 clamp(d, 0, 100) 写过，那会让半径大于 100 的弹（FAB-9000 175、核弹 350）算错。
+  const d = Math.max(0, distFromCenter - boundsRadius)
   if (d >= radius) return 0
   if (a.noFalloff) return 1
   return clamp(1 - d / radius, 0, 1)
