@@ -606,6 +606,37 @@ cmp  dword [armor+0x28], 0 / jg   ; **目标 ArmorValue > 0 → 也走破甲曲�
 他说对的是机制（弹是分开飞的），这在 APS 拦截（我们已经按一发处理）和最后一发的
 溢出上有差别，在计算器的场景里（攻击方满编）咬不到。
 
+### 复核第二批：又改了五处
+
+**攻顶有距离门槛。** `DoesAmmunitionUseTopArmorAttack`（RVA 0x7B53F0，游戏预估伤害时用的就是它）：
+
+```
+弹药的 TopArmorAttack 标志为真 → 攻顶
+抛射角 < 30                    → 不攻顶
+否则                           → 射击距离 ≥ 0.33 × 对这个目标的射程 才攻顶
+```
+
+0.33 是 `LOFT_GOING_STRAIGHT_DISTANCE_PROPORTION`。之前写的「抛射高度 ≤ 10」这个条件是编的。
+标枪这类有显式标志的不受距离影响；匕首（抛射角 85、没有显式标志）10 km 射程下
+**3300 m 以内打正面、以外才打顶**。
+
+**压制是挨打就结算的，不是攒到整秒。** `StressSystem.Update` 里
+`cmp [PendingDamages+0x18], 0 / jg` —— 待结算列表非空就**每帧都结算**，不看计时器；
+只有「这一帧没挨打」才走计时器跑恢复。之前写成每秒结算，变黄变红最多会晚一秒。
+
+**步兵抗打击有伤害门槛，楼房那层没有。** 门槛是 `BuffConfig.StressDamageModThreshold`
+（我们读到的这套是 **36**），比的是单发的 `原始伤害 × AOE衰减`——够大就不吃步兵减伤。
+`BuildingsConfig.BuildingDamageThreshold = 5` 我之前当成「楼房减伤的门槛」是读错了：
+它是从**楼房自身**的伤害里减掉的（`raw × AOE × 系数 − 5`，≤ 0 就不掉血），
+跟里面的人吃多少伤害无关。
+
+**弹药能盖掉武器的瞄准时间。** `GenerateRandomAimTime` 里弹药的
+`AimTimeMinOverride/MaxOverride` 各自独立判零，非零就顶掉武器的。数据里 15 种弹有覆盖。
+
+**地面和飞机的合并是两条路。** `CombineWeapons` 按单位类别分岔：直升机/飞机走
+`CombinePylonsOnAircraft`（间隔按总弹量摊，就是我们实现的那条），地面走
+`MergeWeaponsOnGroundTurrets`——**只并弹药和弹匣，发射节奏不变**。之前地面也在摊间隔。
+
 ## 顺带能做的
 
 `.dek` 解出来是卡组内容：分类 → 每张卡的单位 ID、配装选项、运输载具、张数，

@@ -158,7 +158,10 @@ export function buildCombat(r: RawTables): CombatData {
       n(a.DispersionMinimal),
       n(a.LoftAngle),
       n(a.LoftHeight),
-      n(a.RadioFuseDistance)
+      n(a.RadioFuseDistance),
+      // 弹药可以盖掉武器的瞄准时间（各自独立判零，0 就退回武器的）
+      n(a.AimTimeMinOverride),
+      n(a.AimTimeMaxOverride)
     ] as CAmmo
   }
 

@@ -54,8 +54,10 @@ export interface AmmoProfile {
   seeker: number
   /** 无视掩体的比例（0~1 的浮点，不是开关）：1 = 完全无视楼房和步兵减伤 */
   ignoreCover: number
-  /** 近炸引信的起爆距离，0 = 撞上才炸（数据重新导出之前一律是 0） */
+  /** 近炸引信的起爆距离，0 = 撞上才炸 */
   radioFuse: number
+  /** 这种弹自己的瞄准时间（0 = 用武器的）。GenerateRandomAimTime 里各自独立判零 */
+  aim: number
   /** 抛射角：反坦克导弹里 36° 那一组就是攻顶的（标枪、地狱火、长钉…） */
   loftAngle: number
   loftHeight: number
@@ -240,7 +242,22 @@ export const toM = (x: number): number => Math.round(x * DIST_SCALE)
  * 平地和林区都没有额外减伤——林区只挡视野，那是红龙的设定，这个游戏没有。
  * 楼房那条还有个门槛：单发伤害够大就直接不吃减伤（BuildingsConfig.BuildingDamageThreshold = 5）。
  */
-export const BUILDING = { floor: 0.18, perSoldier: 0.02, threshold: 5 } as const
+/**
+ * 楼里：clamp01(0.18 + 0.02 × 楼里总人数)，人数算的是**这栋楼里所有班组**。
+ * `BuildingsConfig.BuildingDamageThreshold = 5` 不是「伤害够大就不吃减伤」的门槛——
+ * 它是从**楼房自身**的伤害里减掉的（`raw × AOE × 系数 − 5`，≤ 0 就不掉血），
+ * 跟里面的人受多少伤害无关。之前拿它当门槛用是读错了。
+ */
+export const BUILDING = { floor: 0.18, perSoldier: 0.02, selfDamageThreshold: 5 } as const
+
+/**
+ * 步兵抗打击**有**伤害门槛：单发的 `原始伤害 × AOE衰减` 到了
+ * `BuffConfig.StressDamageModThreshold` 就不吃这层减伤了（大口径直接糊脸）。
+ *
+ * 注意：游戏资产里有**两套** BuffConfig——一套 36（步兵黄线 0.4），一套 9999（黄线 0.5）。
+ * 哪一套在实际对局里生效还没定论，这里跟着我们读到并一直在用的那一套（36 / 0.4）走。
+ */
+export const INF_DMG_THRESHOLD = 36
 
 /** 步兵抗打击的两个系数，跟压制等级走（BuffConfig.StressModifiers） */
 export const INF_DMG: Record<number, { floor: number; perSoldier: number }> = {
@@ -285,14 +302,12 @@ export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = 
   let mul = 1
   // 近炸引信：在旁边炸，按起爆距离的分布算能打出多少
   if (usesRadioFuse(a)) mul *= fuseFactor(a, sit.fuse || 'avg')
-  if (target.klass === 'inf' && target.squad.length) {
+  // 步兵抗打击：单发伤害够大就不吃这一层
+  if (target.klass === 'inf' && target.squad.length && a.dmg < INF_DMG_THRESHOLD) {
     const alive = sit.alive ?? target.squad.length
     mul *= bypassCover(infantryFactor(alive, sit.level ?? 0), a.ignoreCover)
   }
-  // 楼房那条只对够小的单发伤害生效
-  if (sit.building && a.dmg < BUILDING.threshold) {
-    mul *= bypassCover(buildingFactor(sit.building), a.ignoreCover)
-  }
+  if (sit.building) mul *= bypassCover(buildingFactor(sit.building), a.ignoreCover)
   return mul
 }
 
@@ -308,6 +323,9 @@ export const isGuided = (a: AmmoProfile): boolean => a.seeker > 0 || a.laser
  *   MISSILE_MISS_RADIOFUSE_TRIGGER_CHANCE = 0.5
  *       就算判定脱靶，引信还有一半概率照样起爆
  */
+/** BattleSystemSettings.LOFT_GOING_STRAIGHT_DISTANCE_PROPORTION（序列化 +364 = 0.33） */
+export const LOFT_STRAIGHT_PROPORTION = 0.33
+
 export const RADIOFUSE = {
   /** MISSILE_RADIOFUSE_HIT_PREDICTED_AVERAGE_DAMAGE_PROPORTION：游戏 AI 预估用的平均伤害比例 */
   avgDamage: 0.33,
@@ -471,7 +489,7 @@ export function profileOf(unitId: number, optionIds: number[] = [], data: Combat
         if (w) weapons.push(w)
       }
     }
-    mergePylons(weapons)
+    mergePylons(weapons, klass === 'plane' || klass === 'heli')
   }
 
   const abilityIds = [...(data.unitAbilities[eff] || []), ...extraAbilities]
@@ -590,6 +608,10 @@ function weaponProfile(
       seeker: a[M.seeker],
       ignoreCover: a[M.ignoreCover] || 0,
       radioFuse: a[M.radioFuse] || 0,
+      // 上下限各自判零再取中值；两个都是 0 就退回武器的瞄准时间
+      aim:
+        ((a[M.aimMinOverride] || 0) + (a[M.aimMaxOverride] || 0)) /
+        ((a[M.aimMinOverride] ? 1 : 0) + (a[M.aimMaxOverride] ? 1 : 0) || 1),
       loftAngle: a[M.loftAngle],
       loftHeight: a[M.loftHeight]
     })
@@ -622,7 +644,13 @@ function weaponProfile(
  * 先取平均再除总弹量，不是直接求和。MISSILE_MERGE_POWER = 1。
  * 所以四发弹的两个挂架并起来，间隔是单挂架的四分之一——齐射就是这么快的。
  */
-function mergePylons(weapons: WeaponProfile[]): void {
+/**
+ * 合并同型武器。`UnitBuilder.CombineWeapons` 按**单位类别**分岔：
+ *   8 / 16（直升机、飞机）→ CombinePylonsOnAircraft：间隔按总弹量摊（我们实现的这条）
+ *   4（地面）            → MergeWeaponsOnGroundTurrets：只并弹药和弹匣，**节奏不变**
+ *   其它                  → 不合并
+ */
+function mergePylons(weapons: WeaponProfile[], air: boolean): void {
   const groups = new Map<number, WeaponProfile[]>()
   for (const w of weapons) {
     if (!w.mergeable) continue
@@ -637,7 +665,8 @@ function mergePylons(weapons: WeaponProfile[]): void {
     const head = g[0]
     head.pylons = g.length
     head.mag = totalAmmo
-    head.dtBurst = r2(avgBurst / Math.pow(Math.max(1, totalAmmo), BS.missileMergePower))
+    // 地面炮塔只并弹匣，发射节奏保持原样；只有飞机/直升机才摊间隔
+    if (air) head.dtBurst = r2(avgBurst / Math.pow(Math.max(1, totalAmmo), BS.missileMergePower))
     for (const w of g.slice(1)) weapons.splice(weapons.indexOf(w), 1)
   }
 }
@@ -812,9 +841,25 @@ export function penAt(a: AmmoProfile, dist: number): number {
  * **统一装甲值** `ArmorValue`，两者互斥。步兵、飞机、直升机、皮薄的车都走后者——
  * 所以飞机的方向装甲全是 0，**不能当成「没装甲」**（A-10 的 ArmorValue 是 30）。
  */
-export function armorAt(target: UnitProfile, a: AmmoProfile, facing: Facing): number {
+/**
+ * 这一发会不会打顶。`DoesAmmunitionUseTopArmorAttack`（RVA 0x7B53F0，游戏预估伤害时用的就是它）：
+ *
+ *   弹药的 TopArmorAttack 标志为真          → 打顶
+ *   抛射角 < 30                             → 不打顶
+ *   否则                                    → 射击距离 ≥ 0.33 × 对这个目标的射程 才打顶
+ *
+ * 0.33 是 `LOFT_GOING_STRAIGHT_DISTANCE_PROPORTION`。**近距离放标枪是不攻顶的**——
+ * 导弹还没爬到高点就撞上了。（之前写的「抛射高度 ≤ 10」这个条件是编的，游戏里没有。）
+ */
+export function usesTopAttack(a: AmmoProfile, target: UnitProfile, dist: number): boolean {
+  if (a.topAttack) return true
+  if (a.loftAngle < 30) return false
+  return dist >= LOFT_STRAIGHT_PROPORTION * rangeFor(a, target)
+}
+
+export function armorAt(target: UnitProfile, a: AmmoProfile, facing: Facing, dist = Infinity): number {
   if (!target.directional) return target.armorValue
-  const i = a.topAttack ? FACE_IDX.top : FACE_IDX[facing]
+  const i = usesTopAttack(a, target, dist) ? FACE_IDX.top : FACE_IDX[facing]
   return a.armorType === 1
     ? target.kin[i]
     : a.armorType === 2
@@ -903,7 +948,7 @@ export function shotAt(
   opts: Situation = {}
 ): ShotResult {
   const pen = penAt(a, dist)
-  const armor = armorAt(target, a, facing)
+  const armor = armorAt(target, a, facing, dist)
   const through = pen >= armor
   // 先把基础伤害乘上减伤（步兵抗打击、躲楼里），再过装甲公式——游戏就是这个顺序
   const mul = damageMul(target, a, opts)
@@ -914,7 +959,9 @@ export function shotAt(
   // 溅射的每个落点各自过一遍装甲公式（和游戏一样），不是拿直击伤害按比例缩
   const splash = a.aoe > 0 ? splashExpected(a, target, dist, { pen, armor, mul }) : 0
   const expected = r2(hit * dmg + (1 - hit) * splash)
-  const per = cycleTime(w)
+  // 这种弹自己带瞄准时间就用它的（GenerateRandomAimTime 里弹药覆盖优先）
+  const wa = a.aim > 0 ? { ...w, aim: a.aim } : w
+  const per = cycleTime(wa)
   const range = rangeFor(a, target)
   const shots = expected > 0 ? Math.ceil(target.hp / expected) : null
   return {
@@ -928,7 +975,7 @@ export function shotAt(
     splash,
     expected,
     shots,
-    seconds: shots == null ? null : timeForShots(w, shots),
+    seconds: shots == null ? null : timeForShots(wa, shots),
     dps: r2((expected * w.count) / per),
     stressShots: a.stress > 0 ? Math.ceil(target.maxStress / a.stress) : null,
     inRange: dist >= a.minRange && dist <= range,
@@ -1299,8 +1346,12 @@ export function simulate(
       }
     }
 
-    // 整秒结算一次压制（已经打死了就不用再算了）
-    if (deadAt == null && t > 0 && Math.abs(t / STRESS.tick - Math.round(t / STRESS.tick)) < dt / 2) {
+    // 压制怎么结算（StressSystem.Update）：
+    //   挨打了（PendingDamages 非空）→ **每一帧都结算**，不等计时器（`cmp [pending+0x18],0 / jg`）
+    //   没挨打                        → 才看 STRESS_TICK 的计时器，跑恢复
+    // 所以挨打是立刻上压制的，只有恢复按秒走。
+    const tick = t > 0 && Math.abs(t / STRESS.tick - Math.round(t / STRESS.tick)) < dt / 2
+    if (deadAt == null && (pending > 0 || tick)) {
       if (pending > 0) {
         stress = clamp(stress + pending, 0, target.maxStress)
         sinceHit = 0

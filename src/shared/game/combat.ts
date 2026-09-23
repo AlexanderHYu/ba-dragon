@@ -70,6 +70,8 @@ export type CAmmo = [
   number,
   number,
   number,
+  number,
+  number,
   number
 ]
 /**
@@ -210,7 +212,9 @@ export const M = {
   dispMin: 23,
   loftAngle: 24,
   loftHeight: 25,
-  radioFuse: 26
+  radioFuse: 26,
+  aimMinOverride: 27,
+  aimMaxOverride: 28
 } as const
 export const B = {
   name: 0,

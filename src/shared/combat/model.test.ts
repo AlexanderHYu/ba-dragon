@@ -23,6 +23,7 @@ import {
   fuseFactor,
   RADIOFUSE,
   usesRadioFuse,
+  usesTopAttack,
   infantryFactor,
   shotAt,
   simulate,
@@ -93,7 +94,7 @@ const DATA: CombatData = {
   },
   ammo: {
     // [名字, 伤害, 压制, 穿近, 穿远, 地面射程, 低空, 高空, 目标位图, 装甲类型, AOE, AOE压制, 超压,
-    //  顶攻, 可拦, 激光, 散布H, V, 最小射程, 暴击, 无视掩体, 伤害不衰减, 导引头, 最小散布, 抛射角, 抛射高度, 近炸距离]
+    //  顶攻, 可拦, 激光, 散布H, V, 最小射程, 暴击, 无视掩体, 伤害不衰减, 导引头, 最小散布, 抛射角, 抛射高度, 近炸距离, 0, 0]
     300: [
       '尾翼稳定脱壳穿甲弹',
       10,
@@ -121,14 +122,46 @@ const DATA: CombatData = {
       0,
       0,
       0,
+      0,
+      0,
       0
     ],
-    301: ['破甲弹', 11.5, 120, 400, 400, 700, 0, 0, 39, 2, 9, 9, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    302: ['7.62 机枪弹', 0.75, 16, 20, 10, 300, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    303: ['5.56 步枪弹', 1.2, 12, 15, 7, 250, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    301: ['破甲弹', 11.5, 120, 400, 400, 700, 0, 0, 39, 2, 9, 9, 0, 0, 0, 0, 1.8, 1.5, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    302: ['7.62 机枪弹', 0.75, 16, 20, 10, 300, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    303: ['5.56 步枪弹', 1.2, 12, 15, 7, 250, 0, 0, 47, 1, 0, 0, 0, 0, 0, 0, 2, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     // 制导：散布两个字段是「基础命中 / 抗干扰」
-    304: ['反坦克导弹', 8.5, 200, 500, 500, 250, 0, 0, 36, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 100, 0, 0, 0, 0],
-    305: ['大炸弹', 175, 500, 300, 300, 0, 0, 0, 1, 2, 175, 175, 15, 0, 0, 0, 65, 65, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    304: [
+      '反坦克导弹',
+      8.5,
+      200,
+      500,
+      500,
+      250,
+      0,
+      0,
+      36,
+      2,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      100,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    305: ['大炸弹', 175, 500, 300, 300, 0, 0, 0, 1, 2, 175, 175, 15, 0, 0, 0, 65, 65, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     // 防空弹：制导 + 溅射 + 近炸引信，打飞机走近炸
     306: [
       '防空导弹',
@@ -158,7 +191,9 @@ const DATA: CombatData = {
       0,
       0,
       // 近炸距离照真实数据取溅射半径的 0.8 倍
-      32
+      32,
+      0,
+      0
     ]
   },
   abilities: {
@@ -228,6 +263,7 @@ const ammo = (id: number, over: Partial<AmmoProfile> = {}): AmmoProfile => {
     seeker: a[22],
     ignoreCover: a[20] || 0,
     radioFuse: a[26] || 0,
+    aim: 0,
     dispMin: a[23],
     loftAngle: a[24],
     loftHeight: a[25],
@@ -704,15 +740,15 @@ describe('步兵减伤和楼房', () => {
     expect(r.mul).toBe(1)
   })
 
-  it('伤害够大就不吃楼房减伤（BuildingDamageThreshold = 5）', () => {
+  it('楼房减伤不看单发伤害；步兵抗打击才有门槛（36）', () => {
     const t = tank()!
     const squad = inf()!
-    // 120mm 单发 10 > 5：楼房那条不生效，只剩步兵自己的
+    // 120mm 单发 10 < 36：两层都吃
     const big = shotAt(t.weapons[0], ammo(300, { ignoreCover: 0 }), squad, 200, 'front', { building: 10 })
-    expect(big.mul).toBeCloseTo(infantryFactor(3, 0), 3)
-    // 机枪单发 0.75 < 5：两条都吃
-    const small = shotAt(t.weapons[0], ammo(302, { ignoreCover: 0 }), squad, 200, 'front', { building: 10 })
-    expect(small.mul).toBeCloseTo(infantryFactor(3, 0) * buildingFactor(10), 3)
+    expect(big.mul).toBeCloseTo(infantryFactor(3, 0) * buildingFactor(10), 3)
+    // 单发够大（≥ 36）就不吃步兵抗打击了，但楼房那层照吃
+    const huge = shotAt(t.weapons[0], ammo(300, { ignoreCover: 0, dmg: 40 }), squad, 200, 'front', { building: 10 })
+    expect(huge.mul).toBeCloseTo(buildingFactor(10), 3)
   })
 })
 
@@ -828,5 +864,42 @@ describe('按机器码审计修正的几处', () => {
     expect(penAt(heat, 9999)).toBe(400)
     // 装甲类型 0 = 无视装甲
     expect(penAt(ammo(300, { armorType: 0 }), 500)).toBe(Infinity)
+  })
+})
+
+describe('审计复核第二批', () => {
+  it('攻顶要么有显式标志，要么抛射角 ≥ 30 且距离过了 0.33 × 射程', () => {
+    const t = tank()!
+    const flagged = ammo(300, { topAttack: true, loftAngle: 0 })
+    expect(usesTopAttack(flagged, t, 0)).toBe(true) // 显式标志，距离不管
+    const lofted = ammo(300, { topAttack: false, loftAngle: 36, range: 900 })
+    expect(usesTopAttack(lofted, t, 200)).toBe(false) // 0.33 × 900 = 297，没到
+    expect(usesTopAttack(lofted, t, 400)).toBe(true)
+    const flat = ammo(300, { topAttack: false, loftAngle: 10, range: 900 })
+    expect(usesTopAttack(flat, t, 899)).toBe(false) // 角度不够，多远都不攻顶
+  })
+
+  it('近距离打不到顶装甲：同一发弹，远了打顶、近了打正面', () => {
+    const t = tank()!
+    const lofted = ammo(300, { topAttack: false, loftAngle: 36, range: 900, armorType: 1 })
+    expect(armorAt(t, lofted, 'front', 800)).toBe(t.kin[3]) // 顶
+    expect(armorAt(t, lofted, 'front', 100)).toBe(t.kin[0]) // 正面
+  })
+
+  it('压制挨打就结算，不攒到整秒（只有恢复按秒走）', () => {
+    const t = tank()!
+    const victim = profileOf(1, [901], DATA)!
+    const sim = simulate(engage(t, victim, 300, 'side'), victim, { limit: 30 })
+    // 第一发打在瞄准时间之后（非整秒），压制事件不该被推到下一个整秒
+    const first = sim.events.find((e) => e.kind === 'shocked')
+    if (first) expect(Number.isInteger(first.t)).toBe(false)
+  })
+
+  it('地面炮塔合并只并弹匣，不摊发射间隔', () => {
+    // 4 号单位是飞机（两个挂架），合并之后间隔会被摊小
+    const plane = profileOf(4, [], DATA)!
+    const merged = plane.weapons.find((w) => w.pylons > 1)
+    expect(merged).toBeTruthy()
+    expect(merged!.dtBurst).toBeLessThan(4)
   })
 })
