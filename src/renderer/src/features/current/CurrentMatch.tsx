@@ -24,6 +24,9 @@ export default function CurrentMatch(): React.JSX.Element {
     ['观战', '', cards.filter((c) => teamOf(c) === 'Spectators'), true],
     ['房间里的人', '', cards.filter((c) => !isTeam(c) && teamOf(c) !== 'Spectators'), true]
   ]
+  // 游戏只在有人**加入**时写一行 Incoming client，你进房之前就在里面的人（房主必然是）
+  // 日志里根本没有。翻了十份日志，进厅两秒内一条补播都没有，只能等开打时的完整名单。
+  const partialRoster = !cur && cards.length > 0
 
   return (
     <div className="card">
@@ -41,6 +44,13 @@ export default function CurrentMatch(): React.JSX.Element {
         )}
         <button onClick={() => void window.BA.queryRoster()}>🔄 重新查询</button>
       </h2>
+
+      {partialRoster && (
+        <div className="dim cm-note">
+          房间里只认得出「你进来之后才加入的人」和你自己——游戏日志只在有人加入时写一行，
+          <b>先在房里的（房主一般就是）它不写</b>。等开打时的完整名单出来就全了。
+        </div>
+      )}
 
       {query.pass && (
         <div className="bar" style={{ marginBottom: 10 }}>

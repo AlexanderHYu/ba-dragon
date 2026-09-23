@@ -5,10 +5,12 @@
 const RE = {
   persona: /^Log: GetPersonaName\s+(.+)$/,
   loginSuccess: /^Log: \[AUTH\] Rest: Login success/,
-  lobbyEnter: /^Log: Enter to lobby \(id: \d+\)/,
-  lobbyExit: /^Log: Exit lobby/,
-  incoming: /^Log: Incoming client (.*?):(\d+) to lobby/,
-  outgoing: /^Log: Outgoing client (.*?):(\d+) exit/,
+  // 游戏后来给这几行加了 [LOBBY] 前缀（进厅那行现在**只有**带前缀的版本），
+  // 前缀写成可选的，新旧日志都能认
+  lobbyEnter: /^Log: (?:\[LOBBY\] )?Enter to lobby \(id: \d+\)/,
+  lobbyExit: /^Log: (?:\[LOBBY\] )?Exit lobby/,
+  incoming: /^Log: (?:\[LOBBY\] )?Incoming client (.*?):(\d+) to lobby/,
+  outgoing: /^Log: (?:\[LOBBY\] )?Outgoing client (.*?):(\d+) exit/,
   battleStart: /^Log: Start loading battle\.\.\. map: ([^,]+),\s*scenario:\s*(.*)$/,
   playerList: /^Log: Player list:\s*$/,
   playerRow: /^ID: (\d+), Name: (.*?), Team: (\w+)$/,

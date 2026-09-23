@@ -63,7 +63,10 @@ describe.runIf(ready)('日志解析和 4.0.x 对拍', () => {
       const pb = new Old((t, d) => b.push([t, strip(d)]))
       pa.feed(lines)
       pb.feed(lines)
-      expect(a, f).toEqual(b)
+      // 有意分叉的一处：游戏给进/出大厅那几行加了 [LOBBY] 前缀，新版认，4.0.x 不认，
+      // 所以新版会多发几次 lobbyReset。对拍时两边都把它滤掉，其余必须一模一样。
+      const noReset = (xs: unknown[]): unknown[] => xs.filter((x) => (x as [string])[0] !== 'lobbyReset')
+      expect(noReset(a), f).toEqual(noReset(b))
       expect(strip(pa.snapshot()), f).toEqual(strip(pb.snapshot()))
     }
   })
