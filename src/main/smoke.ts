@@ -11,23 +11,33 @@ async function recordTest(Svc: typeof import('./services/replays').ReplayService
   const dir = mkdtempSync(join(tmpdir(), 'ba-rec-'))
   const cfg = {
     get: (k: string): unknown =>
-      ({ replayEnabled: true, replayQuality: 720, replayFps: 30, replayBitrateMbps: 5, replayExposure: 0, replayAudio: 'off', replaySaveDir: dir, replayDisplayId: '', replayKeepDays: 0 })[k]
+      ({
+        replayEnabled: true,
+        replayQuality: 720,
+        replayFps: 30,
+        replayBitrateMbps: 5,
+        replayExposure: 0,
+        replayAudio: 'off',
+        replaySaveDir: dir,
+        replayDisplayId: process.env.BA_SMOKE_REC_DISPLAY || '',
+        replayKeepDays: 0
+      })[k]
   }
   const logs: string[] = []
   const svc = new Svc(cfg as never, { get: () => undefined } as never, {
     status: (st: { error?: string }) => {
-      if (st?.error) logs.push(Date.now() % 100000 + ' ERROR ' + st.error)
+      if (st?.error) logs.push((Date.now() % 100000) + ' ERROR ' + st.error)
     },
     changed: () => undefined,
-    log: (l: string) => logs.push(Date.now() % 100000 + ' ' + l)
+    log: (l: string) => logs.push((Date.now() % 100000) + ' ' + l)
   })
   // 先把编码器探测预热掉（首次要十几秒），不然 6 秒的测试还没开录就停了
   const { probeEncoders: warmEnc, probeOutputs: warmOut } = await import('./services/recorder')
   await Promise.all([warmEnc(), warmOut()])
-  logs.push(Date.now() % 100000 + ' >> start')
+  logs.push((Date.now() % 100000) + ' >> start')
   svc.startForMatch('smoketest', '冒烟')
   await new Promise((r) => setTimeout(r, 6000))
-  logs.push(Date.now() % 100000 + ' >> stop')
+  logs.push((Date.now() % 100000) + ' >> stop')
   svc.stopForMatch('smoketest', '冒烟')
   // 合成要一会儿
   for (let i = 0; i < 40; i++) {
@@ -59,7 +69,9 @@ export async function run(win: BrowserWindow): Promise<void> {
       }
     })()`)
     out.config = await win.webContents.executeJavaScript('window.BA.getConfig()')
-    out.session = await win.webContents.executeJavaScript('window.BA.getSession().then(s => ({ listening: s.watcher.listening, file: !!s.watcher.file }))')
+    out.session = await win.webContents.executeJavaScript(
+      'window.BA.getSession().then(s => ({ listening: s.watcher.listening, file: !!s.watcher.file }))'
+    )
     // 复盘：用缓存里已有的一局（BA_SMOKE_FID），不发网络请求
     const fid = process.env.BA_SMOKE_FID
     if (fid) {
