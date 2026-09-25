@@ -19,6 +19,7 @@ import { Analytics } from './services/analytics'
 import { ReplayService } from './services/replays'
 import { migrateLegacy, legacyLocalIds } from './services/migrate'
 import { MatchSync } from './services/matchSync'
+import { catchUpFromLogs, importAfterMatch } from './services/matchImport'
 import { registerIpc } from './ipc'
 
 // 录像播放走自定义协议 replay://local/<文件名>：支持 Range 请求，拖进度条只读需要的那一段
@@ -133,18 +134,14 @@ function startServices(): Services {
     if (type === 'matchEnd') {
       const m = data as { fid?: string | null; map?: string }
       replays?.stopForMatch(m?.fid ?? null, m?.map || '')
-      // BATrace 出数据比打完慢一两分钟（实测 90 秒），所以等一会儿再抓这一局：
-      // 对局档案马上就有，录像文件名里缺的地图/队伍也顺手补上
-      if (!watcher.isHistorical()) {
-        setTimeout(
-          () => {
-            void sync
-              .run()
-              .catch(() => undefined)
-              .then(() => replays?.backfillMeta())
-          },
-          2 * 60 * 1000
-        )
+      // BATrace 出数据比打完慢一两分钟（实测 90 秒），所以等一会儿再按 fid 抓这一局入库：
+      // 不入库的话这局只活在当前日志里，游戏一重开换了新日志，对局档案里就没了。
+      // 抓到之后录像文件名里缺的地图/队伍也顺手补上
+      if (!watcher.isHistorical() && m?.fid) {
+        importAfterMatch({ client, db, gamedb, tracker }, m.fid, localIds, () => {
+          send('archive:changed')
+          replays?.backfillMeta()
+        })
       }
     }
     if (watcher.isHistorical()) return
@@ -282,6 +279,16 @@ function startServices(): Services {
     setTimeout(() => void sync.run().catch(() => undefined), 20000)
     sync.start()
   }
+  // 补漏：最近三天日志里打过、库里却没有的局（打完没等到入库就关了软件、换了日志）
+  setTimeout(() => {
+    void catchUpFromLogs({ client, db, gamedb, tracker }, String(config.get('logDir') || ''), localIds)
+      .then((n) => {
+        if (!n) return
+        send('archive:changed')
+        replays.backfillMeta()
+      })
+      .catch(() => undefined)
+  }, 25000)
   // 封禁名单：启动后等一会查一次（其余时候手动刷新），查到熟人被封就提示
   if (config.get('banCheckOnStart')) {
     setTimeout(() => {

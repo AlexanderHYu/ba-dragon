@@ -85,7 +85,12 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
   useEffect(() => {
     void reload()
     reloadReplays()
-    return window.BA.on('replay:changed', reloadReplays)
+    const offReplay = window.BA.on('replay:changed', reloadReplays)
+    const offArchive = window.BA.on('archive:changed', () => void reload())
+    return () => {
+      offReplay()
+      offArchive()
+    }
   }, [reload, reloadReplays])
 
   const { items: shown, page: cur } = pageSlice(list || [], page, PAGE_SIZE)

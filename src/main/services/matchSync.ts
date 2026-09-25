@@ -66,8 +66,9 @@ export class MatchSync {
         ? teamOf(ratedP)
         : 1 - teamOf(ratedP)
       : null
-    const start = num(mi.StartTime) * 1000 || null
     const dur = num(mi.TotalPlayTimeInSec) || null
+    // 列表接口只给 EndTime，没有 StartTime：用结束时间倒推
+    const start = num(mi.StartTime) * 1000 || (num(mi.EndTime) && dur ? (num(mi.EndTime) - dur) * 1000 : null)
     try {
       this.db.tx(() => {
         this.db.run(

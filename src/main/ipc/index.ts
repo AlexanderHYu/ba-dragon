@@ -1,13 +1,12 @@
 // IPC 注册：通道名和类型来自 shared/ipc.ts，两边共用一份契约。
 import { existsSync } from 'node:fs'
 import { app, dialog, ipcMain, shell } from 'electron'
-import { analyzeMatch } from '@shared/dragon'
-import { buildMatchReport } from '@shared/match'
 import type { ArchiveItem, GameDbStatus, IpcMap, PlayerCard, Settings } from '@shared/ipc'
 import type { Services } from '../index'
 import { detectLogDir, resolveGameDir } from '../services/config'
 import { mapName } from '../services/players'
 import { legacyLocalIds } from '../services/migrate'
+import { importMatch } from '../services/matchImport'
 
 type Handler<K extends keyof IpcMap> = (arg: IpcMap[K][0]) => IpcMap[K][1] | Promise<IpcMap[K][1]>
 
@@ -111,28 +110,7 @@ export function registerIpc(s: Services): void {
 
   on('match:report', async ({ fid, localIds }) => {
     try {
-      const res = await s.client.matchById(fid)
-      const mi = res?.matchInfo
-      if (!mi?.Data || !Object.keys(mi.Data).length) return { error: 'notYet' }
-      const review = analyzeMatch(mi, fid)
-      const ids = localIds?.length ? localIds : localPlayerIds(s)
-      const src = s.gamedb.source()
-      const report = buildMatchReport(mi, {
-        fid,
-        review,
-        localIds: ids,
-        mapName,
-        game: s.gamedb.priceTable() || undefined,
-        gameSource: src === 'none' ? undefined : src
-      })
-      saveMatch(s, fid, mi, report)
-      s.tracker.recordMatch(
-        fid,
-        report.players.map((p) => ({ id: p.id, name: p.name, team: p.team })),
-        report.winnerTeam,
-        ids
-      )
-      return report
+      return await importMatch(s, fid, localIds?.length ? localIds : localPlayerIds(s))
     } catch (e) {
       return { error: String((e as Error)?.message || e) }
     }
@@ -314,56 +292,6 @@ function localPlayerIds(s: Services): string[] {
   for (const [id, n] of Object.entries(snap.lobbyPlayers || {})) if (n === name) ids.add(id)
   for (const id of legacyLocalIds(s.db)) ids.add(id) // 老版记过的本机账号
   return [...ids]
-}
-
-/** 复盘算完顺手入库：对局、每局每人、每局每人每单位（配装原样存着） */
-function saveMatch(
-  s: Services,
-  fid: string,
-  mi: Parameters<typeof analyzeMatch>[0],
-  report: ReturnType<typeof buildMatchReport>
-): void {
-  try {
-    s.db.tx(() => {
-      s.db.run(
-        `INSERT OR REPLACE INTO match (fid, map_id, start_time, duration_sec, winner_team, rated, end_reason, raw, fetched_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          fid,
-          mi.MapId ?? null,
-          report.startTime,
-          report.durationSec,
-          report.winnerTeam,
-          report.rated ? 1 : 0,
-          report.endReason,
-          JSON.stringify(mi),
-          Date.now()
-        ]
-      )
-      for (const p of report.players) {
-        s.db.run(
-          `INSERT OR REPLACE INTO match_player
-           (fid, pid, name, team, elo_before, elo_after, score, mark, titles, d, l, kills, deaths, dmg, spent, afk)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            fid, p.id, p.name, p.team, p.eloBefore, p.eloAfter, p.score, p.mark,
-            JSON.stringify(p.titles.map((t) => t.id)),
-            p.D, p.L, p.kills, p.deaths, p.dmg, p.spent, p.afk ? 1 : 0
-          ]
-        )
-        for (const u of p.units) {
-          s.db.run(
-            `INSERT OR REPLACE INTO match_unit
-             (fid, pid, unit_id, options, deployed, refunded, dead, spent, lost, dmg, kills, destr)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [fid, p.id, u.id, u.options, u.deployed, u.refunded, u.dead, u.spent, u.lost, u.dmg, u.kills, u.destr]
-          )
-        }
-      }
-    })
-  } catch {
-    /* 入库失败不影响看复盘 */
-  }
 }
 
 export type { PlayerCard }

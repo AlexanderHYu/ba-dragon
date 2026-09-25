@@ -351,6 +351,8 @@ export interface EventMap {
     error?: string
   }
   'replay:changed': void
+  /** 对局档案有新局入库了 */
+  'archive:changed': void
   'replay:log': string
 }
 
