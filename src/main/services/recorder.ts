@@ -898,7 +898,8 @@ export class FfmpegRecorder {
   }
 
   async start(opts: StartOptions): Promise<{ ok: boolean; message?: string }> {
-    this.abort()
+    // 上一局还在录（漏了结束行）：收尾保存，不要连片段一起删
+    this.stop()
     if (!ffmpegPath()) {
       this._error('找不到 ffmpeg.exe（开发环境请先运行 npm run fetch-ffmpeg）')
       return { ok: false, message: 'no ffmpeg' }

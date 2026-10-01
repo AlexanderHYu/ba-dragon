@@ -38,6 +38,11 @@ export interface DisplayChoice {
   capturable: boolean
 }
 
+/**
+ * 录像最长多久还没等到对局结束就强制收尾（防漏掉结束行一直录下去）。
+ * 一局最多 45 分钟，开录比开打早约 3 分钟（9/20 一局 2700 秒录出 2868 秒），留足余量取 60 分钟
+ */
+const WATCHDOG_MAX_MS = 60 * 60 * 1000
 /** 换行符（写日志用） */
 const LF = String.fromCharCode(10)
 
@@ -93,7 +98,7 @@ export class ReplayService {
     try {
       const f = join(app.getPath('userData'), 'replay.log')
       if (existsSync(f) && statSync(f).size > 1024 * 1024) renameSync(f, f + '.1')
-      appendFileSync(f, new Date().toISOString().slice(0, 10) + ' ' + line + LF)
+      appendFileSync(f, new Date().toLocaleDateString('sv-SE') + ' ' + line + LF) // 本地日期（sv-SE 就是 YYYY-MM-DD），时间也是本地的
     } catch {
       /* 日志写不进去不该影响录像本身 */
     }
@@ -143,14 +148,20 @@ export class ReplayService {
     this.recorder.stop(fid ?? undefined, map)
   }
 
-  /** 不在对局了还在录（崩溃退出、日志漏了结束行）：中止残留录制 */
+  /**
+   * 不在对局了还在录（崩溃退出、日志漏了结束行）：收尾**保存**，不丢。
+   * 以前这里是 abort（连已录的片段一起删）而且 30 分钟就判超时——老版那个超时读的字段不存在，
+   * 从来没生效过，搬过来以后真生效了，结果所有超过 30 分钟的对局录像都被删掉。
+   * 现在超时放宽到 60 分钟（见 WATCHDOG_MAX_MS），而且就算触发也是保存不是删除。
+   */
   watchdog(inMatch: boolean): void {
     const st = this.recorder.status()
     if (!st.active) return
-    const tooOld = this.recorder.current && Date.now() - this.recorder.current.startedAt > 30 * 60 * 1000
+    const cur = this.recorder.current
+    const tooOld = !!cur && Date.now() - cur.startedAt > WATCHDOG_MAX_MS
     if (!inMatch || tooOld) {
-      this.log('watchdog: 不在对局或超时，中止残留录制')
-      this.recorder.abort()
+      this.log('watchdog: ' + (tooOld ? '录了超过 60 分钟' : '已经不在对局') + '，收尾保存 fid=' + (cur?.fid || '?'))
+      this.recorder.stop(cur?.fid || undefined, cur?.map || '')
       this.emit.status(this.recorder.status())
     }
   }
