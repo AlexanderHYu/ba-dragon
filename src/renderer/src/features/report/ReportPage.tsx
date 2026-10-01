@@ -34,6 +34,43 @@ const TITLE_NAME: Record<string, string> = {
   freeloader: '吃白食', spender: '败家子', traitor: '内鬼', crash: '曼巴out'
 }
 
+/** 称号的说明（鼠标放上去看），{x} 换成这一局的数字 */
+const TITLE_TIP: Record<string, string> = {
+  carry: '赢方净交换最高：摧毁 {d} − 损失 {l} = {net}',
+  blame: '输方净交换最低：摧毁 {d} − 损失 {l} = {net}',
+  deserter: '游戏记为逃兵或中途挂机，最后一次出兵在第 {min} 分钟；输了锅就是他的',
+  tryhard: '输了，但净交换全场第一',
+  passenger: '赢了，但净交换为负且全场垫底：摧毁 {d} − 损失 {l} = {net}',
+  lonewolf: '队里 {n} 人掉线，他扛起了本队（本队第一、全场前 3）',
+  reaper: '摧毁分占全场 {p}%',
+  untouched: '损失只占本队 {p}%，摧毁却是队均的 {x} 倍',
+  weightlifter: '击杀 {k}、阵亡 {d}，都是全场前列，分值 K/D 却只有 {kd}——纯纯的互换',
+  atm: '损失分占全场 {p}%，K/D 只有 {kd}，对面的经济全靠他',
+  scraper: '伤害占全场 {p}%，摧毁却只有队均的 {x} 倍——光挠痒不收人头',
+  killsteal: '每点伤害换来 {x} 分摧毁，全场最会补刀',
+  boxed: '阵亡单位平均只活了 {s} 秒（中位数）',
+  camper: '几乎没损失（本队的 {p}%），也几乎没战果（队均的 {x} 倍）',
+  landlord: '占了 {n} 个点，本队的 {p}%',
+  demolition: '拆了 {n} 栋建筑',
+  convoy: '{n} 补给被敌人缴获——给对面送物资',
+  bandit: '缴获敌方补给 {n}',
+  canteen: '队友用掉了他 {n} 补给',
+  freeloader: '用掉了队友 {n} 补给',
+  courier: '空投了 {n} 补给',
+  refund: '{p}% 的出兵最后退了款',
+  spender: '出兵花费占全场 {p}%，摧毁只有队均的 {x} 倍',
+  traitor: '误伤摧毁了价值 {n} 的友军',
+  backstabbed: '被友军误伤损失了 {n}',
+  crash: '损失了价值 {n} 的直升机/飞机',
+  artygod: '以炮兵为主（{a}%），摧毁分占全场 {p}%',
+  'deserter:silent': '全场没有任何战果（掉线或挂机）；输了锅就是他的'
+}
+/** 称号说明：套上这一局的数字；掉线狗分「全场零战果」和「中途走了」两种说法 */
+function titleTip(t: { id: string; params: Record<string, unknown> }): string {
+  const tpl = (t.params.silent ? TITLE_TIP[t.id + ':silent'] : undefined) || TITLE_TIP[t.id] || ''
+  return tpl.replace(/\{(\w+)\}/g, (_, k: string) => (t.params[k] == null ? '?' : String(t.params[k])))
+}
+
 const num = (n: number | null | undefined): string =>
   n == null ? '—' : Math.round(n).toLocaleString('zh-CN')
 const sec = (s: number | null | undefined): string => {
@@ -336,7 +373,7 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
         {!!p.titles.length && (
           <span className="rp-titles">
             {p.titles.map((t) => (
-              <span key={t.id} className={'tag ' + t.kind}>
+              <span key={t.id} className={'tag ' + t.kind} title={titleTip(t)}>
                 {TITLE_NAME[t.id] || t.id}
               </span>
             ))}
@@ -523,7 +560,8 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
       {p.parts && (
         <div className="rp-parts">
           <span>
-            K/D 在同角色同分段里 <b>第 {Math.round((p.parts.kd || 0) * 100)} 百分位</b>
+            <span title="死步兵、坦克罚得轻，死炮兵罚得重；正面单位的击杀加分多，炮兵和固定翼的少">K/D（按兵种加权）</span>
+            在同角色同分段里 <b>第 {Math.round((p.parts.kd || 0) * 100)} 百分位</b>
           </span>
           <span>
             摧毁贡献 <b>第 {Math.round((p.parts.contrib || 0) * 100)} 百分位</b>

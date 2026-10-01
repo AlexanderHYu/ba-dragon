@@ -84,8 +84,10 @@ const median = (a: number[]): number | null => {
 const r2 = (x: number): number => Math.round(x * 100) / 100
 const pct = (x: number): number => Math.round(x * 100)
 
-// 每人每局只给一个称号：符合多个时选「最罕见」的那个 ——
+// 每人每局最多给 MAX_TITLES 个称号：符合多个时按「罕见程度」排，最罕见的在前 ——
 // 估计一个随机玩家在一局里拿到这个称号（而且至少这么夸张）的概率，概率越小越突出。
+// （原来只给一个：拿了罕见称号的大腿就看不到「大腿」了，七成玩家一个称号都没有）
+export const MAX_TITLES = 2
 const PLAYERS_PER_MATCH = 10
 const DEFAULT_FREQ: Record<string, number> = { carry: 1, blame: 0.72, tryhard: 0.16, passenger: 0.1, lonewolf: 0.16 }
 const freqOf = (id: string): number =>
@@ -106,28 +108,28 @@ function rarityOf(s: Spec, v: number, th: number): number {
 // key = 比较的指标，dir = 1 越大越突出 / -1 越小越突出，filter = 前提条件，
 // target = 希望出现在多少比例的对局里（校准阈值用），min = 阈值下限（再少就不值一提）
 export const SPECS: Spec[] = [
-  { id: 'reaper', key: (m) => m.dShare, dir: 1, target: 0.08, min: 0.15, params: (m) => ({ p: pct(m.dShare) }) },
-  { id: 'untouched', key: (m) => m.lTeamShare, dir: -1, filter: (m) => m.dTeamRatio >= 1, target: 0.06, params: (m) => ({ p: pct(m.lTeamShare), x: r2(m.dTeamRatio) }) },
-  { id: 'weightlifter', key: (m) => Math.min(m.killShare, m.deathShare), dir: 1, filter: (m) => m.kd >= 0.75 && m.kd <= 1.33, target: 0.06, min: 0.1, params: (m) => ({ k: m.kills, d: m.deaths, kd: r2(m.kd) }) },
-  { id: 'atm', key: (m) => m.lShare, dir: 1, filter: (m) => m.kd < 0.5, target: 0.07, min: 0.1, params: (m) => ({ p: pct(m.lShare), kd: r2(m.kd) }) },
-  { id: 'scraper', key: (m) => m.dmgShare, dir: 1, filter: (m) => m.dTeamRatio < 0.8, target: 0.05, min: 0.1, params: (m) => ({ p: pct(m.dmgShare), x: r2(m.dTeamRatio) }) },
-  { id: 'killsteal', key: (m) => m.ksEff, dir: 1, filter: (m) => m.dTeamRatio >= 1 && m.dmg > 0, target: 0.04, params: (m) => ({ x: Math.round(m.ksEff) }) },
-  { id: 'boxed', key: (m) => m.lifeMed, dir: -1, filter: (m) => m.lifeMed != null && m.deaths >= 10, target: 0.06, params: (m) => ({ s: Math.round(m.lifeMed || 0) }) },
-  { id: 'camper', key: (m) => m.lTeamShare, dir: -1, filter: (m) => m.dTeamRatio <= 0.5 && m.minutes >= 10, target: 0.05, params: (m) => ({ p: pct(m.lTeamShare), x: r2(m.dTeamRatio) }) },
+  { id: 'reaper', key: (m) => m.dShare, dir: 1, target: 0.15, min: 0.15, params: (m) => ({ p: pct(m.dShare) }) },
+  { id: 'untouched', key: (m) => m.lTeamShare, dir: -1, filter: (m) => m.dTeamRatio >= 1, target: 0.12, params: (m) => ({ p: pct(m.lTeamShare), x: r2(m.dTeamRatio) }) },
+  { id: 'weightlifter', key: (m) => Math.min(m.killShare, m.deathShare), dir: 1, filter: (m) => m.kd >= 0.75 && m.kd <= 1.33, target: 0.12, min: 0.1, params: (m) => ({ k: m.kills, d: m.deaths, kd: r2(m.kd) }) },
+  { id: 'atm', key: (m) => m.lShare, dir: 1, filter: (m) => m.kd < 0.5, target: 0.12, min: 0.1, params: (m) => ({ p: pct(m.lShare), kd: r2(m.kd) }) },
+  { id: 'scraper', key: (m) => m.dmgShare, dir: 1, filter: (m) => m.dTeamRatio < 0.8, target: 0.1, min: 0.1, params: (m) => ({ p: pct(m.dmgShare), x: r2(m.dTeamRatio) }) },
+  { id: 'killsteal', key: (m) => m.ksEff, dir: 1, filter: (m) => m.dTeamRatio >= 1 && m.dmg > 0, target: 0.08, params: (m) => ({ x: Math.round(m.ksEff) }) },
+  { id: 'boxed', key: (m) => m.lifeMed, dir: -1, filter: (m) => m.lifeMed != null && m.deaths >= 10, target: 0.1, params: (m) => ({ s: Math.round(m.lifeMed || 0) }) },
+  { id: 'camper', key: (m) => m.lTeamShare, dir: -1, filter: (m) => m.dTeamRatio <= 0.5 && m.minutes >= 10, target: 0.1, params: (m) => ({ p: pct(m.lTeamShare), x: r2(m.dTeamRatio) }) },
   // 占点份额经常正好是 1/2、1/3，加上占点数的一点点打破并列，免得一堆人卡在同一个阈值上
-  { id: 'landlord', key: (m) => m.oTeamShare + m.O / 1000, dir: 1, filter: (m) => m.O >= 3, target: 0.07, min: 0.3, params: (m) => ({ n: m.O, p: pct(m.oTeamShare) }) },
-  { id: 'demolition', key: (m) => m.buildings + m.D / 1e7, dir: 1, target: 0.04, min: 3, params: (m) => ({ n: m.buildings }) },
-  { id: 'convoy', key: (m) => m.convoy, dir: 1, pool: 'all', target: 0.05, min: 100, params: (m) => ({ n: Math.round(m.convoy) }) },
-  { id: 'bandit', key: (m) => m.bandit, dir: 1, target: 0.05, min: 100, params: (m) => ({ n: Math.round(m.bandit) }) },
-  { id: 'canteen', key: (m) => m.canteen, dir: 1, target: 0.05, min: 500, params: (m) => ({ n: Math.round(m.canteen) }) },
-  { id: 'freeloader', key: (m) => m.freeloader, dir: 1, target: 0.05, min: 500, params: (m) => ({ n: Math.round(m.freeloader) }) },
-  { id: 'courier', key: (m) => m.airdrop, dir: 1, target: 0.04, min: 500, params: (m) => ({ n: Math.round(m.airdrop) }) },
-  { id: 'refund', key: (m) => m.refundRatio, dir: 1, target: 0.04, min: 0.1, params: (m) => ({ p: pct(m.refundRatio) }) },
-  { id: 'spender', key: (m) => m.spawnShare, dir: 1, filter: (m) => m.dTeamRatio < 0.7, target: 0.05, min: 0.12, params: (m) => ({ p: pct(m.spawnShare), x: r2(m.dTeamRatio) }) },
-  { id: 'traitor', key: (m) => m.ffDestroyCost, dir: 1, pool: 'all', target: 0.04, min: 100, params: (m) => ({ n: Math.round(m.ffDestroyCost) }) },
-  { id: 'backstabbed', key: (m) => m.ffLossScore, dir: 1, pool: 'all', target: 0.03, min: 100, params: (m) => ({ n: Math.round(m.ffLossScore) }) },
-  { id: 'crash', key: (m) => m.airLoss, dir: 1, target: 0.05, min: 300, params: (m) => ({ n: Math.round(m.airLoss) }) },
-  { id: 'artygod', key: (m) => m.dShare, dir: 1, filter: (m) => m.artyShare >= 0.3, target: 0.04, min: 0.12, params: (m) => ({ p: pct(m.dShare), a: pct(m.artyShare) }) }
+  { id: 'landlord', key: (m) => m.oTeamShare + m.O / 1000, dir: 1, filter: (m) => m.O >= 3, target: 0.12, min: 0.3, params: (m) => ({ n: m.O, p: pct(m.oTeamShare) }) },
+  { id: 'demolition', key: (m) => m.buildings + m.D / 1e7, dir: 1, target: 0.08, min: 3, params: (m) => ({ n: m.buildings }) },
+  { id: 'convoy', key: (m) => m.convoy, dir: 1, pool: 'all', target: 0.1, min: 100, params: (m) => ({ n: Math.round(m.convoy) }) },
+  { id: 'bandit', key: (m) => m.bandit, dir: 1, target: 0.1, min: 100, params: (m) => ({ n: Math.round(m.bandit) }) },
+  { id: 'canteen', key: (m) => m.canteen, dir: 1, target: 0.1, min: 500, params: (m) => ({ n: Math.round(m.canteen) }) },
+  { id: 'freeloader', key: (m) => m.freeloader, dir: 1, target: 0.1, min: 500, params: (m) => ({ n: Math.round(m.freeloader) }) },
+  { id: 'courier', key: (m) => m.airdrop, dir: 1, target: 0.08, min: 500, params: (m) => ({ n: Math.round(m.airdrop) }) },
+  { id: 'refund', key: (m) => m.refundRatio, dir: 1, target: 0.08, min: 0.1, params: (m) => ({ p: pct(m.refundRatio) }) },
+  { id: 'spender', key: (m) => m.spawnShare, dir: 1, filter: (m) => m.dTeamRatio < 0.7, target: 0.1, min: 0.12, params: (m) => ({ p: pct(m.spawnShare), x: r2(m.dTeamRatio) }) },
+  { id: 'traitor', key: (m) => m.ffDestroyCost, dir: 1, pool: 'all', target: 0.06, min: 100, params: (m) => ({ n: Math.round(m.ffDestroyCost) }) },
+  { id: 'backstabbed', key: (m) => m.ffLossScore, dir: 1, pool: 'all', target: 0.06, min: 100, params: (m) => ({ n: Math.round(m.ffLossScore) }) },
+  { id: 'crash', key: (m) => m.airLoss, dir: 1, target: 0.1, min: 300, params: (m) => ({ n: Math.round(m.airLoss) }) },
+  { id: 'artygod', key: (m) => m.dShare, dir: 1, filter: (m) => m.artyShare >= 0.3, target: 0.08, min: 0.12, params: (m) => ({ p: pct(m.dShare), a: pct(m.artyShare) }) }
 ]
 
 /** 模型缺失时的保守默认阈值 */
@@ -258,7 +260,7 @@ export interface TitleAward {
  */
 export function awardTitles(
   mi: MatchInfo,
-  opts: { winnerTeam?: number | null; unitMap?: UnitMap; thresholds?: Record<string, number> } = {}
+  opts: { winnerTeam?: number | null; unitMap?: UnitMap; thresholds?: Record<string, number>; maxTitles?: number } = {}
 ): Record<string, TitleAward> {
   const t = { ...thresholds(), ...(opts.thresholds || {}) }
   const ms = titleMetrics(mi, opts.unitMap)
@@ -340,10 +342,10 @@ export function awardTitles(
   const byPlayer: Record<string, typeof cand> = {}
   for (const c of cand) (byPlayer[c.pid] ||= []).push(c)
   for (const m of ms) {
-    // 按罕见程度排序，最突出的排第一，只发这一个
+    // 按罕见程度排序，最突出的排第一
     const list = (byPlayer[m.id] || []).sort((a, b) => a.p - b.p)
     out[m.id] = {
-      titles: list.slice(0, 1).map((c) => ({ id: c.title, kind: TITLES[c.title], params: c.params })),
+      titles: list.slice(0, opts.maxTitles ?? MAX_TITLES).map((c) => ({ id: c.title, kind: TITLES[c.title], params: c.params })),
       candidates: list.map((c) => c.title),
       mvp: !!m.mvp,
       blame: !!m.blame,

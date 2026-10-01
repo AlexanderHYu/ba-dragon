@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { MatchInfo } from '../types/batrace'
 import { analyzeMatch } from './score'
-import { awardTitles, titleMetrics } from './titles'
+import { titleMetrics } from './titles'
 import { buildMatchReport } from '../match/report'
 
 const LEGACY = process.env.BA_LEGACY || 'H:/github/brokenarrow-log-maggot'
@@ -58,22 +58,27 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
     expect(matches.length).toBeGreaterThan(0)
   })
 
-  it('单局复盘的龙/区/泯、称号、净交换完全一致', () => {
+  // v1.0.8 起故意和老版分开：K/D 按兵种加权（关掉 trade 就对得上）、称号阈值重新校准且每人最多两个。
+  // 所以这里关掉加权、去掉称号再比，称号只比原始指标（最后一条）
+  const noTitles = (v: unknown): unknown =>
+    JSON.parse(JSON.stringify(v, (k, x) => (k === 'titles' ? undefined : x)))
+
+  it('单局复盘的龙/区/泯、净交换完全一致（不加权）', () => {
     for (const { fid, mi } of matches) {
-      const a = analyzeMatch(mi, fid)
+      const a = analyzeMatch(mi, fid, { trade: false })
       const b = oldScore.analyzeMatch(mi, fid)
-      expect(JSON.parse(JSON.stringify(a)), '对局 ' + fid).toEqual(JSON.parse(JSON.stringify(b)))
+      expect(noTitles(a), '对局 ' + fid).toEqual(noTitles(b))
     }
   })
 
   it('单局复盘页的所有数字完全一致', () => {
     const oldReport = require(join(LEGACY, 'src', 'matchReport.js'))
     for (const { fid, mi } of matches) {
-      const review = analyzeMatch(mi, fid)
+      const review = analyzeMatch(mi, fid, { trade: false })
       // 配装分组、配装真名、花费口径都是新版才有的：对拍时关掉分组，抹掉新增字段
       const a = buildMatchReport(mi, { fid, review, groupByLoadout: false })
       const b = oldReport.buildMatchReport(mi, { fid, review: oldScore.analyzeMatch(mi, fid) })
-      const NEW_FIELDS = new Set(['options', 'loadout', 'priced'])
+      const NEW_FIELDS = new Set(['options', 'loadout', 'priced', 'titles'])
       const strip = (v: unknown): unknown =>
         JSON.parse(JSON.stringify(v, (k, x) => (NEW_FIELDS.has(k) ? undefined : x)))
       expect(strip(a), '对局 ' + fid).toEqual(strip(b))
@@ -83,9 +88,6 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
   it('称号的原始指标完全一致', () => {
     for (const { fid, mi } of matches) {
       expect(titleMetrics(mi), '对局 ' + fid).toEqual(oldTitles.titleMetrics(mi))
-      expect(awardTitles(mi, { winnerTeam: 0 }), '对局 ' + fid).toEqual(
-        oldTitles.awardTitles(mi, { winnerTeam: 0 })
-      )
     }
   })
 })

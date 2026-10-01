@@ -5,8 +5,8 @@
 // 所有参数都来自真实数据拟合（model.json），这里只有公式，没有拍脑袋的数字。纯函数、无 I/O。
 //
 // 每场三个表现指标 + 一个胜负项：
-//   K/D    —— log2(摧毁分 ÷ 损失分)
-//   贡献   —— log2(本人摧毁分 ÷ 本队在线队员人均摧毁分)
+//   K/D    —— log2(摧毁分 ÷ 损失分)，两边都按兵种加权（见 TRADE）
+//   贡献   —— log2(本人摧毁分 ÷ 本队在线队员人均摧毁分)，摧毁分同样加权
 //   占点   —— log2(本人占点 ÷ 本队在线队员人均占点)（照算但权重为 0：和地图、选位强相关，不计入）
 //   胜负   —— 实际结果 − Elo 预期胜率（按两队在线队员的赛前平均 ELO；缺人的一方按弱若干分算）
 // 表现指标先按「同角色构成、同 ELO、同分差的玩家通常打成什么样」标准化，再换算成百分位。
@@ -50,6 +50,64 @@ export function detectInactive(mi: MatchInfo): Set<string> {
     }
   }
   return out
+}
+
+/**
+ * 交换加权：死什么兵、拿什么兵杀的，分量不一样。
+ * 这是设计取舍（玩家反馈：正面填线的人 K/D 挨罚太狠），不是拟合出来的：
+ *   损失 —— 步兵、坦克是填线的正常消耗，罚轻一点；炮兵躲在后面还被摸掉，罚重一点
+ *   击杀 —— 正面（装甲/步兵/侦察）拿到的奖励多一点，炮兵和固定翼的少一点
+ * 两张表各自按真实对局（backtest 的 1199 局）缩放过：全体玩家的平均倍数是 1，
+ * 所以普通人的分数不动，只在「兵种构成不同的人之间」挪分。运输/后勤不加权（按 1 算）。
+ */
+export const TRADE: { kill: RoleShare; loss: RoleShare } = {
+  kill: { armor: 1.2, inf: 1.2, recon: 1.1, aa: 1, heli: 0.9, jet: 0.8, arty: 0.75 },
+  loss: { armor: 0.75, inf: 0.7, recon: 0.9, aa: 1, heli: 1, jet: 1.1, arty: 1.4 }
+}
+/** 上面两张表的缩放系数（scripts/fit-trade.ts 算的：让全体的 log2 平均倍数为 0） */
+export const TRADE_NORM = { kill: 0.9719, loss: 1.1218 }
+
+export interface TradeMult {
+  /** 摧毁分乘的倍数 */
+  k: number
+  /** 损失分乘的倍数 */
+  l: number
+}
+
+const mix = (w: RoleShare, share: Partial<Record<RoleKey | '_', number>>): number | null => {
+  let s = 0
+  let n = 0
+  // 只认 7 个兵种和「_」（运输/后勤），Roles 上还挂着 known 之类的字段
+  for (const k of [...ROLE_KEYS, '_'] as const) {
+    const v = share[k]
+    if (!v) continue
+    s += v * (k === '_' ? 1 : w[k])
+    n += v
+  }
+  return n > 0 ? s / n : null
+}
+
+/**
+ * 一个人这一局的交换倍数。
+ * 有单位数据时：击杀按各单位的击杀数分摊到兵种，损失按阵亡单位的价格分摊；
+ * 没有（列表接口只给总分）或者这一边是 0 时，按他的兵种构成（花钱比例）估。
+ */
+export function tradeMult(p: PlayerData, roles?: RoleShare | null, unitMap?: UnitMap): TradeMult {
+  const um = unitMap || MODEL.units || {}
+  const kShare: Partial<Record<RoleKey | '_', number>> = {}
+  const lShare: Partial<Record<RoleKey | '_', number>> = {}
+  for (const u of Object.values(p?.UnitData || {})) {
+    const e = um[u.Id]
+    const r: RoleKey | '_' = (e && e[0]) || '_'
+    const kills = num(u.KilledCount)
+    if (kills) kShare[r] = (kShare[r] || 0) + kills
+    if (u.DeathTime && !u.WasRefunded) lShare[r] = (lShare[r] || 0) + ((e && e[1]) || 1)
+  }
+  const fb = roles ? mix(TRADE.kill, roles) : null
+  const fl = roles ? mix(TRADE.loss, roles) : null
+  const k = mix(TRADE.kill, kShare) ?? fb ?? 1 / TRADE_NORM.kill
+  const l = mix(TRADE.loss, lShare) ?? fl ?? 1 / TRADE_NORM.loss
+  return { k: k * TRADE_NORM.kill, l: l * TRADE_NORM.loss }
 }
 
 const C_SCORE = 200 // 摧毁/损失分的平滑量（避免 0 分时 log 爆掉）
@@ -98,6 +156,8 @@ export interface FeatureOpts {
   /** 玩家ID → 缺席比例 0~1（不传按整局缺席） */
   absence?: Map<string, number>
   expect?: { scale: number; afkPenalty: number }
+  /** 玩家ID → 交换倍数（不传或查不到按 1，即不加权） */
+  trade?: Map<string, TradeMult>
 }
 
 /** 一场 → 某玩家这一场的特征。观战、数据不全、（未允许时）非排位局返回 null */
@@ -138,6 +198,11 @@ export function matchFeatures(
   const L = num(me.LossesScore)
   const O = num(me.ObjectivesCaptured)
   const avgD = sum(onTeam, 'DestructionScore') / onTeam.length
+  // 模型用的加权分：摧毁分乘击杀倍数、损失分乘损失倍数；队均也用各人加权后的摧毁分
+  const tm = (p: PlayerData): TradeMult => opts.trade?.get(String(p.Id)) || { k: 1, l: 1 }
+  const Dw = D * tm(me).k
+  const Lw = L * tm(me).l
+  const avgDw = onTeam.reduce((a, p) => a + num(p.DestructionScore) * tm(p).k, 0) / onTeam.length
   const avgO = sum(onTeam, 'ObjectivesCaptured') / onTeam.length
   const minutes = num(d.TotalPlayTimeInSec) / 60
   let won: boolean | null = null
@@ -181,8 +246,8 @@ export function matchFeatures(
     conscript: rated && matchElo != null && elo != null && elo < matchElo - 200,
     // 模型用的 log 指标
     x: {
-      kd: Math.log2((D + C_SCORE) / (L + C_SCORE)),
-      con: Math.log2((D + C_SCORE) / (avgD + C_SCORE)),
+      kd: Math.log2((Dw + C_SCORE) / (Lw + C_SCORE)),
+      con: Math.log2((Dw + C_SCORE) / (avgDw + C_SCORE)),
       obj: Math.log2((O + 1) / (avgO + 1)),
       dpm: Math.log2((D + C_SCORE) / Math.max(minutes, 5))
     }
@@ -358,7 +423,8 @@ export function computeDragonScore(input: {
   const { stbid, matches, categoryPreferences, highlightUnits } = input
   const roles: Roles = rolesFromCareer(categoryPreferences, highlightUnits) || defaultRoles()
   const feats = (Array.isArray(matches) ? matches : [])
-    .map((m) => matchFeatures(m, stbid))
+    // 列表接口没有单位数据：按生涯兵种构成估自己的交换倍数，队友按 1（全体平均）
+    .map((m) => matchFeatures(m, stbid, { trade: new Map([[String(stbid), tradeMult({ Id: stbid }, roles)]]) }))
     .filter((f): f is MatchFeatures => !!f)
     .slice(0, 20)
   if (!feats.length) return { error: 'noRated', stbid: String(stbid) }
@@ -491,6 +557,8 @@ export function analyzeMatch(
     winnerTeam?: number | null
     rolesById?: Record<string, { categoryPreferences?: CategoryPreference[]; highlightUnits?: HighlightUnit[] }>
     unitMap?: UnitMap
+    /** false = 不做交换加权（和老版对拍用） */
+    trade?: boolean
   } = {}
 ): MatchReview {
   const raw: MatchEntry = { matchId: fid, data: mi }
@@ -510,17 +578,25 @@ export function analyzeMatch(
   const absence = new Map(
     Object.entries(aw).filter(([, v]) => v.gone).map(([id, v]) => [id, v.absence] as const)
   )
+  const rolesOf = (p: PlayerData): Roles => {
+    const career = opts.rolesById?.[String(p.Id)]
+    return (
+      rolesFromUnits(p, opts.unitMap) ||
+      (career && rolesFromCareer(career.categoryPreferences, career.highlightUnits, opts.unitMap)) ||
+      defaultRoles()
+    )
+  }
+  const trade = new Map<string, TradeMult>()
+  if (opts.trade !== false) {
+    for (const p of Object.values(mi.Data || {})) trade.set(String(p.Id), tradeMult(p, rolesOf(p), opts.unitMap))
+  }
   const players: ReviewPlayer[] = []
   for (const p of Object.values(mi.Data || {})) {
     const tid = teamOf(p)
     if (tid !== 0 && tid !== 1) continue // 观战
-    const f = matchFeatures(raw, p.Id, { allowUnrated: true, winnerTeam, inactive, absence })
+    const f = matchFeatures(raw, p.Id, { allowUnrated: true, winnerTeam, inactive, absence, trade })
     if (!f) continue
-    const career = opts.rolesById?.[String(p.Id)]
-    const roles =
-      rolesFromUnits(p, opts.unitMap) ||
-      (career && rolesFromCareer(career.categoryPreferences, career.highlightUnits, opts.unitMap)) ||
-      defaultRoles()
+    const roles = rolesOf(p)
     // 龙/区/泯：和同角色构成、同分段的玩家比（这里才考虑 ELO）
     const s = scoreMatch(f, roles, 'match')
     const a = aw[String(p.Id)]

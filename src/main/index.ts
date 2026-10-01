@@ -19,7 +19,7 @@ import { Analytics } from './services/analytics'
 import { ReplayService } from './services/replays'
 import { migrateLegacy, legacyLocalIds } from './services/migrate'
 import { MatchSync } from './services/matchSync'
-import { catchUpFromLogs, importAfterMatch } from './services/matchImport'
+import { catchUpFromLogs, importAfterMatch, rescoreStored } from './services/matchImport'
 import { registerIpc } from './ipc'
 
 // 录像播放走自定义协议 replay://local/<文件名>：支持 Range 请求，拖进度条只读需要的那一段
@@ -279,6 +279,14 @@ function startServices(): Services {
     setTimeout(() => void sync.run().catch(() => undefined), 20000)
     sync.start()
   }
+  // 算分规则升级后把库里的老局按新规则重算（只算一次，不发请求）
+  setTimeout(() => {
+    try {
+      if (rescoreStored({ client, db, gamedb, tracker }, localIds())) send('archive:changed')
+    } catch {
+      /* 重算失败就保持旧分数 */
+    }
+  }, 5000)
   // 补漏：最近三天日志里打过、库里却没有的局（打完没等到入库就关了软件、换了日志）
   setTimeout(() => {
     void catchUpFromLogs({ client, db, gamedb, tracker }, String(config.get('logDir') || ''), localIds)
