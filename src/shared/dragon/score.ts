@@ -9,6 +9,8 @@
 //   贡献   —— log2(本人摧毁分 ÷ 本队在线队员人均摧毁分)，摧毁分同样加权
 //   占点   —— log2(本人占点 ÷ 本队在线队员人均占点)（照算但权重为 0：和地图、选位强相关，不计入）
 //   胜负   —— 实际结果 − Elo 预期胜率（按两队在线队员的赛前平均 ELO；缺人的一方按弱若干分算）
+//             权重 MODEL.weights.out，v1.0.9 起为 0：输赢是五个人的事，不该算到个人头上；
+//             只出炮这类打法的问题已经由兵种交换加权罚过了。公式留着，权重改回来就能用
 // 表现指标先按「同角色构成、同 ELO、同分差的玩家通常打成什么样」标准化，再换算成百分位。
 import { num, type MatchEntry, type MatchInfo, type PlayerData } from '../types/batrace'
 import { FRONT, MODEL, ROLE_KEYS, type Norm, type RoleKey, type RoleShare, type Roles } from './model'
@@ -331,7 +333,8 @@ export function scoreMatch(
     parts.obj = pctOf(z.obj, norm.obj.q)
   }
   const out = f.S == null ? 0 : (f.S - f.E) / outSd
-  if (f.S != null) parts.outcome = phi(out)
+  // 胜负项不计分时也不显示这一项，免得看起来像是还在算
+  if (f.S != null && w.out) parts.outcome = phi(out)
   const c = stat + w.out * out
   const pct = pctOf(c, MODEL.matchPct?.[kind])
   return { c, pct, parts }
@@ -473,7 +476,7 @@ export function computeDragonScore(input: {
     })
   }
   const over = winRate - avgExp
-  if (Math.abs(over) >= 0.1) {
+  if (MODEL.weights.out && Math.abs(over) >= 0.1) {
     push(over > 0 ? 'overperform' : 'underperform', over * 3, {
       win: Math.round(winRate * 100), exp: Math.round(avgExp * 100)
     })

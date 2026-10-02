@@ -27,7 +27,7 @@ const TIER_LABEL: Record<string, string> = {
   qu: '纯区'
 }
 
-/** 四个分项，固定这个顺序 */
+/** 分项，固定这个顺序（胜负预期不计分时没有值，不显示） */
 const PARTS: { key: string; name: string }[] = [
   { key: 'kd', name: '分值 K/D' },
   { key: 'contrib', name: '摧毁贡献' },
@@ -151,7 +151,7 @@ export default function PlayerDetail({
               </div>
 
               <div className="dg-parts">
-                {PARTS.map(({ key, name }) => {
+                {PARTS.filter(({ key }) => key !== 'outcome' || d.parts[key] != null).map(({ key, name }) => {
                   const v = d.parts[key]
                   return (
                     <div className="dg-part" key={key}>

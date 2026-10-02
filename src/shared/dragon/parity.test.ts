@@ -5,9 +5,10 @@
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { MatchInfo } from '../types/batrace'
 import { analyzeMatch } from './score'
+import { MODEL } from './model'
 import { titleMetrics } from './titles'
 import { buildMatchReport } from '../match/report'
 
@@ -62,6 +63,17 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
   // 所以这里关掉加权、去掉称号再比，称号只比原始指标（最后一条）
   const noTitles = (v: unknown): unknown =>
     JSON.parse(JSON.stringify(v, (k, x) => (k === 'titles' ? undefined : x)))
+  // v1.0.9 起胜负项不计分，百分位表和卡尔曼参数跟着重新拟合过。对拍时临时换回老版的这几项参数，
+  // 这样其余流程（特征、标准化、掉线判定、复盘页的每个数字）仍然逐个对得上
+  const oldModel = JSON.parse(readFileSync(join(LEGACY, 'src', 'dragonModel.json'), 'utf8')) as typeof MODEL
+  const SWAP = ['weights', 'matchPct', 'playerPct', 'kalman'] as const
+  const saved = Object.fromEntries(SWAP.map((k) => [k, MODEL[k]]))
+  beforeAll(() => {
+    for (const k of SWAP) Object.assign(MODEL, { [k]: oldModel[k] })
+  })
+  afterAll(() => {
+    Object.assign(MODEL, saved)
+  })
 
   it('单局复盘的龙/区/泯、净交换完全一致（不加权）', () => {
     for (const { fid, mi } of matches) {

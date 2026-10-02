@@ -65,8 +65,9 @@ function ingest(s: ImportDeps, fid: string, mi: MatchInfo, localIds: string[], t
  * 算分规则变了（SCORE_VERSION 加一）之后，把库里存着原始数据的局按新规则重算一遍，
  * 不然对局档案里老局的龙/区/泯和称号还是旧规则的。只动本地，不发请求。
  * 1 → 2：K/D 按兵种加权、称号重新校准且每人最多两个（v1.0.8）
+ * 2 → 3：胜负项不计分，百分位表和卡尔曼参数重新拟合（v1.0.9）
  */
-export const SCORE_VERSION = '2'
+export const SCORE_VERSION = '3'
 export function rescoreStored(s: ImportDeps, localIds: string[]): number {
   if (s.db.meta('scoreVersion') === SCORE_VERSION) return 0
   const rows = s.db.all<{ fid: string; raw: string }>('SELECT fid, raw FROM match WHERE raw IS NOT NULL')
