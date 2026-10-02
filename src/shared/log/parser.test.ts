@@ -61,12 +61,13 @@ describe.runIf(ready)('日志解析和 4.0.x 对拍', () => {
       const b: unknown[] = []
       const pa = new LogParser((t, d) => a.push([t, strip(d)]))
       const pb = new Old((t, d) => b.push([t, strip(d)]))
+      // 有意分叉的一处：游戏给进/出大厅那几行加了 [LOBBY] 前缀，新版认，4.0.x 不认。
+      // 不认的后果不止少发 lobbyReset：重进大厅时大厅名单也不清空。所以喂老版之前把前缀去掉，
+      // 让两边看到的是同一种写法——这样大厅名单也能逐条对上，不用整段跳过
+      const legacyLines = lines.map((l) => l.replace(/^Log: \[LOBBY\] /, 'Log: '))
       pa.feed(lines)
-      pb.feed(lines)
-      // 有意分叉的一处：游戏给进/出大厅那几行加了 [LOBBY] 前缀，新版认，4.0.x 不认，
-      // 所以新版会多发几次 lobbyReset。对拍时两边都把它滤掉，其余必须一模一样。
-      const noReset = (xs: unknown[]): unknown[] => xs.filter((x) => (x as [string])[0] !== 'lobbyReset')
-      expect(noReset(a), f).toEqual(noReset(b))
+      pb.feed(legacyLines)
+      expect(a, f).toEqual(b)
       // sawLobbyEnter 是新版为了反推房主加的，老版没有，比较时摘掉
       const snap = (d: unknown): unknown => {
         const o = strip(d) as Record<string, unknown>
