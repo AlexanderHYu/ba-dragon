@@ -17,7 +17,7 @@ async function recordTest(Svc: typeof import('./services/replays').ReplayService
         replayFps: 30,
         replayBitrateMbps: 5,
         replayExposure: 0,
-        replayAudio: 'off',
+        replayAudio: process.env.BA_SMOKE_REC_AUDIO || 'off',
         replaySaveDir: dir,
         replayDisplayId: process.env.BA_SMOKE_REC_DISPLAY || '',
         replayKeepDays: 0
@@ -46,12 +46,16 @@ async function recordTest(Svc: typeof import('./services/replays').ReplayService
   }
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.mp4')) : []
   const size = files.length ? statSync(join(dir, files[0])).size : 0
-  try {
-    rmSync(dir, { recursive: true, force: true })
-  } catch {
-    /* 临时目录删不掉无所谓 */
+  // BA_SMOKE_KEEP=1 时留着录像（看声音、画面用），结果里给出完整路径
+  if (!process.env.BA_SMOKE_KEEP) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* 临时目录删不掉无所谓 */
+    }
   }
-  return { ok: files.length > 0 && size > 10000, file: files[0] || null, size, log: logs.slice(-25) }
+  const file = files[0] ? (process.env.BA_SMOKE_KEEP ? join(dir, files[0]) : files[0]) : null
+  return { ok: files.length > 0 && size > 10000, file, size, log: logs.slice(-25) }
 }
 
 export async function run(win: BrowserWindow): Promise<void> {

@@ -1,5 +1,5 @@
-// WASAPI 回环采集：把「默认播放设备」正在播放的声音以原始 PCM 写到 stdout
-// 用法：wasapi-loopback.exe（stdin 关闭即停止）
+// WASAPI 采集：把「默认播放设备」正在播放的声音（回环），或「默认麦克风」收到的声音，以原始 PCM 写到 stdout
+// 用法：wasapi-loopback.exe [mic]（不带参数 = 桌面声音，mic = 麦克风；stdin 关闭即停止）
 // stderr 第一行：FORMAT <采样率> <声道数> <位深> <f|i>；第二行：START <开始时刻 Unix 毫秒>
 // 设备空闲时 WASAPI 不给数据，这里按时间补静音，保证音频时间轴与真实时间一致（便于和画面对齐）
 // 用 Windows 自带的 .NET Framework csc 编译（C# 5 语法），由 src/audioLoopback.js 负责编译与缓存
@@ -47,7 +47,7 @@ interface IAudioCaptureClient {
 }
 
 static class Program {
-  const int eRender = 0, eConsole = 0, CLSCTX_ALL = 23;
+  const int eRender = 0, eCapture = 1, eConsole = 0, CLSCTX_ALL = 23;
   const int AUDCLNT_SHAREMODE_SHARED = 0, AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
   const uint AUDCLNT_BUFFERFLAGS_SILENT = 2;
   static volatile bool stop;
@@ -56,11 +56,13 @@ static class Program {
     if (hr < 0) throw new Exception(what + " failed: 0x" + hr.ToString("X8"));
   }
 
-  static int Main() {
+  // 参数 mic = 采集默认麦克风（录音设备），不带参数 = 回环采集默认播放设备（桌面声音）
+  static int Main(string[] args) {
     try {
       var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
       IMMDevice device;
-      Check(enumerator.GetDefaultAudioEndpoint(eRender, eConsole, out device), "GetDefaultAudioEndpoint");
+      bool mic = args.Length > 0 && args[0] == "mic";
+      Check(enumerator.GetDefaultAudioEndpoint(mic ? eCapture : eRender, eConsole, out device), "GetDefaultAudioEndpoint");
       Guid iidClient = typeof(IAudioClient).GUID;
       object o;
       Check(device.Activate(ref iidClient, CLSCTX_ALL, IntPtr.Zero, out o), "Activate");
@@ -78,7 +80,8 @@ static class Program {
         isFloat = Marshal.ReadInt32(fmt, 24) == 3;
         bits = Marshal.ReadInt16(fmt, 14);
       }
-      Check(client.Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 2000000, 0, fmt, IntPtr.Zero), "Initialize");
+      // 麦克风本身就是采集设备，不需要（也不能加）回环标志
+      Check(client.Initialize(AUDCLNT_SHAREMODE_SHARED, mic ? 0 : AUDCLNT_STREAMFLAGS_LOOPBACK, 2000000, 0, fmt, IntPtr.Zero), "Initialize");
       Guid iidCapture = typeof(IAudioCaptureClient).GUID;
       Check(client.GetService(ref iidCapture, out o), "GetService");
       var capture = (IAudioCaptureClient)o;

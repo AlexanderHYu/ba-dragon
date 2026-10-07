@@ -96,14 +96,19 @@ export interface LoopbackHandle {
   kill(): void
 }
 
-/** 开始采集，写到 outFile（.aac）。返回 { startWall, stop(), kill() } */
+/**
+ * 开始采集，写到 outFile（.aac）。返回 { startWall, stop(), kill() }
+ * @param source 'loopback' = 桌面声音（默认播放设备的回环），'mic' = 默认麦克风
+ */
 export async function startLoopback(
   outFile: string,
   ffmpegBin: string,
-  log?: (msg: string) => void
+  log?: (msg: string) => void,
+  source: 'loopback' | 'mic' = 'loopback'
 ): Promise<LoopbackHandle> {
   const exe = await ensureHelper()
-  const helper = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+  const label = source === 'mic' ? '麦克风采集' : '声音采集'
+  const helper = spawn(exe, source === 'mic' ? ['mic'] : [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
   const info = await new Promise<LoopbackInfo>((resolve, reject) => {
     const got: Partial<LoopbackInfo> = {}
     let buf = ''
@@ -113,7 +118,7 @@ export async function startLoopback(
       } catch {
         /* 已经退出了 */
       }
-      reject(new Error('声音采集程序 5 秒内没有启动'))
+      reject(new Error(label + '程序 5 秒内没有启动'))
     }, 5000)
     helper.stderr.on('data', (d: Buffer) => {
       buf += d.toString()
@@ -137,13 +142,13 @@ export async function startLoopback(
           clearTimeout(timer)
           reject(new Error(line.slice(6)))
         } else if (line && log) {
-          log('声音采集: ' + line)
+          log(label + ': ' + line)
         }
       }
     })
     helper.on('exit', (code) => {
       clearTimeout(timer)
-      reject(new Error('声音采集程序退出 code=' + code))
+      reject(new Error(label + '程序退出 code=' + code))
     })
   })
   const pcm = PCM_FORMATS[(info.float ? 'f' : 'i') + info.bits]
@@ -169,7 +174,7 @@ export async function startLoopback(
   enc.stdin.on('error', () => {}) // ffmpeg 先退出时忽略 EPIPE
   const encDone = new Promise<number | null>((r) => enc.on('exit', (code) => r(code)))
   if (log) {
-    log('声音采集: ' + info.rate + 'Hz ' + info.channels + '声道 ' + info.bits + 'bit' + (info.float ? ' float' : '') + ' → AAC 立体声')
+    log(label + ': ' + info.rate + 'Hz ' + info.channels + '声道 ' + info.bits + 'bit' + (info.float ? ' float' : '') + ' → AAC 立体声')
   }
   return {
     startWall: info.startWall,
@@ -194,7 +199,7 @@ export async function startLoopback(
       }, 8000)
       const code = await encDone
       clearTimeout(killer)
-      if (code !== 0 && log) log('声音编码 exit=' + code + ' ' + encErr.trim())
+      if (code !== 0 && log) log(label + '编码 exit=' + code + ' ' + encErr.trim())
     },
     kill(): void {
       try {

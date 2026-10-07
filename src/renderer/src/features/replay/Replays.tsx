@@ -213,10 +213,13 @@ export default function Replays(): React.JSX.Element {
               value={String(config.replayAudio || 'default')}
               onChange={(e) => void patch({ replayAudio: e.target.value })}
             >
-              <option value="default">系统默认声卡（桌面音频）</option>
+              <option value="default">桌面声音</option>
+              <option value="mic">桌面声音 + 麦克风</option>
               <option value="off">关闭</option>
             </select>
-            <div className="rec-hint dim">Chromium 仅支持回环系统默认输出，无法指定其它声卡。</div>
+            <div className="rec-hint dim">
+              用的是系统默认的播放设备和默认麦克风（Windows 声音设置里的「默认设备」），换设备请在系统里改。
+            </div>
           </div>
 
           <div className="rec-field">

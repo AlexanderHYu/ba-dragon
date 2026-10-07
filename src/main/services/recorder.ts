@@ -1,6 +1,7 @@
 // ================= 对局录像：FFmpeg 采集 + 硬件编码 =================
 // 画面：FFmpeg ddagrab（DXGI 桌面复制，帧留在显存）→ NVENC / AMF / QSV / x264 → 分片 MP4（中途崩溃也不丢已录部分）
-// 声音：ddagrab 不带音频，另由 WASAPI 回环采集系统声音（services/audioLoopback.ts），实时编码为 AAC
+// 声音：ddagrab 不带音频，另由 WASAPI 回环采集系统声音（services/audioLoopback.ts），实时编码为 AAC；
+// 选了「桌面声音 + 麦克风」时再开一路麦克风，各写一个 AAC，合成时按各自的起点对齐后混成一轨
 // 结束：两路按实测的起始时刻对齐，合成为带 faststart 索引的普通 MP4（任何播放器都能拖进度条）
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -504,7 +505,8 @@ export interface SessionOptions {
   fps: number
   bitrateMbps: number
   exposure: number
-  audio: 'off' | 'default'
+  /** off = 不录声音，default = 桌面声音，mic = 桌面声音 + 麦克风 */
+  audio: 'off' | 'default' | 'mic'
   saveDir: string
 }
 
@@ -548,6 +550,7 @@ class Session {
   readonly dir: string
   readonly previewFile: string
   readonly audioFile: string
+  readonly micFile: string
   /** { file, seconds, t0 }：t0 为该段时间戳的零点（系统时间，毫秒） */
   segments: Segment[] = []
   proc: PipedProc | null = null
@@ -558,6 +561,10 @@ class Session {
   audioStartWall = 0
   /** 声音采集句柄（startLoopback 返回） */
   audio: LoopbackHandle | null = null
+  /** 麦克风：第 0 秒对应的系统时间、采集句柄 */
+  micStartWall = 0
+  mic: LoopbackHandle | null = null
+  hasMic = false
   private procExit: (() => void) | null = null
   hasAudio = false
   hdr = false
@@ -573,6 +580,7 @@ class Session {
     this.dir = join(opts.saveDir, '.rec-' + this.startedAt + '-' + (this.fid || 'nofid'))
     this.previewFile = join(this.dir, 'preview.jpg')
     this.audioFile = join(this.dir, 'audio.aac')
+    this.micFile = join(this.dir, 'mic.aac')
   }
 
   log(m: string): void {
@@ -694,18 +702,33 @@ class Session {
   }
 
   private async startAudio(): Promise<void> {
-    try {
-      const a = await startLoopback(this.audioFile, requireFfmpeg(), (m) => this.log(m))
-      if (this.stopping || this.aborted) {
-        a.kill()
-        return
-      }
-      this.audio = a
-      this.audioStartWall = a.startWall
-      this.hasAudio = true
-    } catch (e) {
-      this.log('声音采集失败，本局只录画面: ' + (e instanceof Error ? e.message : String(e)))
-    }
+    // 两路同时开：各自独立，一路失败不影响另一路
+    await Promise.all([
+      (async () => {
+        try {
+          const a = await startLoopback(this.audioFile, requireFfmpeg(), (m) => this.log(m))
+          if (this.stopping || this.aborted) return a.kill()
+          this.audio = a
+          this.audioStartWall = a.startWall
+          this.hasAudio = true
+        } catch (e) {
+          this.log('声音采集失败，本局不录桌面声音: ' + (e instanceof Error ? e.message : String(e)))
+        }
+      })(),
+      this.opts.audio === 'mic'
+        ? (async () => {
+            try {
+              const m = await startLoopback(this.micFile, requireFfmpeg(), (x) => this.log(x), 'mic')
+              if (this.stopping || this.aborted) return m.kill()
+              this.mic = m
+              this.micStartWall = m.startWall
+              this.hasMic = true
+            } catch (e) {
+              this.log('麦克风采集失败，本局不录麦克风: ' + (e instanceof Error ? e.message : String(e)))
+            }
+          })()
+        : null
+    ])
   }
 
   /** 正常结束：ffmpeg 收到 q 会写完尾部再退出；声音采集同时停止并写完 AAC */
@@ -733,7 +756,7 @@ class Session {
         }
       }
     }, 15000)
-    await Promise.all([procDone, this.audio ? this.audio.stop() : null])
+    await Promise.all([procDone, this.audio ? this.audio.stop() : null, this.mic ? this.mic.stop() : null])
     clearTimeout(killer)
     return this.mux()
   }
@@ -748,6 +771,7 @@ class Session {
       }
     }
     if (this.audio) this.audio.kill()
+    if (this.mic) this.mic.kill()
     setTimeout(() => this.cleanup(), 1500)
   }
 
@@ -782,12 +806,16 @@ class Session {
       writeFileSync(list, segs.map((s) => 'file ' + quote(s.file)).join('\n'))
       vIn.push('-f', 'concat', '-safe', '0', '-i', list)
     }
-    let audioOk = false
-    try {
-      audioOk = this.hasAudio && statSync(this.audioFile).size > 1024
-    } catch {
-      /* 没有音频文件 */
+    const nonEmpty = (f: string): boolean => {
+      try {
+        return statSync(f).size > 1024
+      } catch {
+        return false // 没有这个音频文件
+      }
     }
+    const sysOk = this.hasAudio && nonEmpty(this.audioFile)
+    const micOk = this.hasMic && nonEmpty(this.micFile)
+    const audioOk = sysOk || micOk
     // 成品时间轴零点 = 第一段第一帧的采集时刻（T0 + 它在滤镜里的时间戳）：合成时 ffmpeg 会把视频平移到第一帧从 0 开始，
     // 播放器也按这个时间轴播放（分段文件里第一帧落在 B 帧延迟处，那个偏移在合成时就被去掉了，不能再减一次）
     let zeroWall = 0
@@ -801,31 +829,61 @@ class Session {
       }
       zeroWall = segs[0].t0 + capturePts * 1000
     }
-    const attempt = async (withAudio: boolean): Promise<boolean> => {
-      const aIn: string[] = []
-      if (withAudio) {
-        // 声音比画面晚开始 → 往后推；早开始 → 裁掉多出的开头
-        // 以第一段对齐；中途续录的分段之间有 1~2 秒空档，之后的声音会相应偏早
-        const offset = this.audioStartWall && zeroWall ? (this.audioStartWall - zeroWall) / 1000 : 0
-        if (offset >= 0) aIn.push('-itsoffset', offset.toFixed(3), '-i', this.audioFile)
-        else aIn.push('-ss', (-offset).toFixed(3), '-i', this.audioFile)
-        this.log(
-          '合成: 声音偏移 ' + offset.toFixed(3) + 's（T0 ' + segs[0].t0 + '，第一帧采集于 T0+' + capturePts.toFixed(3) +
-            's；声音起点 ' + this.audioStartWall + '）'
-        )
+    // 声音比画面晚开始 → 往后推；早开始 → 裁掉多出的开头
+    // 以第一段对齐；中途续录的分段之间有 1~2 秒空档，之后的声音会相应偏早
+    const offsetOf = (startWall: number): number => (startWall && zeroWall ? (startWall - zeroWall) / 1000 : 0)
+    const tracks = [
+      ...(sysOk ? [{ name: '声音', file: this.audioFile, offset: offsetOf(this.audioStartWall), wall: this.audioStartWall }] : []),
+      ...(micOk ? [{ name: '麦克风', file: this.micFile, offset: offsetOf(this.micStartWall), wall: this.micStartWall }] : [])
+    ]
+    for (const tr of tracks) {
+      this.log(
+        '合成: ' + tr.name + '偏移 ' + tr.offset.toFixed(3) + 's（T0 ' + segs[0].t0 + '，第一帧采集于 T0+' +
+          capturePts.toFixed(3) + 's；' + tr.name + '起点 ' + tr.wall + '）'
+      )
+    }
+    type Track = (typeof tracks)[number]
+    const attempt = async (use: Track[]): Promise<boolean> => {
+      const args = ['-v', 'error', ...vIn]
+      if (use.length === 1) {
+        // 只有一路：偏移直接用输入参数做，声音原样拷贝，不重新编码
+        const tr = use[0]
+        if (tr.offset >= 0) args.push('-itsoffset', tr.offset.toFixed(3), '-i', tr.file)
+        else args.push('-ss', (-tr.offset).toFixed(3), '-i', tr.file)
+        args.push('-map', '0:v:0', '-map', '1:a:0', '-c:a', 'copy')
+      } else if (use.length > 1) {
+        // 两路：各自按起点对齐（晚开始的补静音、早开始的裁掉开头），再混成一轨。
+        // normalize=0：不按路数压低音量，不然游戏声音会小一半
+        const chains = use.map((tr, i) => {
+          args.push('-i', tr.file)
+          const shift =
+            tr.offset >= 0
+              ? 'asetpts=PTS-STARTPTS,adelay=delays=' + Math.round(tr.offset * 1000) + ':all=1'
+              : 'atrim=start=' + (-tr.offset).toFixed(3) + ',asetpts=PTS-STARTPTS'
+          return '[' + (i + 1) + ':a]' + shift + '[a' + i + ']'
+        })
+        const mix = use.map((_, i) => '[a' + i + ']').join('') + 'amix=inputs=' + use.length + ':duration=longest:normalize=0[aout]'
+        args.push('-filter_complex', chains.join(';') + ';' + mix)
+        args.push('-map', '0:v:0', '-map', '[aout]', '-c:a', 'aac', '-b:a', '160k')
+      } else {
+        args.push('-map', '0:v:0')
       }
-      const args = ['-v', 'error', ...vIn, ...aIn, '-map', '0:v:0']
-      if (withAudio) args.push('-map', '1:a:0', '-c:a', 'copy')
       args.push('-c:v', 'copy', '-movflags', '+faststart', '-y', out)
       const r = await runFfmpeg(args, 10 * 60 * 1000)
       if (r.code !== 0) {
-        this.log('合成失败(' + (withAudio ? '含声音' : '纯画面') + '): ' + r.stderr.trim().split(/\r?\n/).slice(-3).join(' | '))
+        const what = use.length ? use.map((x) => x.name).join('+') : '纯画面'
+        this.log('合成失败(' + what + '): ' + r.stderr.trim().split(/\r?\n/).slice(-3).join(' | '))
       }
       return r.code === 0 && existsSync(out) && statSync(out).size > 1024
     }
-    let ok = await attempt(audioOk)
+    // 先两路一起；不行就只要桌面声音（以前的做法）；再不行纯画面
+    let ok = await attempt(tracks)
     let hasAudio = audioOk && ok
-    if (!ok && audioOk) ok = await attempt(false)
+    if (!ok && tracks.length > 1) {
+      ok = await attempt(tracks.slice(0, 1))
+      hasAudio = ok
+    }
+    if (!ok && audioOk) ok = await attempt([])
     if (!ok) {
       // 合成失败的兜底：保留第一段原始分片 MP4（能播放，只是部分播放器拖动不准）
       try {
@@ -862,7 +920,7 @@ export interface StartOptions {
   fps?: number
   bitrateMbps?: number
   exposure?: number
-  /** 'off' = 不录声音 */
+  /** 'off' = 不录声音，'mic' = 桌面声音 + 麦克风，其它 = 只录桌面声音 */
   audio?: string
   saveDir: string
 }
@@ -912,7 +970,7 @@ export class FfmpegRecorder {
       fps: Number(opts.fps) || 30,
       bitrateMbps: Number(opts.bitrateMbps) || 8,
       exposure: normExposure(opts.exposure),
-      audio: opts.audio === 'off' ? 'off' : 'default',
+      audio: opts.audio === 'off' ? 'off' : opts.audio === 'mic' ? 'mic' : 'default',
       saveDir: opts.saveDir
     })
     this.session = s
