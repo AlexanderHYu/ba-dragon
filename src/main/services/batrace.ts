@@ -15,7 +15,7 @@ import type {
   UnitInfo
 } from '@shared/types/batrace'
 
-const BASE = 'https://app.batrace.top'
+const BASE = 'https://dash.batrace.top'
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** 真正的人机验证页（普通 5xx/维护页不算，免得误报） */
@@ -33,6 +33,14 @@ export class CaptchaError extends Error {
   constructor() {
     super('BATrace 要求人机验证')
     this.name = 'CaptchaError'
+  }
+}
+
+/** 404 + JSON：BATrace 正常，只是这个玩家/对局没有数据（新号、没有有效对局）。不算连接异常，也不重试 */
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'NotFoundError'
   }
 }
 
@@ -129,6 +137,10 @@ export class BatraceClient {
       this.mark(false, '服务器错误 HTTP ' + r.status)
       throw new Error('服务器错误 HTTP ' + r.status)
     }
+    if (r.status === 404) {
+      this.mark(true)
+      throw new NotFoundError('无数据')
+    }
     if (!r.ok) {
       this.mark(false, 'HTTP ' + r.status)
       throw new Error('HTTP ' + r.status)
@@ -152,7 +164,7 @@ export class BatraceClient {
       this.db.cacheSet(key, v)
       return v
     } catch (e) {
-      if (e instanceof CaptchaError) throw e
+      if (e instanceof CaptchaError || e instanceof NotFoundError) throw e
       // 超时/5xx：停 30 秒重试一次，再不行就用旧缓存兜底
       try {
         await sleep(30000)

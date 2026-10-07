@@ -292,7 +292,7 @@ export default function Settings(): React.JSX.Element {
         </p>
         <p>
           玩家数据来自{' '}
-          <a href="#" onClick={() => window.BA.openExternal('https://app.batrace.top/')}>
+          <a href="#" onClick={() => window.BA.openExternal('https://dash.batrace.top/')}>
             BATrace
           </a>
           （运营方已同意本工具使用其 API）· 录像编码用{' '}

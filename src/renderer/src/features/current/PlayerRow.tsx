@@ -81,7 +81,7 @@ export default function PlayerRow({
                   { label: '📋 复制 ID', onClick: () => void navigator.clipboard.writeText(card.id) },
                   {
                     label: '🌐 在 BATrace 打开',
-                    onClick: () => window.BA.openExternal('https://app.batrace.top/player/' + card.id)
+                    onClick: () => window.BA.openExternal('https://dash.batrace.top/player/' + card.id)
                   }
                 ]
               })

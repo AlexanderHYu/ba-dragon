@@ -91,7 +91,7 @@ export default function PlayerDetail({
         >
           {busy ? '查询中…' : '重新查询'}
         </button>
-        <button onClick={() => window.BA.openExternal('https://app.batrace.top/player/' + card.id)}>BATrace</button>
+        <button onClick={() => window.BA.openExternal('https://dash.batrace.top/player/' + card.id)}>BATrace</button>
       </div>
 
       <div className="pdetail-grid">
@@ -331,7 +331,7 @@ export default function PlayerDetail({
                         <td
                           className="dim dg-fid"
                           title="在 BATrace 中打开本局"
-                          onClick={() => window.BA.openExternal('https://app.batrace.top/match/' + r.fid)}
+                          onClick={() => window.BA.openExternal('https://dash.batrace.top/match/' + r.fid)}
                         >
                           {r.fid}
                         </td>

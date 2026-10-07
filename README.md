@@ -1,6 +1,6 @@
 # 🐉 龙区分类器（ba-dragon）
 
-基于断箭（Broken Arrow）官方 GameLogs 日志和 [BATrace](https://app.batrace.top/) 公开数据的本地对局复盘工具，
+基于断箭（Broken Arrow）官方 GameLogs 日志和 [BATrace](https://dash.batrace.top/) 公开数据的本地对局复盘工具，
 用来判断对局中每位玩家的水平（龙/区）。只读取日志和公开接口，不读写游戏内存，不注入进程，不影响反作弊。
 
 > 本仓库是基于 Electron + TypeScript + React 的重写版，版本号从 1.0.0 开始。
@@ -67,5 +67,5 @@ src/
 本仓库为重写版本：龙区分、称号、单局复盘、自动更新为本项目编写；
 沿用自原项目的部分（录像、玩家追踪、卡组、日志解析规则）保留其版权声明，见 [LICENSE](LICENSE)。
 
-玩家数据由 [BATrace](https://app.batrace.top/) 提供（运营方已同意本工具使用其 API）。
+玩家数据由 [BATrace](https://dash.batrace.top/) 提供（运营方已同意本工具使用其 API）。
 录像使用 [FFmpeg](https://github.com/BtbN/FFmpeg-Builds)（GPL）。

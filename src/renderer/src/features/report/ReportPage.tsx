@@ -122,7 +122,7 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
         </h1>
         <span className="grow" />
         <button
-          onClick={() => window.BA.openExternal('https://app.batrace.top/match/' + fid)}
+          onClick={() => window.BA.openExternal('https://dash.batrace.top/match/' + fid)}
           title="在浏览器中打开本局的 BATrace 页面"
         >
           BATrace ↗
@@ -495,7 +495,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
                               { label: '📋 复制 ID', onClick: () => void navigator.clipboard.writeText(p.id) },
                               {
                                 label: '🌐 在 BATrace 打开',
-                                onClick: () => window.BA.openExternal('https://app.batrace.top/player/' + p.id)
+                                onClick: () => window.BA.openExternal('https://dash.batrace.top/player/' + p.id)
                               }
                             ]
                           })
