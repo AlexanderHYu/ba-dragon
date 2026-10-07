@@ -2,7 +2,7 @@
 // 列：胜负 / 模式 / 龙区分 / 地图 / ELO / 账号 / 时间（+ 有录像的那局末尾一个 ▶）
 import { useCallback, useEffect, useState } from 'react'
 import type { ArchiveItem } from '@shared/ipc'
-import { scoreColor } from '../current/PlayerRow'
+import { scoreColor } from '../../components/scoreColor'
 import Pager, { pageSlice } from '../../components/Pager'
 import { useStore } from '../../store'
 import './archive.css'
@@ -140,7 +140,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                     <td className="archive-mode">
                       <Mode mode={m.mode} />
                     </td>
-                    <td style={{ color: scoreColor(m.mine?.score) }}>
+                    <td style={{ color: scoreColor(m.mine?.score, m.mine?.mark) }}>
                       {m.mine?.score != null ? m.mine.score.toFixed(1) : '—'}
                     </td>
                     <td className="archive-map" title={m.map || undefined}>

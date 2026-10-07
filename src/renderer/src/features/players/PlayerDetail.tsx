@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { Bond, PlayerCard } from '@shared/ipc'
 import type { DragonRow } from '@shared/dragon'
-import { scoreColor } from '../current/PlayerRow'
+import { scoreColor } from '../../components/scoreColor'
 import Mark from '../../components/Mark'
 
 const ROLE_NAME: Record<string, string> = {
@@ -101,12 +101,12 @@ export default function PlayerDetail({
             <>
               <div className="dg-head">
                 <div className="dg-score">
-                  <span className="dg-num" style={{ color: scoreColor(d.value) }}>
+                  <span className="dg-num" style={{ color: scoreColor(d.value, d.tier) }}>
                     {d.value.toFixed(1)}
                   </span>
                   <span
                     className="dg-tier"
-                    style={{ color: scoreColor(d.value), borderColor: scoreColor(d.value) }}
+                    style={{ color: scoreColor(d.value, d.tier), borderColor: scoreColor(d.value, d.tier) }}
                   >
                     {TIER_LABEL[d.tier] || d.tier}
                   </span>
@@ -323,7 +323,7 @@ export default function PlayerDetail({
                           {r.eloDelta != null ? (r.eloDelta > 0 ? '+' : '') + r.eloDelta.toFixed(2) : '—'}
                         </td>
                         <td>
-                          <b style={{ color: scoreColor(r.score) }}>{r.score.toFixed(1)}</b>
+                          <b style={{ color: scoreColor(r.score, r.mark) }}>{r.score.toFixed(1)}</b>
                         </td>
                         <td className="dim dg-flags">
                           {[r.conscript ? '壮丁' : '', r.minutes < 10 ? '短局' : ''].filter(Boolean).join(' ')}

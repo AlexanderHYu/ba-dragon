@@ -2,17 +2,9 @@
 // K/D 和胜率都取龙区分用的那 20 场排位局（非排位、没参考价值的局本来就不在里面），口径对得上分数。
 import type { PlayerCard } from '@shared/ipc'
 import Mark from '../../components/Mark'
+import { scoreColor } from '../../components/scoreColor'
 import type { MenuState } from '../../components/ContextMenu'
 
-/** 1~10 分的颜色：高分偏金，低分偏红 */
-export function scoreColor(v: number | null | undefined): string {
-  if (v == null) return 'var(--dim)'
-  if (v >= 8) return 'var(--gold)'
-  if (v >= 6.5) return 'var(--good)'
-  if (v >= 4) return 'var(--text)'
-  if (v >= 2.5) return 'var(--warn)'
-  return 'var(--bad)'
-}
 
 /** K/D 和胜率只做「明显好 / 明显差」两档提示，中间一律留白，不然一行全是颜色 */
 function kdColor(v: number | null | undefined): string {
@@ -98,7 +90,7 @@ export default function PlayerRow({
       }
       title="点开看详细；右键有更多"
     >
-      <div className="score" style={{ color: scoreColor(score) }}>
+      <div className="score" style={{ color: scoreColor(score, d?.tier) }}>
         {score != null ? score.toFixed(1) : card.dragonState === 'loading' ? <span className="spin" /> : '—'}
         {d ? <Mark tier={d.tier} /> : card.dragonState === 'done' ? <small>无排位</small> : null}
       </div>

@@ -6,18 +6,10 @@ import type { MatchReport, ReportPlayer, ReportTeam } from '@shared/match'
 import Mark from '../../components/Mark'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import Flag from '../../components/Flag'
+import { scoreColor } from '../../components/scoreColor'
 import { useStore } from '../../store'
 import './report.css'
 
-// 从 current/PlayerRow 复制过来的：复盘页不再依赖对局页的文件。
-export function scoreColor(v: number | null | undefined): string {
-  if (v == null) return 'var(--dim)'
-  if (v >= 8) return 'var(--gold)'
-  if (v >= 6.5) return 'var(--good)'
-  if (v >= 4) return 'var(--text)'
-  if (v >= 2.5) return 'var(--warn)'
-  return 'var(--bad)'
-}
 
 const ROLE_COLOR: Record<string, string> = {
   armor: '#6e9bd8', inf: '#63b06a', recon: '#c9a227', arty: '#d07b3f',
@@ -356,7 +348,7 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
       p.mark ? (
         <span className="rp-dg">
           <Mark tier={p.mark} />
-          <b style={{ color: scoreColor(p.score) }}>{p.score != null ? p.score.toFixed(1) : '—'}</b>
+          <b style={{ color: scoreColor(p.score, p.mark) }}>{p.score != null ? p.score.toFixed(1) : '—'}</b>
         </span>
       ) : (
         '—'
