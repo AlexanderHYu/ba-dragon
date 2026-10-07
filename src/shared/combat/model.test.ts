@@ -5,6 +5,7 @@ import { COMBAT, type CombatData } from '../game/combat'
 import {
   aoeCurve,
   aoeDamageAt,
+  damageMul,
   aoeFactor,
   apsAgainst,
   armorAt,
@@ -774,6 +775,25 @@ describe('近炸引信', () => {
     const full = damageOf(sam.dmg, 250, 0, sam.armorType)
     const withFuse = damageOf(sam.dmg * fuseFactor(sam), 250, 0, sam.armorType)
     expect(withFuse).toBeLessThan(full * 0.5)
+  })
+
+  it('滑条固定起爆距离：越近越疼，两头就是最好/最坏，超出范围会被夹回来', () => {
+    const sam = ammo(306)
+    expect(fuseFactor(sam, RADIOFUSE.pMin)).toBe(fuseFactor(sam, 'best'))
+    expect(fuseFactor(sam, 1)).toBe(fuseFactor(sam, 'worst'))
+    expect(fuseFactor(sam, 0.7)).toBeGreaterThan(fuseFactor(sam, 0.9))
+    expect(fuseFactor(sam, 0.1)).toBe(fuseFactor(sam, 'best'))
+    expect(fuseFactor(sam, 3)).toBe(fuseFactor(sam, 'worst'))
+  })
+
+  it('溅射曲线不再乘近炸系数：爆心就是满额（以前乘了平均 0.36，理论能秒的也秒不了）', () => {
+    const plane = profileOf(4, [], DATA)!
+    const sam = ammo(306)
+    const ctx = { pen: 250, armor: 0, mul: damageMul(plane, sam, { fuse: 'none' }) }
+    expect(ctx.mul).toBe(1)
+    expect(aoeDamageAt(sam, plane, 0, ctx)).toBe(damageOf(sam.dmg, 250, 0, sam.armorType, plane.armorValue > 0))
+    // 直击（命中判定）那一路照样吃近炸
+    expect(damageMul(plane, sam)).toBeCloseTo(fuseFactor(sam), 3)
   })
 })
 

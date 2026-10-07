@@ -278,10 +278,11 @@ export interface Situation {
   /** 目标自己的压制等级：0 正常 / 1 黄 / 2 红 */
   level?: number
   /**
-   * 近炸引信按哪一档算：平均 / 贴脸炸（最疼）/ 擦边炸（最不疼）。
+   * 近炸引信按哪一档算：平均 / 贴脸炸（最疼）/ 擦边炸（最不疼），或者手动给起爆距离比例 p。
    * 这是游戏里**唯一**一处单发伤害本身带随机的地方，所以单独拎出来。
+   * 'none' = 不乘近炸系数（溅射曲线用：曲线自己就是按距离衰减的，再乘一遍就算重了）
    */
-  fuse?: FuseCase
+  fuse?: FuseCase | 'none'
 }
 
 export function infantryFactor(alive: number, level = 0): number {
@@ -301,7 +302,7 @@ export const bypassCover = (factor: number, ignoreCover: number): number =>
 export function damageMul(target: UnitProfile, a: AmmoProfile, sit: Situation = {}): number {
   let mul = 1
   // 近炸引信：在旁边炸，按起爆距离的分布算能打出多少
-  if (usesRadioFuse(a)) mul *= fuseFactor(a, sit.fuse || 'avg')
+  if (usesRadioFuse(a) && sit.fuse !== 'none') mul *= fuseFactor(a, sit.fuse ?? 'avg')
   // 步兵抗打击：单发伤害够大就不吃这一层
   if (target.klass === 'inf' && target.squad.length && a.dmg < INF_DMG_THRESHOLD) {
     const alive = sit.alive ?? target.squad.length
@@ -349,13 +350,15 @@ export const RADIOFUSE = {
  * 和游戏自己写死的预估常量 0.33 对得上（见 RADIOFUSE.avgDamage），
  * 说明这个读法是对的。这里用逐弹算出来的值，不用那个粗略常量。
  */
-export type FuseCase = 'avg' | 'best' | 'worst'
+/** 平均 / 最疼 / 最不疼，或者数字 = 手动指定的起爆距离比例 p（MIN ~ 1，乘引信半径就是离外壳多远炸） */
+export type FuseCase = 'avg' | 'best' | 'worst' | number
 
 export function fuseFactor(a: AmmoProfile, which: FuseCase = 'avg'): number {
   if (!usesRadioFuse(a)) return 1
   const hi = Math.min(1, RADIOFUSE.pMax)
   // 擦身距离是从外壳算起的，正好就是 aoeFactor 里的 d。
   // 贴着最近处炸（p = MIN）最疼，擦着引信边缘炸（p = 1）最不疼。
+  if (typeof which === 'number') return r3(aoeFactor(a, clamp(which, RADIOFUSE.pMin, hi) * a.radioFuse, 0))
   if (which === 'best') return r3(aoeFactor(a, RADIOFUSE.pMin * a.radioFuse, 0))
   if (which === 'worst') return r3(aoeFactor(a, hi * a.radioFuse, 0))
   const n = 33

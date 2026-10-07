@@ -57,7 +57,7 @@ export default function StressChart({
       <g>
         <line x1={pad.l} y1={10} x2={pad.l + 20} y2={10} stroke="var(--good)" strokeWidth="2" />
         <text x={pad.l + 25} y={13} fontSize="10.5" fill="var(--good)">
-          血量（右轴，满血 {hp}）{best && worst ? '｜浅带 = 近炸最好~最坏' : ''}
+          血量（右轴，满血 {hp}）
         </text>
         <line
           x1={pad.l + 150}
@@ -71,6 +71,22 @@ export default function StressChart({
         <text x={pad.l + 175} y={13} fontSize="10.5" fill="var(--accent)">
           压制值（左轴，上限 {maxStress}）
         </text>
+        {/* 近炸浮动带单独一项，放在最后（以前接在血量后面，会压住压制值那一项） */}
+        {best && worst && (
+          <>
+            <rect
+              x={pad.l + (deaths.length > 0 ? 420 : 330)}
+              y={5}
+              width={16}
+              height={10}
+              fill="var(--good)"
+              opacity="0.18"
+            />
+            <text x={pad.l + (deaths.length > 0 ? 441 : 351)} y={13} fontSize="10.5" fill="var(--good)">
+              浅带 = 近炸最好~最坏
+            </text>
+          </>
+        )}
         {deaths.length > 0 && (
           <>
             <line x1={pad.l + 330} y1={6} x2={pad.l + 330} y2={14} stroke="var(--bad)" strokeWidth="2" />

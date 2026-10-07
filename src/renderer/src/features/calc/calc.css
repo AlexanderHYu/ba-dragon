@@ -466,7 +466,8 @@ button.ub-item.on {
   border-top: 1px solid var(--line);
 }
 .pick-extra .calc-range {
-  flex: 1 1 200px;
+  /* 一个滑条占一整行：两个挤在一行时文字会被压成一个字一行 */
+  flex: 1 1 100%;
   min-width: 180px;
 }
 
@@ -481,4 +482,11 @@ button.ub-item.on {
 .ub-hidden input {
   cursor: pointer;
   margin: 0;
+}
+
+/* 滑条旁边的小按钮（近炸「回到平均」） */
+.calc-mini {
+  padding: 1px 8px;
+  font-size: 12px;
+  line-height: 1.6;
 }
