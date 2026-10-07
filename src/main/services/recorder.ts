@@ -597,7 +597,7 @@ class Session {
     // 首次探测编码器要十几秒，这期间对局可能已经结束（stop 会清掉临时目录）：
     // 这时候再往下走就会往不存在的目录里写文件，直接收手
     if (this.stopping || this.aborted) {
-      this.log('探测还没完对局就结束了，这局不录了')
+      this.log('编码器探测完成前对局已结束，本局不录制')
       return
     }
     const { display, out, color, hdr, sdrWhite } = target
@@ -1005,7 +1005,7 @@ export class FfmpegRecorder {
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e)
-        this._log('收尾异常: ' + msg)
+        this._log('结束录制时出错: ' + msg)
         s.cleanup()
         if (this.onFinished) this.onFinished({ ok: false, error: msg, ...base() })
       })

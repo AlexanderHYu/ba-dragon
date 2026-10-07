@@ -1194,7 +1194,7 @@ export interface Simulation {
     /** 打光的时刻，没打光就是 null */
     dry: number | null
   }[]
-  /** 稳定开火时每秒进账多少压制 */
+  /** 稳定开火时每秒累积的压制值 */
   stressPerSec: number
   /** 停火后第一秒恢复多少（之后每秒再多 1） */
   recoveryFirst: number
@@ -1318,7 +1318,7 @@ export function simulate(
           apsReady = t + (aps?.cooldown || 6)
           g.shots += 1
           n -= 1
-          push(t, 'aps', (aps?.name || 'APS') + ' 拦下一发 ' + a.name + '（还剩 ' + apsLeft + ' 发）')
+          push(t, 'aps', (aps?.name || 'APS') + ' 拦截 ' + a.name + '（剩余 ' + apsLeft + ' 发）')
         }
         if (n <= 0) {
           advance(g)
@@ -1341,18 +1341,18 @@ export function simulate(
           while (alive > now) {
             const m = order[squadSize - alive]
             alive--
-            push(t, 'soldier', '倒下 1 人（剩 ' + alive + '）：' + (m ? m.name : '步枪手'))
+            push(t, 'soldier', '阵亡 1 人（剩 ' + alive + ' 人）：' + (m ? m.name : '步枪手'))
           }
         }
         if (hp <= 0) {
           hp = 0
           deadAt = t
-          push(t, 'dead', '目标被打死')
+          push(t, 'dead', '目标被击杀')
           break
         }
         if (g.shots >= g.stock) {
           g.dry = t
-          push(t, 'dry', g.w.name + ' 打光了（' + g.stock + ' 发）')
+          push(t, 'dry', g.w.name + ' 弹药耗尽（' + g.stock + ' 发）')
           break
         }
         advance(g)
@@ -1378,12 +1378,12 @@ export function simulate(
       if (level !== before) {
         if (level === 2) {
           panickedAt = panickedAt ?? t
-          push(t, 'panicked', '压制 ' + Math.round(stress) + '（红线 ' + lv.panicked + '），变红：崩溃')
+          push(t, 'panicked', '压制 ' + Math.round(stress) + '（红线 ' + lv.panicked + '），进入崩溃')
         } else if (level === 1 && before === 0) {
           shockedAt = shockedAt ?? t
-          push(t, 'shocked', '压制 ' + Math.round(stress) + '（黄线 ' + lv.shocked + '），变黄：动摇')
+          push(t, 'shocked', '压制 ' + Math.round(stress) + '（黄线 ' + lv.shocked + '），进入动摇')
         } else {
-          push(t, 'calm', '压制掉到 ' + Math.round(stress) + '，回到' + (level === 1 ? '黄' : '正常'))
+          push(t, 'calm', '压制降至 ' + Math.round(stress) + '，恢复为' + (level === 1 ? '动摇' : '正常'))
         }
       }
     }

@@ -84,14 +84,14 @@ export function UnitBrowser({
     <div className="ub-mask" onClick={onClose}>
       <div className="ub" onClick={(e) => e.stopPropagation()}>
         <div className="ub-head">
-          <input autoFocus value={q} placeholder="搜单位名" onChange={(e) => setQ(e.target.value)} />
+          <input autoFocus value={q} placeholder="搜索单位" onChange={(e) => setQ(e.target.value)} />
           <span className="dim">{list.length} 个</span>
           <label
             className="ub-hidden"
-            title="默认藏起来的两类：① 军械库里不显示的（跳伞的飞行员、船、测试假人、降落在机场上的飞机）② 母单位换配装换出来的变体（槽位在母单位身上）"
+            title="默认隐藏两类单位：① 军械库中不显示的单位（跳伞飞行员、船只、测试假人、降落在机场的飞机）② 母单位切换配装生成的变体（配装槽在母单位上）"
           >
             <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
-            连变体和隐藏单位一起列
+            显示变体和隐藏单位
           </label>
           <span className="grow" />
           <button onClick={onClose}>✕</button>
@@ -155,12 +155,12 @@ export function UnitBrowser({
               <span className="ub-name">
                 {u.name}
                 {!u.armory && (
-                  <i className="tag warn" title="游戏军械库里不显示的单位，出不了兵，一般也打不着">
+                  <i className="tag warn" title="游戏军械库中不显示的单位，无法部署，通常不会出现在对局中">
                     隐藏
                   </i>
                 )}
                 {u.armory && variants.has(u.id) && !(data.unitOptions[u.id] || []).length && (
-                  <i className="tag dimtag" title="母单位换配装换出来的版本，配装槽在母单位身上">
+                  <i className="tag dimtag" title="母单位切换配装生成的变体，配装槽在母单位上">
                     变体
                   </i>
                 )}
@@ -200,7 +200,7 @@ export default function UnitPicker({
       <div className="pick-head">
         <span className="pick-title">{title}</span>
         <button className="pick-name" onClick={() => setOpen(true)}>
-          {profile ? profile.name : '选一个单位'}
+          {profile ? profile.name : '选择单位'}
           <span className="dim"> {profile ? profile.cost + ' 分 · ' + CLASS_NAME[profile.klass] : ''}</span>
           <span className="dim"> ▾</span>
         </button>
@@ -219,7 +219,7 @@ export default function UnitPicker({
         <div className="pick-stats dim">
           HP {profile.hp}
           {!profile.directional ? (
-            <> · 装甲 {profile.armorValue}（不分方向）</>
+            <> · 装甲 {profile.armorValue}（全向）</>
           ) : (
             <>
               {' '}
@@ -246,7 +246,7 @@ export default function UnitPicker({
                 onChange({ unit: value.unit, opts: v ? [...keep, v] : keep })
               }}
             >
-              <option value="">（不选）</option>
+              <option value="">（无）</option>
               {opts.map(([id]) => (
                 <option key={id} value={id}>
                   {optLabel(id)}

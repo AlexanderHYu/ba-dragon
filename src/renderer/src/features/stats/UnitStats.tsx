@@ -31,7 +31,7 @@ const COLS: Col[] = [
         {u.refunded > 0 && <span className="dim">（回收 {u.refunded}）</span>}
       </>
     ),
-    '这些对局里一共出动了多少次（飞机按架次）'
+    '所选对局中的出动总次数（飞机按架次计）'
   ],
   [
     'deathRate',
@@ -44,19 +44,19 @@ const COLS: Col[] = [
     ),
     '阵亡 ÷ 出动'
   ],
-  ['lifeMedian', '存活·中位', (u) => u.lifeMedian, (u) => sec(u.lifeMedian), '阵亡的那些从出兵到死了多久，取中位数'],
-  ['dmgPerSortie', '伤害/次', (u) => u.dmgPerSortie, (u) => num(u.dmgPerSortie), '平均每出动一次打出多少伤害'],
+  ['lifeMedian', '存活·中位', (u) => u.lifeMedian, (u) => sec(u.lifeMedian), '已阵亡单位从出兵到阵亡的时间中位数'],
+  ['dmgPerSortie', '伤害/次', (u) => u.dmgPerSortie, (u) => num(u.dmgPerSortie), '平均每次出动造成的伤害'],
   [
     'dmgPer100',
     '伤害/100花费',
     (u) => u.dmgPer100,
     (u) => num(u.dmgPer100),
-    '每 100 点花费打出多少伤害——横向比不同价位的单位就看这个'
+    '每 100 点花费造成的伤害，用于比较不同价位的单位'
   ],
   ['killsPerSortie', '击杀/次', (u) => u.killsPerSortie, (u) => (u.killsPerSortie || 0).toFixed(1)],
   ['killsPer1k', '击杀/1000花费', (u) => u.killsPer1k, (u) => (u.killsPer1k ?? 0).toFixed(2)],
   ['dmg', '总伤害', (u) => u.dmg, (u) => num(u.dmg)],
-  ['matches', '局数', (u) => u.matches, (u) => String(u.matches), '在几局里出现过']
+  ['matches', '局数', (u) => u.matches, (u) => String(u.matches), '出现过的对局数']
 ]
 
 export default function UnitStats(): React.JSX.Element {
@@ -106,12 +106,12 @@ export default function UnitStats(): React.JSX.Element {
         单位效能
         <span className="dim">
           {res
-            ? '只算我自己出的兵 · ' + res.matches + ' 局 · ' + res.records.toLocaleString('zh-CN') + ' 条出兵记录'
-            : '算着…'}
+            ? '仅统计本人出兵 · ' + res.matches + ' 局 · ' + res.records.toLocaleString('zh-CN') + ' 条出兵记录'
+            : '计算中…'}
         </span>
         {busy && <span className="spin" />}
         <span className="grow" />
-        <input value={q} placeholder="搜单位或挂载" onChange={(e) => setQ(e.target.value)} style={{ width: 160 }} />
+        <input value={q} placeholder="搜索单位或挂载" onChange={(e) => setQ(e.target.value)} style={{ width: 160 }} />
       </h2>
 
       <div className="st-filters">
@@ -130,9 +130,9 @@ export default function UnitStats(): React.JSX.Element {
           value={f.result || ''}
           onChange={(e) => patch({ result: (e.target.value || null) as UnitStatsFilter['result'] })}
         >
-          <option value="">胜负都算</option>
-          <option value="win">只看赢的那一方</option>
-          <option value="lose">只看输的那一方</option>
+          <option value="">全部胜负</option>
+          <option value="win">仅胜方</option>
+          <option value="lose">仅负方</option>
         </select>
         <select value={String(f.minDeployed ?? 5)} onChange={(e) => patch({ minDeployed: Number(e.target.value) })}>
           {[1, 2, 3, 5, 10, 20].map((n) => (
@@ -143,14 +143,14 @@ export default function UnitStats(): React.JSX.Element {
         </select>
         <label className="st-check">
           <input type="checkbox" checked={!!f.rankedOnly} onChange={(e) => patch({ rankedOnly: e.target.checked })} />
-          只看排位
+          仅排位赛
         </label>
       </div>
 
-      {res && res.priced === 'none' && <div className="lit-bad st-note">没有游戏单位表，配装名字和单价都用不了。</div>}
+      {res && res.priced === 'none' && <div className="lit-bad st-note">缺少游戏单位表，无法显示配装名称和单价。</div>}
       {res && res.unpriced > 0 && (
         <div className="dim st-note">
-          有 {res.unpriced} 条记录在单位表里查不到（游戏更新后新加的单位），这些行的单价是老表里的估算。
+          {res.unpriced} 条记录在单位表中找不到（游戏更新后新增的单位），这些行的单价为旧表估算值。
         </div>
       )}
 
@@ -187,8 +187,8 @@ export default function UnitStats(): React.JSX.Element {
                     onClick={() => setOpenUnit(open ? null : u.unitId)}
                     title={
                       variants.length > 1
-                        ? '点一下：和这个单位的其它 ' + (variants.length - 1) + ' 套配装并排比'
-                        : '这个单位只有这一套配装'
+                        ? '单击与该单位的其他 ' + (variants.length - 1) + ' 套配装对比'
+                        : '该单位只有一套配装'
                     }
                   >
                     <td>
@@ -207,7 +207,7 @@ export default function UnitStats(): React.JSX.Element {
                     <tr key={u.unitId + '|cmp'} className="st-cmp-row">
                       <td colSpan={COLS.length + 2}>
                         <div className="st-cmp">
-                          <div className="st-cmp-head">{u.name} 的几套配装</div>
+                          <div className="st-cmp-head">{u.name} 的配装对比</div>
                           <table className="t">
                             <thead>
                               <tr>
@@ -224,7 +224,7 @@ export default function UnitStats(): React.JSX.Element {
                             <tbody>
                               {variants.map((v) => (
                                 <tr key={v.options} className={v.options === u.options ? 'st-cmp-me' : ''}>
-                                  <td>{v.loadout || <span className="dim">（没有配装）</span>}</td>
+                                  <td>{v.loadout || <span className="dim">（无配装）</span>}</td>
                                   <td className="num">{v.cost}</td>
                                   <td className="num">{v.deployed}</td>
                                   <td className="num">{v.deathRate == null ? '—' : v.deathRate + '%'}</td>
@@ -236,7 +236,7 @@ export default function UnitStats(): React.JSX.Element {
                               ))}
                             </tbody>
                           </table>
-                          <div className="dim st-cmp-note">样本少的时候别当真——出动个位数的行只能算个印象。</div>
+                          <div className="dim st-cmp-note">出动次数为个位数的行样本太少，仅供参考。</div>
                         </div>
                       </td>
                     </tr>
@@ -247,7 +247,7 @@ export default function UnitStats(): React.JSX.Element {
             {!rows.length && (
               <tr>
                 <td colSpan={COLS.length + 2} className="dim">
-                  {busy ? '算着…' : '没有符合条件的记录，把「至少出动」调小一点试试'}
+                  {busy ? '计算中…' : '没有符合条件的记录，可调低「至少出动」次数'}
                 </td>
               </tr>
             )}
@@ -256,9 +256,9 @@ export default function UnitStats(): React.JSX.Element {
       </div>
 
       <div className="dim st-note">
-        数据来自本地档案里<b>存了完整单位记录</b>的对局（老版本迁移过来的只有战绩、没有出兵明细，不在内），
-        全部本地现算，不发任何请求。伤害和存活是官方记的真值，「每 100 花费」用的是含配装的精确单价。
-        打得越多这张表越准。
+        数据来自本地档案中<b>含完整单位记录</b>的对局（从旧版本迁移的对局只有战绩、没有出兵明细，不计入），
+        全部在本地计算，不发送网络请求。伤害和存活时间为官方记录值，「伤害/100花费」使用含配装的精确单价。
+        对局越多，统计越准确。
       </div>
     </div>
   )

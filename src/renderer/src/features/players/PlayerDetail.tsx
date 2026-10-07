@@ -76,7 +76,7 @@ export default function PlayerDetail({
       <div className="row" style={{ marginBottom: 8 }}>
         <b style={{ fontSize: 16 }}>{card.name || card.id}</b>
         <span className="dim">ID {card.id}</span>
-        {card.updatedAt && <span className="dim">{new Date(card.updatedAt).toLocaleString('zh-CN')} 算的</span>}
+        {card.updatedAt && <span className="dim">更新于 {new Date(card.updatedAt).toLocaleString('zh-CN')}</span>}
         <span className="grow" />
         <button
           disabled={busy}
@@ -119,7 +119,7 @@ export default function PlayerDetail({
                   </div>
                   <div className="dg-line">
                     {roles && roles.known === false
-                      ? '角色：没有兵种数据，按全体玩家的平均构成计算'
+                      ? '角色：无兵种数据，按全体玩家平均构成计算'
                       : '角色：' +
                         roleList
                           .filter(([, v]) => v >= 5)
@@ -156,7 +156,7 @@ export default function PlayerDetail({
                   return (
                     <div className="dg-part" key={key}>
                       <span className="dg-part-name">{name}</span>
-                      <span className="dg-bar" title="50 = 同条件玩家里的普通水平">
+                      <span className="dg-bar" title="50 为同条件玩家的平均水平">
                         <i style={{ width: (v == null ? 0 : Math.round(v * 100)) + '%' }} />
                       </span>
                       <b style={{ color: partColor(v) }}>{v == null ? '—' : Math.round(v * 100)}</b>
@@ -240,10 +240,10 @@ export default function PlayerDetail({
                         <table className="t" style={{ marginTop: 6 }}>
                           <thead>
                             <tr>
-                              <th>最爱单位</th>
+                              <th>常用单位</th>
                               <th>出场</th>
                               <th>伤害</th>
-                              <th title="平均每点花费打出的收益">回报</th>
+                              <th title="平均每点花费的收益">回报</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -260,7 +260,7 @@ export default function PlayerDetail({
                       )}
                     </>
                   ) : (
-                    <div className="empty">{card.infoState === 'loading' ? '正在查…' : card.error || '没有档案'}</div>
+                    <div className="empty">{card.infoState === 'loading' ? '查询中…' : card.error || '无档案'}</div>
                   )}
                 </div>
                 {!!info?.mapStats.length && (
@@ -330,7 +330,7 @@ export default function PlayerDetail({
                         </td>
                         <td
                           className="dim dg-fid"
-                          title="在 BATrace 上打开这一局"
+                          title="在 BATrace 中打开本局"
                           onClick={() => window.BA.openExternal('https://app.batrace.top/match/' + r.fid)}
                         >
                           {r.fid}
@@ -342,7 +342,7 @@ export default function PlayerDetail({
               )}
             </>
           ) : (
-            <div className="empty">{card.dragonState === 'loading' ? '正在算…' : '没有排位局，算不出龙区分'}</div>
+            <div className="empty">{card.dragonState === 'loading' ? '计算中…' : '无排位对局，无法计算龙区分'}</div>
           )}
         </section>
 
@@ -353,7 +353,7 @@ export default function PlayerDetail({
             <div className="kv">
               <div>
                 <b>{bond.matches}</b>
-                <span>一起打过</span>
+                <span>共同对局</span>
               </div>
               <div>
                 <b>
@@ -369,13 +369,13 @@ export default function PlayerDetail({
               </div>
               <div>
                 <b>{bond.avgScore ?? '—'}</b>
-                <span>他的平均龙区分</span>
+                <span>平均龙区分</span>
               </div>
             </div>
             <div className="dim">
-              {bond.firstSeen ? '第一次见：' + new Date(bond.firstSeen).toLocaleDateString('zh-CN') : ''}
-              {bond.names.length > 1 ? ' · 用过的名字：' + bond.names.join('、') : ''}
-              {bond.banned ? ' · ⚠ 在封禁名单上' : ''}
+              {bond.firstSeen ? '首次相遇：' + new Date(bond.firstSeen).toLocaleDateString('zh-CN') : ''}
+              {bond.names.length > 1 ? ' · 曾用名：' + bond.names.join('、') : ''}
+              {bond.banned ? ' · ⚠ 在封禁名单中' : ''}
             </div>
           </section>
         )}
@@ -388,19 +388,19 @@ export default function PlayerDetail({
 /** 龙区分的解释文案 */
 function reasonText(key: string, p: Record<string, unknown>): string {
   const T: Record<string, string> = {
-    kdHigh: `K/D 中位 ${p.kd}，在同条件玩家里排第 ${p.p} 百分位`,
-    kdLowFront: `K/D 中位 ${p.kd}，打正面的人里偏低（第 ${p.p} 百分位）`,
-    kdLowSupport: `K/D 中位 ${p.kd}，同类玩家里偏低（第 ${p.p} 百分位）`,
-    contribHigh: `摧毁贡献是队友人均的 ${p.x} 倍`,
-    contribLow: `摧毁贡献只有队友人均的 ${p.x} 倍`,
-    overperform: `胜率 ${p.win}%，高于 ELO 预期的 ${p.exp}%，打得比匹配到的对手好`,
+    kdHigh: `K/D 中位数 ${p.kd}，同条件玩家中第 ${p.p} 百分位`,
+    kdLowFront: `K/D 中位数 ${p.kd}，正面兵种玩家中偏低（第 ${p.p} 百分位）`,
+    kdLowSupport: `K/D 中位数 ${p.kd}，同类玩家中偏低（第 ${p.p} 百分位）`,
+    contribHigh: `摧毁贡献为队友人均的 ${p.x} 倍`,
+    contribLow: `摧毁贡献仅为队友人均的 ${p.x} 倍`,
+    overperform: `胜率 ${p.win}%，高于 ELO 预期的 ${p.exp}%`,
     underperform: `胜率 ${p.win}%，低于 ELO 预期的 ${p.exp}%`,
-    underdog: `对手平均更强，预期胜率只有 ${p.exp}%`,
-    conscript: `有 ${p.n} 场是被大佬带 / 被拉去填坑`,
-    afkGames: `有 ${p.n} 场掉线或挂机`,
-    shortGames: `有 ${p.n} 场很短`,
-    roleUnknown: '没有生涯兵种数据，角色构成按全体平均算',
-    fewMatches: `只有 ${p.n} 场排位，分数不太稳`
+    underdog: `对手平均更强，预期胜率仅 ${p.exp}%`,
+    conscript: `${p.n} 场为壮丁局（被高分玩家带或临时补位）`,
+    afkGames: `${p.n} 场掉线或挂机`,
+    shortGames: `${p.n} 场为短局`,
+    roleUnknown: '无生涯兵种数据，角色构成按全体平均计算',
+    fewMatches: `仅 ${p.n} 场排位，分数可能不稳定`
   }
   return T[key] || key
 }

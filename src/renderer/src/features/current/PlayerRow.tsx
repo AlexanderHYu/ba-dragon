@@ -33,7 +33,7 @@ export function PlayerRowHead(): React.JSX.Element {
       <div className="num" title="最近 20 场排位的胜率">
         胜率
       </div>
-      <div className="num" title="算分用了多少场">
+      <div className="num" title="计算龙区分所用的场数">
         样本
       </div>
       <div>常用单位</div>
@@ -88,7 +88,7 @@ export default function PlayerRow({
             }
           : undefined
       }
-      title="点开看详细；右键有更多"
+      title="单击查看详情，右键查看更多操作"
     >
       <div className="score" style={{ color: scoreColor(score, d?.tier) }}>
         {score != null ? score.toFixed(1) : card.dragonState === 'loading' ? <span className="spin" /> : '—'}
@@ -100,11 +100,11 @@ export default function PlayerRow({
         {loading && <span className="spin" style={{ marginLeft: 6 }} />}
         {card.infoState === 'error' && (
           <span className="dim" style={{ marginLeft: 6, fontWeight: 400 }}>
-            {card.error || '查不到'}
+            {card.error || '未找到'}
           </span>
         )}
       </div>
-      <div className="num" title={info?.elo == null && card.staleElo != null ? '这是 BATrace 档案里的旧值' : ''}>
+      <div className="num" title={info?.elo == null && card.staleElo != null ? 'BATrace 档案中的旧值' : ''}>
         {elo != null ? Math.round(elo) : '—'}
       </div>
       <div className="num" style={{ color: kdColor(d?.summary.kdAgg) }}>

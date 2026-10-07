@@ -607,9 +607,9 @@ function insights(r: MatchReport): Insight[] {
   if (r.winnerTeam != null && A.expected != null) {
     const w = r.teams[r.winnerTeam]
     if ((w.expected as number) < 0.35) {
-      out.push({ kind: 'good', text: tn(r.winnerTeam) + fac(r.winnerTeam) + '以弱胜强：赛前预期胜率只有 ' + Math.round((w.expected as number) * 100) + '%' })
+      out.push({ kind: 'good', text: tn(r.winnerTeam) + fac(r.winnerTeam) + '以弱胜强：赛前预期胜率 ' + Math.round((w.expected as number) * 100) + '%' })
     } else if ((w.expected as number) > 0.75) {
-      out.push({ kind: 'neutral', text: tn(r.winnerTeam) + fac(r.winnerTeam) + '赢得不意外：赛前预期胜率 ' + Math.round((w.expected as number) * 100) + '%' })
+      out.push({ kind: 'neutral', text: tn(r.winnerTeam) + fac(r.winnerTeam) + '按预期获胜：赛前预期胜率 ' + Math.round((w.expected as number) * 100) + '%' })
     }
   }
   // 交换比
@@ -621,19 +621,19 @@ function insights(r: MatchReport): Insight[] {
     if (ratio && ratio >= 1.3) {
       out.push({
         kind: better === r.winnerTeam ? 'neutral' : 'bad',
-        text: tn(better) + '摧毁是对面的 ' + r2(ratio) + ' 倍' + (r.winnerTeam != null && better !== r.winnerTeam ? '，却输了' : '')
+        text: tn(better) + '摧毁分为对方的 ' + r2(ratio) + ' 倍' + (r.winnerTeam != null && better !== r.winnerTeam ? '，但输掉了比赛' : '')
       })
     }
   }
   for (const t of [0, 1]) {
     const T = r.teams[t]
-    if (T.gone.length) out.push({ kind: 'bad', text: tn(t) + '有人掉线/挂机：' + T.gone.join('、') })
+    if (T.gone.length) out.push({ kind: 'bad', text: tn(t) + '掉线/挂机：' + T.gone.join('、') })
     // 空军损失占比
     const air = r.units
       .filter((u) => u.team === t && (u.role === 'heli' || u.role === 'jet'))
       .reduce((s, u) => s + u.lost, 0)
     if (T.lostValue && air / T.lostValue >= 0.35 && air >= 1500) {
-      out.push({ kind: 'bad', text: tn(t) + '损失里 ' + Math.round((air / T.lostValue) * 100) + '% 是飞机（' + Math.round(air) + '）' })
+      out.push({ kind: 'bad', text: tn(t) + '损失中 ' + Math.round((air / T.lostValue) * 100) + '% 为直升机/固定翼（' + Math.round(air) + '）' })
     }
   }
   // 最赚、最亏的单位（出了至少 2 个；运输单位本来就不打伤害，不参与）
@@ -643,10 +643,10 @@ function insights(r: MatchReport): Insight[] {
     .filter((u) => (u.deathRate as number) >= 80)
     .sort((a, b) => (a.destrPerCost as number) - (b.destrPerCost as number))[0]
   if (best) {
-    out.push({ kind: 'good', text: '最赚的单位：' + tn(best.team) + '的 ' + best.name + '（出了 ' + best.deployed + ' 个，每 1 点花费打出 ' + best.destrPerCost + ' 击杀分，估算）' })
+    out.push({ kind: 'good', text: '性价比最高的单位：' + tn(best.team) + ' ' + best.name + '（出兵 ' + best.deployed + '，每点花费 ' + best.destrPerCost + ' 击杀分，估算）' })
   }
   if (worst) {
-    out.push({ kind: 'bad', text: '最亏的单位：' + tn(worst.team) + '的 ' + worst.name + '（出了 ' + worst.deployed + ' 个、死了 ' + worst.dead + ' 个，每 1 点花费只打出 ' + worst.destrPerCost + ' 击杀分，估算）' })
+    out.push({ kind: 'bad', text: '性价比最低的单位：' + tn(worst.team) + ' ' + worst.name + '（出兵 ' + worst.deployed + '，阵亡 ' + worst.dead + '，每点花费 ' + worst.destrPerCost + ' 击杀分，估算）' })
   }
   for (const ev of r.timeline.events) {
     if (ev.type === 'spike') out.push({ kind: 'neutral', text: '第 ' + (ev.min + 1) + ' 分钟 ' + tn(ev.team) + ev.text })

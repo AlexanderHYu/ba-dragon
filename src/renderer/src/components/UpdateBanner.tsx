@@ -21,13 +21,13 @@ export default function UpdateBanner(): React.JSX.Element | null {
   const cur = '（当前 v' + info.current + '）'
   let text: string
   if (info.mode === 'auto' && info.status === 'ready') {
-    text = '✅ 新版本 ' + v + ' 已经下载好了。点「重启更新」马上装好并重新打开；不点的话，下次关软件时自动装。'
+    text = '✅ 新版本 ' + v + ' 已下载。点击「重启更新」立即安装，否则在下次退出时自动安装。'
   } else if (info.mode === 'auto') {
     text = '⬇ 发现新版本 ' + v + cur + '，正在后台下载… ' + (info.percent || 0) + '%'
   } else if (info.portable) {
-    text = '🆕 有新版本 ' + v + cur + '。免安装版不能自动更新，下载新的 exe 换掉旧的即可；推荐改用安装版。设置和档案都会保留。'
+    text = '🆕 新版本 ' + v + cur + '。免安装版不支持自动更新，请下载新 exe 替换旧文件（推荐使用安装版）。设置和档案会保留。'
   } else {
-    text = '🆕 有新版本 ' + v + cur + '。下载新的安装包运行覆盖安装即可，设置和档案都会保留。'
+    text = '🆕 新版本 ' + v + cur + '。请下载安装包覆盖安装，设置和档案会保留。'
   }
 
   return (

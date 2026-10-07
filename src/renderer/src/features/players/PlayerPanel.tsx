@@ -35,7 +35,7 @@ export default function PlayerPanel(): React.JSX.Element {
     try {
       const list = await window.BA.searchPlayers(text)
       setSearch(list)
-      if (!list.length) setErr('没搜到这个人')
+      if (!list.length) setErr('未找到该玩家')
     } catch (e) {
       setSearch([])
       setErr(String((e as Error)?.message || e))
@@ -87,7 +87,7 @@ export default function PlayerPanel(): React.JSX.Element {
           }}
         />
       ) : (
-        <div className="empty">搜一个人，或者在上面的名单里点一个人。</div>
+        <div className="empty">搜索玩家，或在上方名单中点击玩家。</div>
       )}
     </div>
   )

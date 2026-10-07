@@ -138,7 +138,7 @@ export interface Loadout {
 /** 游戏的加密：明文前缀 fhk3s0g3 + 16 字节 IV + AES-256-CBC，整体再 base64（卡组文件不套 base64） */
 export function decryptBlob(buf: Buffer, key: string): Buffer {
   if (!buf.subarray(0, MARKER.length).equals(MARKER)) {
-    throw new Error('这段数据不是游戏加密格式（开头对不上）')
+    throw new Error('数据不是游戏的加密格式（文件头不匹配）')
   }
   const iv = buf.subarray(MARKER.length, MARKER.length + 16)
   const body = buf.subarray(MARKER.length + 16)
@@ -182,13 +182,13 @@ class Cursor {
     const want = Math.max(n, this.end * 2)
     this.buf = this.fs.read(this.node, this.base, want)
     this.end = this.buf.length
-    if (n > this.end) throw new Error('数据库对象读到节点末尾了')
+    if (n > this.end) throw new Error('数据库对象超出节点末尾')
   }
   /** Unity 的字符串：4 字节长度 + 内容，然后补齐到 4 的倍数 */
   string(offset: number): [Buffer, number] {
     this.need(offset + 4)
     const size = this.buf.readUInt32LE(offset)
-    if (size < 0 || size > 64 * 1024 * 1024) throw new Error('字符串长度不像话：' + size)
+    if (size < 0 || size > 64 * 1024 * 1024) throw new Error('字符串长度异常：' + size)
     this.need(offset + 4 + size)
     const data = this.buf.subarray(offset + 4, offset + 4 + size)
     return [data, (offset + 4 + size + 3) & ~3]
@@ -247,7 +247,7 @@ export function extractRaw(gameDir: string, key: string, wanted: Set<string> = W
     const pattern = Buffer.concat([Buffer.from([OBJ_NAME.length, 0, 0, 0]), Buffer.from(OBJ_NAME, 'ascii')])
     let hits = fs.findFromEnd(node, pattern, 2, TAIL_SCAN)
     if (!hits.length) hits = fs.findFromEnd(node, pattern, 2)
-    if (!hits.length) throw new Error('资源里找不到 ' + OBJ_NAME + '，游戏的存法可能变了')
+    if (!hits.length) throw new Error('资源里找不到 ' + OBJ_NAME + '，游戏的数据格式可能已变更')
 
     let best: RawTables | null = null
     for (const hit of hits) {
@@ -259,7 +259,7 @@ export function extractRaw(gameDir: string, key: string, wanted: Set<string> = W
       }
       if (!best || (tables.t.Units?.length || 0) > (best.t.Units?.length || 0)) best = tables
     }
-    if (!best) throw new Error('数据库解不开，密钥可能不对（游戏更新后会换）')
+    if (!best) throw new Error('无法解密数据库，密钥可能不正确（游戏更新后密钥可能变化）')
     return best
   } finally {
     fs.close()
@@ -269,7 +269,7 @@ export function extractRaw(gameDir: string, key: string, wanted: Set<string> = W
 function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: string, wanted: Set<string>): RawTables {
   const cur = new Cursor(fs, node, nameOffset)
   let [name, off] = cur.string(0)
-  if (name.toString('ascii') !== OBJ_NAME) throw new Error('对象名对不上')
+  if (name.toString('ascii') !== OBJ_NAME) throw new Error('对象名不匹配')
   const raw: Record<string, unknown> = {}
   for (const field of FIELDS) {
     const [data, next] = cur.string(off)
@@ -499,7 +499,7 @@ export class GameDbService {
       return false
     }
     if (key.length !== 32) {
-      this.lastError = '密钥要正好 32 个字符'
+      this.lastError = '密钥必须是 32 个字符'
       return false
     }
     const dir = this.gameDir()
@@ -513,7 +513,7 @@ export class GameDbService {
       stamp = fs.stamp()
       fs.close()
     } catch (e) {
-      this.lastError = '打不开游戏资源：' + String((e as Error)?.message || e)
+      this.lastError = '无法打开游戏资源：' + String((e as Error)?.message || e)
       return false
     }
     if (!force) {

@@ -16,7 +16,7 @@ export default function Bans(): React.JSX.Element {
         <span className="ico">🛡</span>
         封禁监控
         <span className="grow" />
-        {data && <span className="dim">{new Date(data.checkedAt).toLocaleString('zh-CN')} 查的</span>}
+        {data && <span className="dim">检查于 {new Date(data.checkedAt).toLocaleString('zh-CN')}</span>}
         <button
           disabled={busy}
           onClick={async () => {
@@ -33,9 +33,9 @@ export default function Bans(): React.JSX.Element {
       </h2>
       {err && <div style={{ color: 'var(--bad)' }}>{err}</div>}
       {!data ? (
-        <div className="empty">启动后会自动查一次。</div>
+        <div className="empty">尚未检查。开启「启动时查一次封禁名单」后会在启动时自动检查。</div>
       ) : !data.met.length ? (
-        <div className="empty">你遇到过的人里，名单上一个都没有。名单共 {data.total} 人。</div>
+        <div className="empty">你遇到过的玩家均不在封禁名单上（名单共 {data.total} 人）。</div>
       ) : (
         <table className="t">
           <thead>

@@ -164,14 +164,14 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
         <span className="dim">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
         <span className="grow" />
         <button onClick={() => void window.BA.openReplayFolder(item.id)}>定位文件</button>
-        <button onClick={toggleFull} title="全屏（Esc 或再点一次退出）">
+        <button onClick={toggleFull} title="全屏（按 Esc 或再次点击退出）">
           {full ? '⤢ 退出全屏' : '⛶ 全屏'}
         </button>
         <button onClick={onClose}>✕</button>
       </div>
 
       {broken ? (
-        <div className="empty">这个录像打不开了，文件可能被删了或者还没合成完。</div>
+        <div className="empty">无法打开录像，文件可能已删除或尚未生成完成。</div>
       ) : (
         <video
           ref={video}
@@ -335,11 +335,11 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       <div className="bplayer-note dim">
         {curve ? (
           <>
-            曲线 = 兵力差：<span className="t0">中线以上 = A 队占上风</span>，<span className="t1">以下 = B 队占上风</span>
-            ；竖着的色带 = 某一队损失最惨的那一分钟（带的左右两边就是这分钟的头尾）。按比例对齐，可能有几秒误差
+            曲线为兵力差：<span className="t0">中线以上 A 队领先</span>，<span className="t1">中线以下 B 队领先</span>
+            ；竖色带标出某队损失最大的一分钟。按比例对齐，可能有几秒误差
           </>
         ) : (
-          '这一局没有对局数据，只有普通进度条'
+          '本局无对局数据，仅显示普通进度条'
         )}{' '}
         · 空格播放/暂停，← → ±5 秒
       </div>

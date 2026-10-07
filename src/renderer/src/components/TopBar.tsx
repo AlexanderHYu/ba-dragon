@@ -16,7 +16,7 @@ export default function TopBar(): React.JSX.Element {
   const apiCls = api?.ok == null ? 'wait' : api.ok ? 'ok' : 'bad'
   const apiText = api?.ok == null ? 'BATrace 待请求' : api.ok ? 'BATrace 正常' : 'BATrace ' + (api.message || '异常')
   const logCls = status?.watching ? 'ok' : status?.logFound ? 'wait' : 'bad'
-  const logText = status?.watching ? '日志监听中' : status?.logFound ? '找到目录，等日志' : '没找到游戏目录'
+  const logText = status?.watching ? '日志监听中' : status?.logFound ? '等待游戏日志' : '未找到游戏目录'
 
   return (
     <div className="topbar">
@@ -28,7 +28,7 @@ export default function TopBar(): React.JSX.Element {
         <i />
         {logText}
       </span>
-      <span className={'status ' + apiCls} title={api?.at ? new Date(api.at).toLocaleTimeString('zh-CN') + ' · 本次启动发了 ' + api.requests + ' 个请求' : ''}>
+      <span className={'status ' + apiCls} title={api?.at ? new Date(api.at).toLocaleTimeString('zh-CN') + ' · 本次启动请求 ' + api.requests + ' 次' : ''}>
         <i />
         {apiText}
       </span>

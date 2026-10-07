@@ -23,7 +23,7 @@ export default function CurrentMatch(): React.JSX.Element {
     ['Alpha', 't0', cards.filter((c) => teamOf(c) === 'Alpha'), false],
     ['Bravo', 't1', cards.filter((c) => teamOf(c) === 'Bravo'), false],
     ['观战', '', cards.filter((c) => teamOf(c) === 'Spectators'), true],
-    ['房间里的人', '', cards.filter((c) => !isTeam(c) && teamOf(c) !== 'Spectators'), true]
+    ['未分队', '', cards.filter((c) => !isTeam(c) && teamOf(c) !== 'Spectators'), true]
   ]
   // 游戏只在有人**加入**时写一行 Incoming client，你进房之前就在里面的人（房主必然是）
   // 日志里根本没有。翻了十份日志，进厅两秒内一条补播都没有，只能等开打时的完整名单。
@@ -55,8 +55,7 @@ export default function CurrentMatch(): React.JSX.Element {
 
       {partialRoster && (
         <div className="dim cm-note">
-          房间里只认得出「你进来之后才加入的人」和你自己——游戏日志只在有人加入时写一行，
-          <b>先在房里的（房主一般就是）它不写</b>。等开打时的完整名单出来就全了。
+          游戏日志只记录你进入后加入的玩家，你进入前已在房间的玩家（通常包括房主）暂不显示。对局开始后显示完整名单。
         </div>
       )}
 
@@ -64,16 +63,16 @@ export default function CurrentMatch(): React.JSX.Element {
         <div className="dim cm-note">
           {host.me ? (
             <>
-              👑 <b>你就是房主</b>——你进来的时候房里没别人。
+              👑 <b>你是房主</b>
             </>
           ) : host.id ? (
             <>
-              👑 房主是 <b>{host.candidates[0].name}</b>：开打的完整名单里，只有他不是「你进来之后才加入的」。
+              👑 房主：<b>{host.candidates[0].name}</b>
             </>
           ) : (
             <>
-              👑 房主在这几个人里：<b>{host.candidates.map((c) => c.name).join('、')}</b>
-              ——他们在你进房之前就在了，日志分不出谁先谁后。
+              👑 房主可能是：<b>{host.candidates.map((c) => c.name).join('、')}</b>
+              （均在你进入前已在房间，无法确定）
             </>
           )}
         </div>
@@ -88,10 +87,10 @@ export default function CurrentMatch(): React.JSX.Element {
       {!cards.length ? (
         <div className="empty">
           {!status?.logFound
-            ? '还没设置游戏目录，去右上角「设置」里选。'
+            ? '未设置游戏目录，请在右上角「设置」中选择。'
             : cur || lobby
-              ? '正在等名单…'
-              : '等待对局开始…进游戏后会自动把房间里每个人都算好。'}
+              ? '等待玩家名单…'
+              : '等待对局开始…进入房间后自动查询所有玩家。'}
         </div>
       ) : (
         <div className="teams">

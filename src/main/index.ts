@@ -118,7 +118,7 @@ function startServices(): Services {
       () =>
         send('toast', {
           kind: 'info',
-          text: '老版数据已经搬过来了：' + moved.matches + ' 局对局、' + moved.players + ' 个玩家'
+          text: '已导入旧版数据：' + moved.matches + ' 局对局、' + moved.players + ' 个玩家'
         }),
       3000
     )
@@ -304,7 +304,7 @@ function startServices(): Services {
         .check()
         .then((r) => {
           if (r.newly.length) {
-            send('toast', { kind: 'warn', text: '你遇到过的 ' + r.newly.map((x) => x.name).join('、') + ' 被封了' })
+            send('toast', { kind: 'warn', text: '你遇到过的玩家已被封禁：' + r.newly.map((x) => x.name).join('、') })
           }
         })
         .catch(() => undefined)

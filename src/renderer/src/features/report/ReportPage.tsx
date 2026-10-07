@@ -30,32 +30,32 @@ const TITLE_NAME: Record<string, string> = {
 const TITLE_TIP: Record<string, string> = {
   carry: '赢方净交换最高：摧毁 {d} − 损失 {l} = {net}',
   blame: '输方净交换最低：摧毁 {d} − 损失 {l} = {net}',
-  deserter: '游戏记为逃兵或中途挂机，最后一次出兵在第 {min} 分钟；输了锅就是他的',
+  deserter: '被游戏记为逃兵或中途挂机，最后一次出兵在第 {min} 分钟；本队输了由他背锅',
   tryhard: '输了，但净交换全场第一',
   passenger: '赢了，但净交换为负且全场垫底：摧毁 {d} − 损失 {l} = {net}',
-  lonewolf: '队里 {n} 人掉线，他扛起了本队（本队第一、全场前 3）',
+  lonewolf: '本队 {n} 人掉线，他的表现本队第一、全场前 3',
   reaper: '摧毁分占全场 {p}%',
   untouched: '损失只占本队 {p}%，摧毁却是队均的 {x} 倍',
-  weightlifter: '击杀 {k}、阵亡 {d}，都是全场前列，分值 K/D 却只有 {kd}——纯纯的互换',
-  atm: '损失分占全场 {p}%，K/D 只有 {kd}，对面的经济全靠他',
-  scraper: '伤害占全场 {p}%，摧毁却只有队均的 {x} 倍——光挠痒不收人头',
-  killsteal: '每点伤害换来 {x} 分摧毁，全场最会补刀',
+  weightlifter: '击杀 {k}、阵亡 {d}，均为全场前列，但分值 K/D 仅 {kd}，基本是对换',
+  atm: '损失分占全场 {p}%，K/D 仅 {kd}',
+  scraper: '伤害占全场 {p}%，摧毁分仅为队均的 {x} 倍',
+  killsteal: '每点伤害对应 {x} 摧毁分，全场最高',
   boxed: '阵亡单位平均只活了 {s} 秒（中位数）',
-  camper: '几乎没损失（本队的 {p}%），也几乎没战果（队均的 {x} 倍）',
-  landlord: '占了 {n} 个点，本队的 {p}%',
-  demolition: '拆了 {n} 栋建筑',
-  convoy: '{n} 补给被敌人缴获——给对面送物资',
+  camper: '损失很少（本队的 {p}%），战果也很少（队均的 {x} 倍）',
+  landlord: '占点 {n} 个，占本队的 {p}%',
+  demolition: '摧毁建筑 {n} 栋',
+  convoy: '补给被敌方缴获 {n}',
   bandit: '缴获敌方补给 {n}',
-  canteen: '队友用掉了他 {n} 补给',
-  freeloader: '用掉了队友 {n} 补给',
-  courier: '空投了 {n} 补给',
-  refund: '{p}% 的出兵最后退了款',
+  canteen: '队友使用了他的补给 {n}',
+  freeloader: '使用了队友的补给 {n}',
+  courier: '空投补给 {n}',
+  refund: '{p}% 的出兵被回收退款',
   spender: '出兵花费占全场 {p}%，摧毁只有队均的 {x} 倍',
-  traitor: '误伤摧毁了价值 {n} 的友军',
-  backstabbed: '被友军误伤损失了 {n}',
-  crash: '损失了价值 {n} 的直升机/飞机',
+  traitor: '误伤摧毁友军，价值 {n}',
+  backstabbed: '被友军误伤损失 {n}',
+  crash: '直升机/固定翼损失 {n}',
   artygod: '以炮兵为主（{a}%），摧毁分占全场 {p}%',
-  'deserter:silent': '全场没有任何战果（掉线或挂机）；输了锅就是他的'
+  'deserter:silent': '全场无任何战果（掉线或挂机）；本队输了由他背锅'
 }
 /** 称号说明：套上这一局的数字；掉线狗分「全场零战果」和「中途走了」两种说法 */
 function titleTip(t: { id: string; params: Record<string, unknown> }): string {
@@ -103,7 +103,7 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
     setError(null)
     void window.BA.getMatchReport(fid).then((r) => {
       if (!alive) return
-      if ('error' in r) setError(r.error === 'notYet' ? 'BATrace 还没有这一局的数据，过几分钟再看' : r.error)
+      if ('error' in r) setError(r.error === 'notYet' ? 'BATrace 暂无本局数据，请几分钟后再试' : r.error)
       else setReport(r)
     })
     return () => {
@@ -114,7 +114,7 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
   return (
     <div className="rp">
       <div className="rp-head">
-        <button className="rp-back" onClick={onBack} title="回到上一个页面">
+        <button className="rp-back" onClick={onBack} title="返回上一页">
           ← 返回
         </button>
         <h1 className="rp-title">
@@ -123,13 +123,13 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
         <span className="grow" />
         <button
           onClick={() => window.BA.openExternal('https://app.batrace.top/match/' + fid)}
-          title="在浏览器里打开 BATrace 的这一局"
+          title="在浏览器中打开本局的 BATrace 页面"
         >
           BATrace ↗
         </button>
       </div>
       {!report ? (
-        <div className="empty">{error ? error : <>正在算…（第一次要拉一次对局数据）</>}</div>
+        <div className="empty">{error ? error : <>计算中…（首次需下载对局数据）</>}</div>
       ) : (
         <>
           <div className="rp-tabs">
@@ -325,7 +325,7 @@ function Overview({ r }: { r: MatchReport }): React.JSX.Element {
 
       <div className="card">
         <h2>
-          全场之最<span className="dim rp-sub">（掉线/挂机的人不算）</span>
+          全场之最<span className="dim rp-sub">（不含掉线/挂机玩家）</span>
         </h2>
         <div className="rp-bests">
           {BESTS.map(([label, k, fmt]) => (
@@ -353,7 +353,7 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
       ) : (
         '—'
       ),
-    '和同分段、同兵种构成的人比，这一局打得怎么样'
+    '与同分段、同兵种构成的玩家相比，本局的表现评分'
   ],
   [
     'name',
@@ -388,21 +388,21 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
           </span>
         </>
       ),
-    '赛后分，后面是这一局的涨跌'
+    '赛后 ELO 及本局涨跌'
   ],
   [
     'net',
     '净交换',
     (p) => <span className={p.net >= 0 ? 'lit-ok' : 'lit-bad'}>{(p.net >= 0 ? '+' : '') + num(p.net)}</span>,
-    '摧毁分 − 损失分，这一局的实际功劳'
+    '摧毁分 − 损失分'
   ],
   ['D', '摧毁 / 损失', (p) => num(p.D) + ' / ' + num(p.L)],
   ['kd', 'K/D', (p) => p.kd ?? '—', '摧毁分 ÷ 损失分'],
   ['kills', '击杀 / 阵亡', (p) => p.kills + ' / ' + p.deaths],
   ['dmg', '伤害 / 承伤', (p) => num(p.dmg) + ' / ' + num(p.dmgTaken)],
-  ['spent', '出兵', (p) => p.unitsDeployed + ' 个 · ' + num(p.spent), '出动次数（飞机按架次算）· 花费'],
+  ['spent', '出兵', (p) => p.unitsDeployed + ' 个 · ' + num(p.spent), '出动次数（飞机按架次计）· 花费'],
   ['survival', '存活率', (p) => (p.survival == null ? '—' : p.survival + '%')],
-  ['dPerCost', '击杀分/花费', (p) => p.dPerCost ?? '—', '每 1 点花费打出多少击杀分'],
+  ['dPerCost', '击杀分/花费', (p) => p.dPerCost ?? '—', '每点花费对应的击杀分'],
   ['supply', '补给', (p) => num(p.supply)]
 ]
 
@@ -500,7 +500,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
                             ]
                           })
                         }}
-                        title={open === p.id ? '点一下收起' : '点一下看这个人的单位明细；右键有更多'}
+                        title={open === p.id ? '单击收起' : '单击查看单位明细，右键查看更多操作'}
                       >
                         {PCOLS.map(([k, , render]) => (
                           <td key={String(k)}>{render(p)}</td>
@@ -528,12 +528,12 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
 function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
   // 老版 mrPlayerDetail 的那一串零碎事实
   const extra = [
-    p.supplyByAllies ? '队友吃了他 ' + num(p.supplyByAllies) + ' 补给' : '',
-    p.supplyFromAllies ? '他吃了队友 ' + num(p.supplyFromAllies) + ' 补给' : '',
+    p.supplyByAllies ? '队友使用其补给 ' + num(p.supplyByAllies) : '',
+    p.supplyFromAllies ? '使用队友补给 ' + num(p.supplyFromAllies) : '',
     p.supplyCaptured ? '缴获敌方补给 ' + num(p.supplyCaptured) : '',
     p.supplyLostToEnemy ? '补给被缴获 ' + num(p.supplyLostToEnemy) : '',
     p.airdrop ? '空投 ' + num(p.airdrop) : '',
-    p.buildings ? '拆建筑 ' + p.buildings + ' 栋' : '',
+    p.buildings ? '摧毁建筑 ' + p.buildings + ' 栋' : '',
     p.ffDestroyed ? '误伤友军 ' + num(p.ffDestroyed) : '',
     p.ffLost ? '被友军误伤 ' + num(p.ffLost) : '',
     p.unitsRefunded ? '返航/回收 ' + p.unitsRefunded + ' 次（退回 ' + num(p.refundScore) + '）' : '',
@@ -552,8 +552,8 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
       {p.parts && (
         <div className="rp-parts">
           <span>
-            <span title="死步兵、坦克罚得轻，死炮兵罚得重；正面单位的击杀加分多，炮兵和固定翼的少">K/D（按兵种加权）</span>
-            在同角色同分段里 <b>第 {Math.round((p.parts.kd || 0) * 100)} 百分位</b>
+            <span title="按兵种加权：步兵、坦克阵亡扣分少，炮兵阵亡扣分多；正面单位击杀加分多，炮兵和固定翼加分少">K/D（按兵种加权）</span>
+            同角色同分段中 <b>第 {Math.round((p.parts.kd || 0) * 100)} 百分位</b>
           </span>
           <span>
             摧毁贡献 <b>第 {Math.round((p.parts.contrib || 0) * 100)} 百分位</b>
@@ -576,14 +576,14 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
         </div>
         <div>
           <b>{sec(p.lifeMedian)}</b>
-          <span title="已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）">阵亡存活·中位</span>
+          <span title="已阵亡单位从出兵到阵亡的时间中位数（不含存活到结束和返航回收的单位）">阵亡存活·中位</span>
         </div>
         <div>
           <b>
             {p.unitsDeployed}
             {p.unitsRefunded ? <span className="dim">（回收 {p.unitsRefunded}）</span> : null}
           </b>
-          <span title="出动次数，飞机按架次算">出兵</span>
+          <span title="出动次数，飞机按架次计">出兵</span>
         </div>
         <div>
           <b>{p.obj}</b>
@@ -607,13 +607,13 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
             <tr>
               <th>单位</th>
               <th>兵种</th>
-              <th title="出动次数，飞机按架次算；括号里是其中返航/回收的">出兵</th>
+              <th title="出动次数，飞机按架次计；括号内为其中返航/回收的次数">出兵</th>
               <th>阵亡</th>
               <th>死亡率</th>
-              <th title="已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）">阵亡存活·中位</th>
+              <th title="已阵亡单位从出兵到阵亡的时间中位数（不含存活到结束和返航回收的单位）">阵亡存活·中位</th>
               <th>伤害</th>
               <th>击杀</th>
-              <th title="把这个人的总击杀分按各单位击杀数分下去的估算">击杀分（估）</th>
+              <th title="按各单位击杀数分摊该玩家总击杀分的估算值">击杀分（估）</th>
               <th>花费</th>
             </tr>
           </thead>
@@ -679,7 +679,7 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
           {u.usage}%
         </span>
       ),
-      '出动价值（出兵 × 单价）占本队的比例'
+      '出动价值（出兵 × 单价）占本队总出动价值的比例'
     ],
     [
       'deployed',
@@ -690,15 +690,15 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
           {u.refunded ? <span className="dim">（回收 {u.refunded}）</span> : null}
         </>
       ),
-      '出动次数，飞机按架次算；括号里是其中返航/回收的（回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费）'
+      '出动次数，飞机按架次计；括号内为其中返航/回收的次数（回收：飞机返航、卡车撤回、开局出售，官方全额退款，不计花费）'
     ],
     [
       'cost',
       '单价',
       (u) => num(u.cost),
       r.priced === 'estimate'
-        ? '按官方出兵总数等比例摊出来的估算'
-        : '单位基础价 + 配装加价（读的游戏单位表，精确值）'
+        ? '按官方出兵总数等比例分摊的估算值'
+        : '单位基础价 + 配装加价（取自游戏单位表，精确值）'
     ],
     [
       'deathRate',
@@ -714,12 +714,12 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
       'lifeMedian',
       '阵亡存活·中位',
       (u) => sec(u.lifeMedian),
-      '已阵亡单位从出兵到阵亡的时间，取中位数（活到结束的和返航回收的不算）'
+      '已阵亡单位从出兵到阵亡的时间中位数（不含存活到结束和返航回收的单位）'
     ],
     ['dmg', '伤害', (u) => num(u.dmg)],
     ['kills', '击杀', (u) => u.kills],
-    ['destr', '击杀分（估）', (u) => num(u.destr), '把这个人的总击杀分按各单位击杀数分下去的估算'],
-    ['destrPerCost', '击杀分/花费', (u) => u.destrPerCost ?? '—', '越高越赚'],
+    ['destr', '击杀分（估）', (u) => num(u.destr), '按各单位击杀数分摊该玩家总击杀分的估算值'],
+    ['destrPerCost', '击杀分/花费', (u) => u.destrPerCost ?? '—', '每点花费对应的击杀分'],
     ['users', '使用者', (u) => <span className="dim rp-users">{u.users.join('、')}</span>]
   ]
 
@@ -738,14 +738,13 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
           </button>
         ))}
         <span className="dim rp-note">
-          出兵 = 出动次数，飞机按架次算，返航后再出算两次；使用率 = 出动价值（出兵 × 单价）占本队的比例；死亡率 =
-          阵亡 ÷ 出兵；回收 = 飞机返航、卡车开回、开局卖掉，官方全额退款，不算花费；击杀分/花费越高越赚；
-          单位的击杀分是把这个人的总击杀分按各单位击杀数分下去的估算
+          出兵：出动次数，飞机按架次计，返航后再出动计两次。使用率：出动价值（出兵 × 单价）占本队的比例。死亡率：
+          阵亡 ÷ 出兵。回收：飞机返航、卡车撤回、开局出售，官方全额退款，不计花费。单位击杀分：按各单位击杀数分摊该玩家总击杀分的估算值
           {r.priced === 'local'
-            ? '；单价读的是你本机的游戏单位表，含配装，精确到个位'
+            ? '。单价取自本机游戏单位表，含配装，精确值'
             : r.priced === 'bundled'
-              ? '；单价读的是软件自带的游戏单位表，含配装，精确到个位（游戏更新后可能略旧）'
-              : '；单价是按官方出兵总数等比例摊出来的估算'}
+              ? '。单价取自软件内置游戏单位表，含配装，精确值（游戏更新后可能过时）'
+              : '。单价按官方出兵总数等比例分摊，为估算值'}
         </span>
       </div>
       <div className="rp-scroll">
@@ -848,8 +847,8 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
 
   const TITLE: Record<typeof mode, string> = {
     field: '场上兵力（估算：累计出兵 − 累计损失）',
-    diff: '兵力差（A 队 − B 队，正数 = A 队占上风）',
-    slope: '每分钟净变化（正数 = 这一分钟在扩大兵力）'
+    diff: '兵力差（A 队 − B 队，正值为 A 队领先）',
+    slope: '每分钟净变化（正值为兵力增加）'
   }
 
   return (
@@ -873,11 +872,11 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
             <>
               <span>
                 <i style={{ background: 'var(--t0)' }} />
-                {teamName(0)}占上风
+                {teamName(0)}领先
               </span>
               <span>
                 <i style={{ background: 'var(--t1)' }} />
-                {teamName(1)}占上风
+                {teamName(1)}领先
               </span>
             </>
           ) : (
@@ -950,7 +949,7 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
                   <rect x={x1} y={pad.t} width={Math.max(1, x2 - x1)} height={H - pad.t - pad.b} fill={color} opacity="0.14" />
                   <line x1={x1} y1={pad.t} x2={x1} y2={H - pad.b} stroke={color} strokeDasharray="2 3" />
                   <line x1={x2} y1={pad.t} x2={x2} y2={H - pad.b} stroke={color} strokeDasharray="2 3" />
-                  <title>{'第 ' + (e.min + 1) + ' 分钟（整整一分钟）' + teamName(e.team) + ' ' + e.text}</title>
+                  <title>{'第 ' + (e.min + 1) + ' 分钟（整分钟）' + teamName(e.team) + ' ' + e.text}</title>
                 </g>
               )
             }

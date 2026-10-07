@@ -12,18 +12,18 @@ const PAGE_SIZE = 5
 
 /** 分辨率档位：0 = 原生（不缩放，编码器和采集同卡时帧全程留在显存），对齐 4.0.3 的写法 */
 const QUALITIES: [number, string][] = [
-  [0, '原生分辨率（纯 GPU，几乎不占 CPU）'],
+  [0, '原生分辨率（GPU 编码，CPU 占用低）'],
   [1440, '1440p'],
   [1080, '1080p'],
   [720, '720p']
 ]
 /** 自动清理：0 = 不删 */
 const KEEP_DAYS: [number, string][] = [
-  [0, '不自动删'],
-  [7, '只留 7 天'],
-  [14, '只留 14 天'],
-  [30, '只留 30 天'],
-  [90, '只留 90 天']
+  [0, '不自动清理'],
+  [7, '保留 7 天'],
+  [14, '保留 14 天'],
+  [30, '保留 30 天'],
+  [90, '保留 90 天']
 ]
 
 const size = (n: number): string => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.round(n / 1e6) + ' MB')
@@ -111,7 +111,7 @@ export default function Replays(): React.JSX.Element {
       <h2>
         <span className="ico">🚗</span>
         行车记录仪
-        {status?.active && <span className="lit-bad">● 正在录</span>}
+        {status?.active && <span className="lit-bad">● 录制中</span>}
         <span className="grow" />
         <Switch checked={on} onChange={(v) => void patch({ replayEnabled: v })} label="开启" />
         <button className={showSet ? 'rec-set-btn open' : 'rec-set-btn'} title="录像设置" onClick={() => setShowSet(!showSet)}>
@@ -134,7 +134,7 @@ export default function Replays(): React.JSX.Element {
 
       {showSet && (
         <div className="rec-set">
-          {!on && <div className="rec-hint dim">现在是关的。开了之后每局自动录，下面这些设置立刻生效。</div>}
+          {!on && <div className="rec-hint dim">录像未开启。开启后每局自动录制，以下设置立即生效。</div>}
 
           <div className="rec-field">
             <div className="rec-label">录制屏幕</div>
@@ -148,7 +148,7 @@ export default function Replays(): React.JSX.Element {
                   <option key={d.id} value={d.id}>
                     {d.label}
                     {d.primary ? '（主屏）' : ''}
-                    {d.capturable ? '' : '（显卡直采探测不到）'}
+                    {d.capturable ? '' : '（不支持显卡直接采集）'}
                   </option>
                 ))}
               </select>
@@ -218,7 +218,7 @@ export default function Replays(): React.JSX.Element {
               <option value="off">关闭</option>
             </select>
             <div className="rec-hint dim">
-              用的是系统默认的播放设备和默认麦克风（Windows 声音设置里的「默认设备」），换设备请在系统里改。
+              使用系统默认播放设备和麦克风（Windows 声音设置中的「默认设备」）。如需更换请在系统中设置。
             </div>
           </div>
 
@@ -235,13 +235,13 @@ export default function Replays(): React.JSX.Element {
               value={exposure}
               onChange={(e) => void patch({ replayExposure: Number(e.target.value) })}
             />
-            <div className="rec-hint dim">录像偏暗往右拉，偏亮往左拉；每 +1 EV 亮度翻倍。HDR 屏一般要往右一点。</div>
+            <div className="rec-hint dim">录像偏暗向右调，偏亮向左调；每 +1 EV 亮度翻倍。HDR 显示器通常需要调高。</div>
           </div>
 
           <div className="rec-field">
             <div className="rec-label">保存目录</div>
             <div className="row">
-              <span className="rec-dir dim">{String(config.replaySaveDir || '') || '默认（数据目录下的 replays）'}</span>
+              <span className="rec-dir dim">{String(config.replaySaveDir || '') || '默认（数据目录\\replays）'}</span>
               <span className="grow" />
               <button
                 onClick={async () => {
@@ -280,7 +280,7 @@ export default function Replays(): React.JSX.Element {
               >
                 🔎 检测编码器
               </button>
-              {encoders && <span className="dim">{encoders.join('、') || '只有软件编码'}</span>}
+              {encoders && <span className="dim">{encoders.join('、') || '仅软件编码'}</span>}
             </div>
           </div>
         </div>
@@ -294,7 +294,7 @@ export default function Replays(): React.JSX.Element {
         ) : (
           <div className="bplayer-empty">
             <div className="bplayer-empty-ico">▶</div>
-            <div>{list.length ? '点下面任意一条录像，就在这里播放' : on ? '进一局游戏就会自动开录，录完出现在这里' : '行车记录仪没开'}</div>
+            <div>{list.length ? '点击下方录像在此播放' : on ? '进入对局后自动录制，录像将显示在此' : '行车记录仪未开启'}</div>
           </div>
         )}
       </div>
@@ -314,7 +314,7 @@ export default function Replays(): React.JSX.Element {
               <tr
                 key={r.id}
                 className={'replay-row' + (playing?.id === r.id ? ' active' : '')}
-                title="点一下在这里播放"
+                title="在此播放"
                 onClick={() => setPlaying((p) => (p?.id === r.id ? null : r))}
               >
                 <td>{new Date(r.createdAt).toLocaleString('zh-CN')}</td>
@@ -337,7 +337,7 @@ export default function Replays(): React.JSX.Element {
             {!list.length && (
               <tr>
                 <td colSpan={4} className="dim">
-                  {on ? '还没有录像。进一局游戏就会自动开录。' : '没开。开了之后每局自动录。'}
+                  {on ? '暂无录像。进入对局后自动录制。' : '行车记录仪未开启。开启后每局自动录制。'}
                 </td>
               </tr>
             )}
@@ -359,7 +359,7 @@ export default function Replays(): React.JSX.Element {
           <button
             onClick={async () => {
               const n = await window.BA.cleanReplays(30)
-              setLogs((l) => [...l, '清理了 ' + n + ' 个 30 天前的录像'])
+              setLogs((l) => [...l, '已清理 ' + n + ' 个 30 天前的录像'])
               reload()
             }}
           >
@@ -367,7 +367,7 @@ export default function Replays(): React.JSX.Element {
           </button>
         )}
       </div>
-      {showLog && <pre className="log">{logs.join('\n') || '（还没有日志）'}</pre>}
+      {showLog && <pre className="log">{logs.join('\n') || '（暂无日志）'}</pre>}
     </div>
   )
 }

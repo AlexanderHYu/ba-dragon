@@ -109,7 +109,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
       </h2>
 
       {!list?.length ? (
-        <div className="empty">还没有对局。打完一局就会出现在这里。</div>
+        <div className="empty">暂无对局记录。对局结束后会自动添加。</div>
       ) : (
         <div className="archive-wrap">
           <table className="t archive-t">
@@ -122,7 +122,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                 <th>ELO</th>
                 <th>账号</th>
                 <th>时间</th>
-                <th className="num" title="这一局打了多久。和 BATrace 的 TotalPlayTimeInSec 逐条核对过，完全一致">
+                <th className="num" title="对局时长，与 BATrace 的 TotalPlayTimeInSec 一致">
                   时长
                 </th>
                 <th />
@@ -133,7 +133,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                 const won = m.mine?.won
                 const rid = replays[m.fid]
                 return (
-                  <tr key={m.fid} onClick={() => onOpen(m.fid)} title="点开看这局复盘">
+                  <tr key={m.fid} onClick={() => onOpen(m.fid)} title="查看本局复盘">
                     <td style={{ color: won ? 'var(--good)' : won === false ? 'var(--bad)' : undefined }}>
                       {won ? '胜' : won === false ? '负' : <span className="dim">—</span>}
                     </td>
@@ -158,7 +158,7 @@ export default function Archive({ onOpen }: { onOpen: (fid: string) => void }): 
                       {rid && (
                         <button
                           className="archive-play-btn"
-                          title="播放这局录像"
+                          title="播放本局录像"
                           onClick={(e) => {
                             e.stopPropagation()
                             setPlayReplay(rid)

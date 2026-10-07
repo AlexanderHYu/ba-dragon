@@ -65,7 +65,7 @@ export function lz4Decompress(src: Buffer, outSize: number): Buffer {
     let p = d - offset
     for (let i = 0; i < matchLen; i++) dst[d++] = dst[p++]
   }
-  if (d !== outSize) throw new Error('LZ4 解出来 ' + d + ' 字节，块表说是 ' + outSize)
+  if (d !== outSize) throw new Error('LZ4 解压得到 ' + d + ' 字节，块表记录为 ' + outSize)
   return dst
 }
 
@@ -73,7 +73,7 @@ function decompressBlock(data: Buffer, rawSize: number, flags: number): Buffer {
   const kind = flags & 0x3f
   if (kind === 0) return data
   if (kind === 2 || kind === 3) return lz4Decompress(data, rawSize)
-  throw new Error('这个归档用了不支持的压缩方式（' + kind + '）')
+  throw new Error('归档使用了不支持的压缩方式（' + kind + '）')
 }
 
 /** 一个 UnityFS 归档：打开后可以按逻辑地址随机读某个节点 */
@@ -110,7 +110,7 @@ export class UnityFsArchive {
     let got = 0
     while (got < len) {
       const n = readSync(this.fd, b, got, len - got, pos + got)
-      if (n <= 0) throw new Error('归档读到头了')
+      if (n <= 0) throw new Error('归档数据意外结束')
       got += n
     }
     return b

@@ -121,7 +121,7 @@ export class ReplayService {
     if (!this.config.get('replayEnabled')) return
     if (this.recorder.status().active) return
     this.lastError = null // 清掉上一次的报错
-    this.log('对局开始，准备开录 fid=' + (fid || '?') + ' map=' + (map || '?'))
+    this.log('对局开始，准备录制 fid=' + (fid || '?') + ' map=' + (map || '?'))
     this.emit.status(this.recorder.status())
     void this.recorder
       .start({
@@ -136,9 +136,9 @@ export class ReplayService {
         saveDir: this.dir()
       })
       .then((r) => {
-        if (r && r.ok === false) this.log('没开成: ' + (r.message || '未知原因'))
+        if (r && r.ok === false) this.log('未能开始录制: ' + (r.message || '未知原因'))
       })
-      .catch((e: unknown) => this.log('开录失败: ' + String((e as Error)?.message || e)))
+      .catch((e: unknown) => this.log('开始录制失败: ' + String((e as Error)?.message || e)))
   }
 
   /** 对局结束：停止并合成 */
@@ -267,7 +267,7 @@ export class ReplayService {
       if (name === r.id) continue
       try {
         renameSync(r.localPath, join(dir, name))
-        this.log('补名字: ' + r.id + ' → ' + name)
+        this.log('补全名称: ' + r.id + ' → ' + name)
         n++
       } catch {
         /* 文件被占用/已删掉就跳过，下次再补 */

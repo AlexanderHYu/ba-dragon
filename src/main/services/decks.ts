@@ -58,7 +58,7 @@ export class DeckService {
     try {
       return decodeDeckFile(readFileSync(p), key)
     } catch (e) {
-      return { error: '解不开：' + String((e as Error)?.message || e) }
+      return { error: '卡组文件无法解密：' + String((e as Error)?.message || e) }
     }
   }
 
@@ -112,7 +112,7 @@ export class DeckService {
       const want = new Set(only.map((x) => safeName(x)).filter(Boolean) as string[])
       decks = decks.filter((d) => want.has(d.name))
     }
-    if (!decks.length) return { error: only?.length ? '没选中卡组' : '游戏卡组目录里没有卡组' }
+    if (!decks.length) return { error: only?.length ? '未选择卡组' : '游戏卡组目录里没有卡组' }
     const files = decks.map((d) => ({ name: d.name, data: readFileSync(join(this.decksDir, d.name)) }))
     const fileName = safeName(name || '卡组备份-' + stamp() + '.zip') || '卡组备份-' + stamp() + '.zip'
     mkdirSync(this.backupDir, { recursive: true })
@@ -124,7 +124,7 @@ export class DeckService {
   /** 删卡组（前线那栏的「删除所选」）。删之前先整体备份一份，免得手滑 */
   deleteDecks(names: string[]): { removed: number; error?: string } {
     const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
-    if (!want.length) return { removed: 0, error: '没选中卡组' }
+    if (!want.length) return { removed: 0, error: '未选择卡组' }
     this.backup('删除前-' + stamp() + '.zip')
     let removed = 0
     for (const n of want) {
@@ -141,7 +141,7 @@ export class DeckService {
   /** 删备份包（后勤那栏的「删除所选」） */
   deleteBackups(names: string[]): { removed: number; error?: string } {
     const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
-    if (!want.length) return { removed: 0, error: '没选中备份' }
+    if (!want.length) return { removed: 0, error: '未选择备份' }
     let removed = 0
     for (const n of want) {
       try {
@@ -160,12 +160,12 @@ export class DeckService {
     if (!file) return { error: '文件名不合法' }
     const p = join(this.backupDir, file)
     if (!existsSync(p)) return { error: '找不到这个备份' }
-    if (!this.found()) return { error: '没找到游戏的卡组目录' }
+    if (!this.found()) return { error: '找不到游戏的卡组目录' }
     let entries
     try {
       entries = zipExtract(readFileSync(p)).filter((e) => e.name.toLowerCase().endsWith('.dek'))
     } catch (e) {
-      return { error: '备份包读不出来：' + String((e as Error).message) }
+      return { error: '无法读取备份包：' + String((e as Error).message) }
     }
     if (!entries.length) return { error: '这个包里没有卡组' }
     this.backup('还原前-' + stamp() + '.zip')

@@ -146,7 +146,7 @@ export default function Calculator(): React.JSX.Element {
         <h2>
           <span className="ico">🧮</span>
           配装计算器
-          <span className="dim">按游戏本体的算法算{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}</span>
+          <span className="dim">基于游戏本体算法{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}</span>
         </h2>
 
         <div className="calc-pickers">
@@ -162,7 +162,7 @@ export default function Calculator(): React.JSX.Element {
                   value={stress}
                   onChange={(e) => setStress(Number(e.target.value))}
                 />
-                <span className="dim">自己被压制会降导弹命中</span>
+                <span className="dim">受压制时导弹命中率下降</span>
               </label>
             )}
             {fuseAmmo && (
@@ -170,8 +170,8 @@ export default function Calculator(): React.JSX.Element {
                 近炸{' '}
                 <b>
                   {fuseP == null
-                    ? '按平均 ×' + fuseFactor(fuseAmmo)
-                    : '离外壳 ' + toM(fuseP * fuseAmmo.radioFuse) + ' m 起爆 ×' + fuseFactor(fuseAmmo, fuseP)}
+                    ? '平均 ×' + fuseFactor(fuseAmmo)
+                    : '距外壳 ' + toM(fuseP * fuseAmmo.radioFuse) + ' m 起爆 ×' + fuseFactor(fuseAmmo, fuseP)}
                 </b>
                 <input
                   type="range"
@@ -180,13 +180,13 @@ export default function Calculator(): React.JSX.Element {
                   step={0.02}
                   value={fuseP ?? RADIOFUSE.pMin + (1 - RADIOFUSE.pMin) / 2}
                   onChange={(e) => setFuseP(Number(e.target.value))}
-                  title="往左：贴得越近、打得越疼；最左是游戏里能掷到的最近距离（引信半径的 60%），最右是引信半径边缘"
+                  title="起爆距离（距目标外壳）：越靠左越近，伤害越高；最左为游戏中可能出现的最近距离（引信半径的 60%），最右为引信半径边缘"
                 />
                 {fuseP == null ? (
-                  <span className="dim">游戏里起爆距离是随机的；拖动可以固定</span>
+                  <span className="dim">起爆距离随机，拖动可固定</span>
                 ) : (
                   <button className="calc-mini" onClick={() => setFuseP(null)}>
-                    回到平均
+                    恢复平均
                   </button>
                 )}
               </label>
@@ -195,7 +195,7 @@ export default function Calculator(): React.JSX.Element {
           <UnitPicker title="目标" data={data} value={target} onChange={setTarget} profile={T}>
             {anyGuided && (
               <label className="calc-range">
-                放了 <b>{flares}</b> 发干扰弹
+                干扰弹 <b>{flares}</b> 发
                 <input
                   type="range"
                   min={0}
@@ -209,8 +209,8 @@ export default function Calculator(): React.JSX.Element {
             {T?.klass === 'inf' && T.squad.length > 0 && (
               <label className="calc-check">
                 <input type="checkbox" checked={inBuilding} onChange={(e) => setInBuilding(e.target.checked)} />
-                在楼里
-                <span className="dim">按这一个班 {T.squad.length} 人算</span>
+                驻守建筑
+                <span className="dim">按本班 {T.squad.length} 人计算</span>
               </label>
             )}
           </UnitPicker>
@@ -227,10 +227,10 @@ export default function Calculator(): React.JSX.Element {
               value={Math.min(dist, maxRange)}
               onChange={(e) => setDist(Number(e.target.value))}
             />
-            <span className="dim">最远 {toM(maxRange)} m</span>
+            <span className="dim">最大 {toM(maxRange)} m</span>
           </label>
           <div className="calc-faces">
-            打哪面
+            受击面
             {FACES.map((f) => (
               <button key={f} className={facing === f ? 'primary' : ''} onClick={() => setFacing(f)}>
                 {FACE_NAME[f]}
@@ -245,7 +245,7 @@ export default function Calculator(): React.JSX.Element {
               <button
                 key={r.key}
                 className={dist === r.range ? 'primary' : ''}
-                title={'跳到 ' + r.name + ' 的最远射程'}
+                title={'设为 ' + r.name + ' 的最大射程'}
                 onClick={() => setDist(r.range)}
               >
                 {r.name} {toM(r.range)}
@@ -260,11 +260,11 @@ export default function Calculator(): React.JSX.Element {
         <>
           <div className="card">
             <h2>
-              {A.name} 打 {T.name}
+              {A.name} 对 {T.name}
               <span className="dim">
                 {CLASS_NAME[T.klass]} · HP {T.hp} ·{' '}
                 {!T.directional
-                  ? '装甲 ' + T.armorValue + '（不分方向）'
+                  ? '装甲 ' + T.armorValue + '（全向）'
                   : FACE_NAME[facing] +
                     ' 动能 ' +
                     T.kin[FACES.indexOf(facing)] +
@@ -273,15 +273,15 @@ export default function Calculator(): React.JSX.Element {
                 {T.klass === 'inf' && T.squad.length > 0 && (
                   <>
                     {' · '}
-                    <b title="步兵抗打击：clamp01(0.36 + 0.02 × 存活人数)，压成红的时候换成 0.1 + 0.1 × 人数">
-                      受伤害 ×{infantryFactor(T.squad.length, 0).toFixed(2)}
+                    <b title="步兵伤害系数：clamp01(0.36 + 0.02 × 存活人数)；崩溃（红）状态下为 0.1 + 0.1 × 人数">
+                      伤害系数 ×{infantryFactor(T.squad.length, 0).toFixed(2)}
                     </b>
-                    <span className="dim">（{T.squad.length} 人满编）</span>
+                    <span className="dim">（满编 {T.squad.length} 人）</span>
                     {occupants > 0 && (
                       <>
                         {' · '}
-                        <b title="楼里：clamp01(0.18 + 0.02 × 楼里总人数)，只对单发伤害小于 5 的弹生效">
-                          楼里再 ×{buildingFactor(occupants).toFixed(2)}
+                        <b title="建筑内伤害系数：clamp01(0.18 + 0.02 × 建筑内总人数)，仅对单发伤害小于 5 的弹药生效">
+                          建筑内 ×{buildingFactor(occupants).toFixed(2)}
                         </b>
                       </>
                     )}
@@ -294,20 +294,20 @@ export default function Calculator(): React.JSX.Element {
               <table className="t calc-table">
                 <thead>
                   <tr>
-                    <th className="calc-onoff" title="取消勾选就不算进下面的「同时开火总输出」和曲线">
-                      开
+                    <th className="calc-onoff" title="取消勾选后不计入「同时开火总输出」和曲线">
+                      计入
                     </th>
                     <th>武器</th>
                     <th>弹种</th>
-                    <th className="num" title="非制导按散布和目标投影面积算；制导 = 基础命中 × ECM × 干扰弹 × 状态">
+                    <th className="num" title="非制导：按散布和目标投影面积计算；制导：基础命中 × ECM × 干扰弹 × 状态">
                       命中率
                     </th>
-                    <th className="num" title="这个距离上的穿深 vs 目标这一面的装甲">
+                    <th className="num" title="当前距离的穿深 / 目标受击面装甲">
                       穿深/装甲
                     </th>
                     <th
                       className="num"
-                      title="破甲弹：伤害 × 穿深² ÷ (穿深² + 装甲²)；动能弹：穿得动满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，有 10% 下限"
+                      title="破甲弹：伤害 × 穿深² ÷ (穿深² + 装甲²)；动能弹：击穿时满伤，未击穿时 × (1 + (穿深−装甲)/穿深)，下限 10%"
                     >
                       单发伤害
                     </th>
@@ -318,7 +318,7 @@ export default function Calculator(): React.JSX.Element {
                     <th className="num" title="含瞄准和装填，不含弹丸飞行时间">
                       击杀时间
                     </th>
-                    <th className="num" title="期望伤害 ÷ 每发耗时，班组按人数乘">
+                    <th className="num" title="期望伤害 ÷ 每发耗时，班组武器乘以人数">
                       秒伤
                     </th>
                     <th className="num">射程</th>
@@ -348,7 +348,7 @@ export default function Calculator(): React.JSX.Element {
                   {!list.length && (
                     <tr>
                       <td colSpan={11} className="dim">
-                        这个单位没有武器
+                        该单位无武器
                       </td>
                     </tr>
                   )}
@@ -357,9 +357,9 @@ export default function Calculator(): React.JSX.Element {
             </div>
             {total.byChannel.length > 0 && (
               <div className="calc-total">
-                <b>同时开火的总输出 {total.dps} / 秒</b>
+                <b>同时开火总输出 {total.dps}/秒</b>
                 <span className="dim">
-                  ——通道 0 的武器各打各的；同一个非零通道上的武器互相挡着，只算最能打的那件：
+                   · 通道 0 的武器各自独立开火；同一非零通道上的武器互斥，只计秒伤最高的一件：
                   {total.byChannel
                     .map((c) => (c.channel ? ' 通道' + c.channel + ' ' : ' ') + c.weapon + '(' + c.dps + ')')
                     .join('，')}
@@ -367,11 +367,11 @@ export default function Calculator(): React.JSX.Element {
               </div>
             )}
             <div className="dim calc-note">
-              每件武器用哪种弹是自动挑的（能打这类目标、够得着、期望伤害最高的那个）；点一行看这把武器的全部弹种。
-              命中率、选弹、伤害、溅射、目标类型判定都是照游戏本体的机器码实现的，系数也是从游戏文件里读的。
-              <b>穿甲不是二值的</b>：破甲弹按 伤害×穿深²÷(穿深²+装甲²) 走曲线，穿深等于装甲时正好剩一半；
-              动能弹穿得动就是满伤，穿不动按 (1 + (穿深−装甲)/穿深) 打折，装甲到穿深两倍才归零（中间有 10% 的下限）。
-              唯一还在估的是目标外壳半径（游戏用碰撞体，数据里只有长宽高）。
+              每件武器自动选用可攻击该类目标、在射程内且期望伤害最高的弹种；点击一行查看该武器的全部弹种。
+              命中率、选弹、伤害、溅射、目标类型判定均按游戏本体机器码实现，系数读自游戏文件。
+              穿甲不是二值判定：破甲弹伤害 = 伤害×穿深²÷(穿深²+装甲²)，穿深等于装甲时为一半；
+              动能弹击穿时满伤，未击穿时 × (1 + (穿深−装甲)/穿深)，装甲达到穿深两倍时归零，此前最低 10%。
+              目标外壳半径为估算值（游戏使用碰撞体，数据中只有长宽高）。
             </div>
           </div>
 
@@ -388,7 +388,7 @@ export default function Calculator(): React.JSX.Element {
 
             <div className="card">
               <h2>
-                溅射 · 随距离
+                溅射伤害 · 距离
                 {aoeList.length > 1 && (
                   <select value={aoePick} onChange={(e) => setAoePick(Number(e.target.value))}>
                     {aoeList.map((a, i) => (
@@ -411,23 +411,23 @@ export default function Calculator(): React.JSX.Element {
                   <div className="calc-aoe-info">
                     <span>
                       爆心 <b>{aoe.dmg}</b> 伤害 · 半径 <b>{toM(aoe.aoe)} m</b>
-                      {aoe.noFalloff && <>（这种弹不衰减，圈里一律满伤）</>}
+                      {aoe.noFalloff && <>（无衰减，半径内均为满伤）</>}
                     </span>
                     <span>
-                      落点离 {T.name} 中心{' '}
+                      一发击杀范围：落点距 {T.name} 中心{' '}
                       <b>
                         {lethalRadius(aoe, T, aoeCtx) == null ? '—' : toM(lethalRadius(aoe, T, aoeCtx) as number)} m
                       </b>{' '}
-                      以内能一发带走 （{T.hp} HP）
+                      以内（{T.hp} HP）
                     </span>
                     <span className="dim">
-                      距离是从目标外壳算的：{T.name} 外壳半径 {toM(T.bounds)} m，所以大目标更容易被溅到；
-                      出了溅射半径就没伤害了。
+                      距离从目标外壳起算（{T.name} 外壳半径 {toM(T.bounds)} m），目标越大越容易受到溅射；
+                      超出溅射半径无伤害。
                     </span>
                   </div>
                 </>
               ) : (
-                <div className="empty">这一组里没有溅射弹药</div>
+                <div className="empty">当前武器无溅射弹药</div>
               )}
             </div>
           </div>
@@ -470,35 +470,35 @@ function StressPanel({
   }, [target])
 
   if (!sim.firing.length) {
-    return <div className="empty">这个距离上没有武器能打到它，自然也压不住</div>
+    return <div className="empty">当前距离没有武器能攻击该目标</div>
   }
 
   return (
     <>
       <div className="calc-stress-top">
         <span className={sim.shockedAt == null ? 'dim' : 'lit-warn'}>
-          变黄 <b>{sim.shockedAt == null ? '压不黄' : sim.shockedAt + 's'}</b>
+          变黄 <b>{sim.shockedAt == null ? '未达到' : sim.shockedAt + 's'}</b>
         </span>
         <span className={sim.panickedAt == null ? 'dim' : 'lit-bad'}>
-          变红 <b>{sim.panickedAt == null ? '压不红' : sim.panickedAt + 's'}</b>
+          变红 <b>{sim.panickedAt == null ? '未达到' : sim.panickedAt + 's'}</b>
         </span>
         <span>
-          打死 <b>{sim.deadAt == null ? '打不死' : sim.deadAt + 's'}</b>
+          击杀 <b>{sim.deadAt == null ? '无法击杀' : sim.deadAt + 's'}</b>
         </span>
         {hasFuse && best && worst && (
-          <span className="dim" title="近炸引信的起爆距离是随机的：贴着最近处炸最疼，擦着引信边缘炸最不疼">
-            近炸浮动 <b className="lit-ok">最好 {best.deadAt == null ? '打不死' : best.deadAt + 's'}</b> ~{' '}
-            <b className="lit-bad">最坏 {worst.deadAt == null ? '打不死' : worst.deadAt + 's'}</b>
+          <span className="dim" title="近炸引信起爆距离随机：在最近处起爆伤害最高，在引信半径边缘起爆伤害最低">
+            近炸范围 <b className="lit-ok">最好 {best.deadAt == null ? '无法击杀' : best.deadAt + 's'}</b> ~{' '}
+            <b className="lit-bad">最坏 {worst.deadAt == null ? '无法击杀' : worst.deadAt + 's'}</b>
           </span>
         )}
         {sim.intercepted > 0 && (
-          <span className="dim" title="APS 每 6 秒能拦一发，拦完备弹就不管用了">
-            APS 拦下 <b>{sim.intercepted}</b> 发（还剩 {sim.apsLeft}）
+          <span className="dim" title="APS 每 6 秒拦截一发，拦截弹耗尽后失效">
+            APS 拦截 <b>{sim.intercepted}</b> 发（剩余 {sim.apsLeft}）
           </span>
         )}
         <span className="grow" />
         <span className="dim">
-          压制 {sim.stressPerSec}/秒进账，上限 {target.maxStress}（黄 {sim.shocked} 红 {sim.panicked}）
+          压制速率 {sim.stressPerSec}/秒 · 上限 {target.maxStress} · 黄线 {sim.shocked} / 红线 {sim.panicked}
         </span>
       </div>
 
@@ -522,7 +522,7 @@ function StressPanel({
             <span className="dim">
               {' '}
               / {f.ammo.name} · 备弹 {f.stock}
-              {f.dry != null && <b className="lit-bad"> · {f.dry}s 打光</b>}
+              {f.dry != null && <b className="lit-bad"> · {f.dry}s 弹药耗尽</b>}
             </span>
           </span>
         ))}
@@ -537,13 +537,13 @@ function StressPanel({
                 <b>{e.t}s</b> {e.text}
               </li>
             ))}
-            {!sim.events.length && <li className="dim">一直打不出反应</li>}
+            {!sim.events.length && <li className="dim">无状态变化</li>}
           </ul>
         </div>
 
         <div>
           <div className="calc-sub">
-            {target.squad.length ? '掉人顺序（DeathPriority 大的先走，同级随机）' : '压制之后它会变成什么样'}
+            {target.squad.length ? '阵亡顺序（DeathPriority 高者先阵亡，同级随机）' : '各压制状态下的属性修正'}
           </div>
           {target.squad.length ? (
             <ul className="calc-tiers">
@@ -586,17 +586,17 @@ function StressPanel({
       </div>
 
       <div className="dim calc-note">
-        压制每 1 秒结算一次：这一秒挨了打就把伤害折成压制值加上去（弹药自带的 StressDamage + 上限 × 掉血比例），
-        没挨打就往回退——停火第一秒退 {sim.recoveryFirst} 点，之后每多熬一秒再多退 1 点，所以断断续续打是压不住的。
-        变红之后要等压制值掉回红线以下才会降级。
+        压制每 1 秒结算一次：受到攻击时，伤害折算为压制值累加（弹药自带的 StressDamage + 上限 × 掉血比例）；
+        未受攻击时压制值下降，停火第 1 秒降 {sim.recoveryFirst} 点，之后每秒多降 1 点，因此间断射击难以维持压制。
+        变红后，压制值降到红线以下才会降级。
         {target.squad.length > 0 && (
           <>
             {' '}
-            步兵按血量掉人：{target.squad.length} 人分 {target.hp} 血，每人 {sim.hpPerSoldier}，
-            血量每跨过一格就走一个，走谁看 SquadMembers 表里的 DeathPriority。
+            步兵按血量阵亡：{target.squad.length} 人共 {target.hp} 血，每人 {sim.hpPerSoldier}，
+            血量每减少一格阵亡 1 人，阵亡顺序按 SquadMembers 表中的 DeathPriority。
           </>
         )}{' '}
-        没算进去的：弹丸飞行时间、导弹中途丢失、溅射给旁边单位的压制。
+        未计入：弹丸飞行时间、导弹中途丢失、溅射对周边单位的压制。
       </div>
     </>
   )
@@ -627,7 +627,7 @@ function Row({
       <tr
         className={'calc-row' + (open ? ' open' : '') + (on ? '' : ' calc-row-off')}
         onClick={onToggle}
-        title="点一下看这把武器的全部弹种"
+        title="点击查看该武器的全部弹种"
       >
         <td className="calc-onoff" onClick={(ev) => ev.stopPropagation()}>
           <input
@@ -635,32 +635,34 @@ function Row({
             checked={on}
             disabled={!r}
             onChange={onSwitch}
-            title="算不算进「同时开火总输出」和曲线"
+            title="是否计入「同时开火总输出」和曲线"
           />
         </td>
         <td>
           {e.weapon.name}
           {e.weapon.count > 1 && <span className="dim"> ×{e.weapon.count}</span>}
-          {/* 双联 TOW 那种「先急后慢」的节奏：弹匣打完要长装填，前几发来得快 */}
+          {/* 双联 TOW 那种「先急后慢」的节奏：弹匣打完要长装填，前几发间隔短 */}
           {e.weapon.mag > 1 && e.weapon.reload > 0 && (
             <span
               className="dim calc-mag"
               title={
                 '弹匣 ' +
                 e.weapon.mag +
-                ' 发，打空要装 ' +
+                ' 发，打空后装填 ' +
                 e.weapon.reload +
-                ' 秒。前几发来得快，第 ' +
+                ' 秒。前 ' +
+                e.weapon.mag +
+                ' 发连续发射，第 ' +
                 (e.weapon.mag + 1) +
-                ' 发要等装填——「击杀时间」是按这个节奏走的，不是拿平均值乘的'
+                ' 发需等待装填。「击杀时间」按此节奏逐发计算，不按平均射速估算'
               }
             >
               {' '}
-              {e.weapon.mag} 发 / 装 {e.weapon.reload}s
+              {e.weapon.mag} 发 / 装填 {e.weapon.reload}s
             </span>
           )}
           {e.weapon.pylons > 1 && (
-            <span className="dim" title="同型挂架合并齐射，发射间隔按总弹量摊">
+            <span className="dim" title="同型挂架合并齐射，发射间隔按总弹量均摊">
               {' '}
               ×{e.weapon.pylons} 挂架合并
             </span>
@@ -683,17 +685,17 @@ function Row({
                   <i
                     className="tag warn"
                     title={
-                      '近炸引信：擦身距离 = random(' +
+                      '近炸引信：起爆距离 = random(' +
                       RADIOFUSE.pMin +
                       '~' +
                       RADIOFUSE.pMax +
                       ') × ' +
                       toM(a.radioFuse) +
-                      ' m，在引信半径内起爆，吃不到直击伤害。' +
-                      '按溅射衰减积分出来平均打 ' +
+                      ' m，在引信半径内起爆，无直击伤害。' +
+                      '按溅射衰减积分的平均伤害为 ' +
                       Math.round(fuseFactor(a) * 100) +
-                      '%，游戏自己的预估常量是 33%' +
-                      (fuse != null ? '。现在按滑条固定在离外壳 ' + toM(fuse * a.radioFuse) + ' m 起爆' : '')
+                      '%（游戏内预估常量为 33%）' +
+                      (fuse != null ? '。当前按滑条固定在距外壳 ' + toM(fuse * a.radioFuse) + ' m 起爆' : '')
                     }
                   >
                     近炸 {toM(a.radioFuse)}m · ×{fuseFactor(a, fuse ?? 'avg')}
@@ -703,7 +705,7 @@ function Row({
               </span>
             </>
           ) : (
-            <span className="dim">打不了（够不着，或者这类目标不用它）</span>
+            <span className="dim">无法攻击（超出射程，或不用于此类目标）</span>
           )}
         </td>
         <td className="num">{r ? pct(r.hit) : '—'}</td>
@@ -712,15 +714,15 @@ function Row({
           {r ? (
             <span
               className={r.dmg <= 0 ? 'lit-bad' : r.through ? 'lit-ok' : ''}
-              title={r.through ? '穿得动，满伤' : '穿不动，按公式打折'}
+              title={r.through ? '击穿，满伤' : '未击穿，按公式衰减'}
             >
-              {r.dmg <= 0 ? '打不动' : r.dmg}
+              {r.dmg <= 0 ? '无伤害' : r.dmg}
             </span>
           ) : (
             '—'
           )}
           {r && r.mul < 1 && (
-            <span className="dim" title="基础伤害先乘了减伤（步兵抗打击 / 躲楼里），再过装甲公式">
+            <span className="dim" title="基础伤害先乘以减伤系数（步兵 / 建筑内），再代入装甲公式">
               {' '}
               ×{r.mul}
             </span>
@@ -736,12 +738,12 @@ function Row({
         <tr className="calc-alt-row">
           <td colSpan={11}>
             <div className="calc-alt">
-              <div className="calc-alt-head">{e.weapon.name} 带的全部弹种</div>
+              <div className="calc-alt-head">{e.weapon.name} 全部弹种</div>
               <table className="t">
                 <thead>
                   <tr>
                     <th>弹药</th>
-                    <th className="num">带弹</th>
+                    <th className="num">备弹</th>
                     <th className="num">命中</th>
                     <th className="num">穿深/装甲</th>
                     <th className="num">直击</th>
@@ -759,8 +761,8 @@ function Row({
                     >
                       <td>
                         {ammo.name}
-                        {!result.usable && <span className="dim"> · 不用于这类目标</span>}
-                        {!result.inRange && <span className="lit-bad"> · 够不着</span>}
+                        {!result.usable && <span className="dim"> · 不用于此类目标</span>}
+                        {!result.inRange && <span className="lit-bad"> · 超出射程</span>}
                       </td>
                       <td className="num dim">{ammo.qty || '—'}</td>
                       <td className="num">{pct(result.hit)}</td>
@@ -812,7 +814,7 @@ function Missiles({
             ECM <b>{h.ecm === 1 ? '无' : h.ecm}</b>
           </span>
           <span>×</span>
-          <span title={ignoresCountermeasures(sample) ? '反辐射 / 激光导引头会跳过整段干扰计算' : undefined}>
+          <span title={ignoresCountermeasures(sample) ? '反辐射 / 激光导引头不参与干扰弹计算' : undefined}>
             干扰弹 <b>{ignoresCountermeasures(sample) ? '免疫' : h.cm === 1 ? '无' : Math.round(h.cm * 1000) / 1000}</b>
           </span>
           <span>×</span>
@@ -825,7 +827,7 @@ function Missiles({
           </span>
         </div>
       ) : (
-        <div className="dim">这一组里没有制导弹药，命中率只看散布和目标大小。</div>
+        <div className="dim">无制导弹药，命中率仅由散布和目标大小决定。</div>
       )}
 
       <div className="kv">
@@ -843,14 +845,14 @@ function Missiles({
         </div>
         <div>
           <b>{aps?.saturate ?? '—'}</b>
-          <span>齐射几发能穿过 APS</span>
+          <span>突破 APS 所需齐射数</span>
         </div>
       </div>
 
       <div className="dim calc-note">
-        干扰弹按发数指数衰减：放 n 发就是 <code>((1 − 弹药抗干扰) × 干扰弹乘数)ⁿ</code>，所以连放两发比一发狠得多。 APS
-        只拦得住标了「可被拦」的弹药（导弹、反坦克火箭之类），动能弹和炸弹拦不住； 拦截次数用完、或者还在 6
-        秒冷却里，后面的就直接进来了。
+        干扰弹效果按发数指数叠加：n 发为 <code>((1 − 弹药抗干扰) × 干扰弹乘数)ⁿ</code>。APS
+        只拦截标有「可被拦」的弹药（导弹、反坦克火箭等），无法拦截动能弹和炸弹；拦截次数耗尽或处于 6
+        秒冷却期间，后续弹药不会被拦截。
       </div>
     </div>
   )

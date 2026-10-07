@@ -24,7 +24,7 @@ export default function Settings(): React.JSX.Element {
   if (!config) {
     return (
       <div className="card">
-        <div className="empty">读设置中…</div>
+        <div className="empty">正在读取设置…</div>
       </div>
     )
   }
@@ -39,7 +39,7 @@ export default function Settings(): React.JSX.Element {
       setMsg(r.error)
       return
     }
-    setMsg('找到了：' + r.logDir)
+    setMsg('已找到日志目录：' + r.logDir)
     setConfig(await window.BA.getConfig())
     setStatus(await window.BA.getStatus())
   }
@@ -70,9 +70,9 @@ export default function Settings(): React.JSX.Element {
             </button>
           </div>
           <div className="dim">
-            选断箭的安装目录就行（…\steamapps\common\broken_arrow），日志目录自己推。
+            选择断箭安装目录（…\steamapps\common\broken_arrow），日志目录自动识别。
             {status?.logDir ? '　当前日志目录：' + status.logDir : ''}
-            {status?.watching ? '　✅ 正在监听' : status?.logFound ? '　等游戏写日志' : ''}
+            {status?.watching ? '　✅ 正在监听' : status?.logFound ? '　等待游戏日志' : ''}
           </div>
         </div>
       </div>
@@ -81,16 +81,14 @@ export default function Settings(): React.JSX.Element {
         <h2>🧩 游戏数据（配装名字 / 精确花费）</h2>
         <div className="stack">
           <div className="dim">
-            复盘里的配装真名（「配装 A」→「M1A1 FEP Trophy」）和精确花费，来自游戏自带的一张单位表。
-            <b>软件里已经带了一份</b>，不用管也能用，只是游戏更新之后可能比游戏里旧一点。
-            填上密钥就会从你本机的游戏文件里实时解一份最新的（只在本机读，不上传），
-            另外<b>看卡组内容也需要密钥</b>——.dek 文件本身是加密的。
-            密钥是游戏自己的东西、每次更新都可能变，所以不随软件发布。
+            复盘中的配装名称（「配装 A」→「M1A1 FEP Trophy」）和精确花费来自游戏单位表。软件内置一份，游戏更新后可能略旧。
+            填写密钥后从本机游戏文件读取最新单位表（仅本地读取，不上传）。查看卡组内容也需要密钥（.dek 文件已加密）。
+            密钥可能随游戏更新变化，不随软件发布。
           </div>
           <div className="row wrap">
             <input
               value={keyText ?? String(config.gameKey || '')}
-              placeholder="32 位密钥，留空就是不启用"
+              placeholder="32 位密钥，留空则不启用"
               spellCheck={false}
               onChange={(e) => setKeyText(e.target.value)}
               style={{ flex: 1, minWidth: 280, fontFamily: 'ui-monospace, Consolas, monospace' }}
@@ -116,27 +114,27 @@ export default function Settings(): React.JSX.Element {
                 setGdb(await window.BA.refreshGameDb())
                 setBusy(null)
               }}
-              title="游戏更新之后点一下"
+              title="游戏更新后重新读取单位表"
             >
               ↻ 重新读取
             </button>
           </div>
           <div className={gdb?.source === 'local' ? 'lit-ok' : gdb?.error ? 'lit-bad' : 'dim'}>
             {gdb?.error
-              ? '读不出来：' + gdb.error + '（先用着软件自带的那份）'
+              ? '读取失败：' + gdb.error + '（暂用内置单位表）'
               : gdb?.source === 'local'
-                ? '✅ 用的是你本机解出来的：' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
+                ? '✅ 本机单位表：' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
                 : gdb?.source === 'bundled'
-                  ? '用的是软件自带的那份（' +
+                  ? '内置单位表（' +
                     (gdb.updatedAt || '未知日期') +
                     ' 导出，' +
                     gdb.units +
-                    ' 个单位）。游戏更新后可能略旧，填上密钥就能换成你本机最新的'
-                  : '没有单位表，复盘里的花费是估算值'}
-            {gdb?.stale && '　⚠ 游戏更新过了，点「重新读取」解一遍新的'}
+                    ' 个单位）。填写密钥可读取本机最新版本'
+                  : '无单位表，复盘花费为估算值'}
+            {gdb?.stale && '　⚠ 游戏已更新，请点「重新读取」'}
           </div>
           <div className="dim" style={{ fontSize: 11.5 }}>
-            解一次存一次，平时开软件直接用存下来的，不会每次都解。游戏更新之后自己点一下就行。
+            读取结果会缓存，启动时不重复读取。游戏更新后需手动重新读取。
           </div>
         </div>
       </div>
@@ -164,20 +162,20 @@ export default function Settings(): React.JSX.Element {
           <Switch
             checked={!!config.autoQueryCurrentMatch}
             onChange={(v) => void patch({ autoQueryCurrentMatch: v })}
-            label="进对局自动把名单里每个人都算好"
-            hint="两轮：先拉档案填满名单，再补龙区分"
+            label="进入对局时自动查询全部玩家"
+            hint="分两轮：先查档案，再算龙区分"
           />
           <Switch
             checked={!!config.banCheckOnStart}
             onChange={(v) => void patch({ banCheckOnStart: v })}
             label="启动时查一次封禁名单"
-            hint="只标记你遇到过的人；4.0.x 是每小时轮询"
+            hint="只标记你遇到过的玩家"
           />
           <Switch
             checked={!!config.matchSyncEnabled}
             onChange={(v) => void patch({ matchSyncEnabled: v })}
             label="每小时同步我的对局记录"
-            hint="对局档案会自己长起来，也用来回填相遇、胜负、改名史"
+            hint="更新对局档案，并补全相遇、胜负和改名记录"
           />
           <div className="row">
             <span className="set-label">BATrace 请求间隔</span>
@@ -190,7 +188,7 @@ export default function Settings(): React.JSX.Element {
               onChange={(e) => void patch({ apiDelayMs: Number(e.target.value) })}
               style={{ width: 110 }}
             />
-            <span className="dim">毫秒。请求严格串行，调太快容易被对方限流。</span>
+            <span className="dim">毫秒。请求逐个发送，间隔过短可能被限流。</span>
           </div>
           <div className="row">
             <span className="set-label">日志轮询间隔</span>
@@ -239,7 +237,7 @@ export default function Settings(): React.JSX.Element {
                 void run('clean30', async () => {
                   const n = await window.BA.cleanReplays(30)
                   setReplayCount((await window.BA.listReplays()).length)
-                  return '删除了 ' + n + ' 个 30 天前的录像'
+                  return '已删除 ' + n + ' 个 30 天前的录像'
                 })
               }
             >
@@ -248,18 +246,18 @@ export default function Settings(): React.JSX.Element {
             <button
               className="danger"
               onClick={() => {
-                if (!window.confirm('把本地所有录像都删掉？这一步不可撤销。')) return
+                if (!window.confirm('删除本地全部录像？此操作不可撤销。')) return
                 void run('cleanAll', async () => {
                   const n = await window.BA.cleanReplays(0)
                   setReplayCount((await window.BA.listReplays()).length)
-                  return '删除了 ' + n + ' 个录像'
+                  return '已删除 ' + n + ' 个录像'
                 })
               }}
             >
               删除全部录像
             </button>
           </div>
-          <div className="dim">录像参数（显示器、画质、曝光、声音）在主界面的「行车记录仪」卡片里调。</div>
+          <div className="dim">录像参数（显示器、画质、曝光、声音）在主界面「行车记录仪」卡片中设置。</div>
         </div>
       </div>
 
@@ -276,7 +274,7 @@ export default function Settings(): React.JSX.Element {
               setUpMsg(null)
               // 有新版本的话，主进程会推 update:available，顶上的横幅自己会出来
               const u = await window.BA.checkUpdate()
-              setUpMsg(u ? '发现新版本 v' + u.version : '已经是最新版了')
+              setUpMsg(u ? '发现新版本 v' + u.version : '已是最新版本')
               setBusy(null)
             }}
           >
@@ -285,12 +283,12 @@ export default function Settings(): React.JSX.Element {
           {upMsg && <span className="dim" style={{ marginLeft: 8 }}>{upMsg}</span>}
         </p>
         <p className="dim">
-          安装版会自己在后台下载新版本，下好后顶上提示「重启更新」，不点的话下次关软件时自动装；
-          免安装版只提示，需要自己下新的 exe 换掉。
+          安装版在后台下载新版本，下载完成后顶部提示「重启更新」，未重启则在下次退出时安装。
+          免安装版仅提示，需手动下载新 exe 替换。
         </p>
         <p>
-          数据全部存在本地（<code>%APPDATA%\broken-arrow-log-assistant</code>），没有自建服务器，不上传你的任何数据。
-          联网只有两处：BATrace 的公开接口、GitHub 上本仓库的 Release 信息（查新版本）。
+          数据全部存在本地（<code>%APPDATA%\broken-arrow-log-assistant</code>），无自建服务器，不上传任何数据。
+          联网仅两处：BATrace 公开接口、GitHub 本仓库 Release 信息（检查更新）。
         </p>
         <p>
           玩家数据来自{' '}
@@ -305,10 +303,10 @@ export default function Settings(): React.JSX.Element {
           <a href="#" onClick={() => window.BA.openExternal('https://github.com/Zawinzala/brokenarrow-log-maggot')}>
             断箭蛆工具
           </a>
-          （MIT），本版是从零重写的。
+          （MIT），当前版本为完全重写。
         </p>
         <p>
-          有问题、有想法、发现算得不对，都可以找我：<b>QQ {QQ}</b>
+          问题反馈：<b>QQ {QQ}</b>
           <button style={{ marginLeft: 8 }} onClick={() => void navigator.clipboard.writeText(QQ)}>
             复制
           </button>
@@ -319,7 +317,7 @@ export default function Settings(): React.JSX.Element {
           </a>
           {' · '}
           <a href="#" onClick={() => window.BA.openExternal('https://github.com/AlexanderHYu/ba-dragon/blob/main/docs/algorithm.md')}>
-            龙区分怎么算的
+            龙区分算法说明
           </a>
         </p>
       </div>

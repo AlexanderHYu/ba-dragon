@@ -32,7 +32,7 @@ export default function StressChart({
   const W = 1000
   const H = 190
   const pad = { l: 46, r: 56, t: 26, b: 24 }
-  if (samples.length < 2) return <div className="empty">没人开火，或者一发就打死了</div>
+  if (samples.length < 2) return <div className="empty">无武器开火，或一发击杀</div>
   const span = samples[samples.length - 1].t || 1
   const x = (t: number): number => pad.l + (t / span) * (W - pad.l - pad.r)
   const ys = (v: number): number => H - pad.b - (v / (maxStress || 1)) * (H - pad.t - pad.b)
@@ -83,7 +83,7 @@ export default function StressChart({
               opacity="0.18"
             />
             <text x={pad.l + (deaths.length > 0 ? 441 : 351)} y={13} fontSize="10.5" fill="var(--good)">
-              浅带 = 近炸最好~最坏
+              浅色带：近炸最好 ~ 最坏
             </text>
           </>
         )}
@@ -91,7 +91,7 @@ export default function StressChart({
           <>
             <line x1={pad.l + 330} y1={6} x2={pad.l + 330} y2={14} stroke="var(--bad)" strokeWidth="2" />
             <text x={pad.l + 338} y={13} fontSize="10.5" fill="var(--bad)">
-              倒下一个人
+              阵亡 1 人
             </text>
           </>
         )}

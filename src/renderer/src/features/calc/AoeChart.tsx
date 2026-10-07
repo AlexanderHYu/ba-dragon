@@ -20,7 +20,7 @@ export default function AoeChart({
   const W = 520
   const H = 170
   const pad = { l: 42, r: 10, t: 10, b: 24 }
-  if (!curve.length) return <div className="empty">没有 AOE</div>
+  if (!curve.length) return <div className="empty">无溅射</div>
   const maxD = Math.max(...curve.map((p) => p.dmg), hp) * 1.1
   const span = curve[curve.length - 1].d || radius
   const x = (d: number): number => pad.l + (d / span) * (W - pad.l - pad.r)
@@ -52,7 +52,7 @@ export default function AoeChart({
         <>
           <line x1={x(fuse)} y1={pad.t} x2={x(fuse)} y2={H - pad.b} stroke="var(--warn)" strokeDasharray="4 3" />
           <text x={x(fuse) + 4} y={pad.t + 9} fontSize="10" fill="var(--warn)">
-            近炸在这儿起爆
+            近炸起爆点
           </text>
         </>
       )}

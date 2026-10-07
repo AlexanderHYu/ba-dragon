@@ -81,7 +81,7 @@ function PickList({
               {onPeek && (
                 <button
                   className="deck-peek"
-                  title="看看这副卡组里有什么"
+                  title="查看卡组内容"
                   onClick={(e) => {
                     e.stopPropagation()
                     onPeek(r.name)
@@ -182,7 +182,7 @@ export default function Decks(): React.JSX.Element {
             <span className="ico">🃏</span>
             卡组工具
           </h2>
-          <div className="empty">读卡组中…</div>
+          <div className="empty">正在读取卡组…</div>
         </div>
       </>
     )
@@ -197,10 +197,10 @@ export default function Decks(): React.JSX.Element {
             卡组工具
           </h2>
           <div className="deck-note">
-            <p>没找到游戏的卡组目录，前线这边就没法操作了。</p>
+            <p>未找到游戏卡组目录。</p>
             <p className="deck-path">{data.dir || '（路径为空）'}</p>
             <p className="dim">
-              一般是游戏目录没设对，或者这台机器还没进过游戏（卡组目录要玩过一次才会建出来）。去「设置」里重新指一下游戏目录，再回来刷新。
+              可能是游戏目录设置有误，或本机尚未运行过游戏（卡组目录在首次进入游戏后创建）。请在「设置」中检查游戏目录后刷新。
             </p>
             <p className="dim">备份包目录：{data.backupDir || '—'}</p>
           </div>
@@ -246,7 +246,7 @@ export default function Decks(): React.JSX.Element {
           <section className="deck-col">
             <div className="deck-col-head">
               <h3>
-                前线卡组 <span className="dim">(.dek)</span>
+                游戏卡组 <span className="dim">(.dek)</span>
               </h3>
               <span className="grow" />
               <span className="dim">
@@ -266,7 +266,7 @@ export default function Decks(): React.JSX.Element {
               rows={frontRows}
               sel={front}
               onChange={setFront}
-              empty="前线目录里没有卡组"
+              empty="游戏卡组目录为空"
               onPeek={async (name) => {
                 setView(null)
                 setViewErr(null)
@@ -274,9 +274,9 @@ export default function Decks(): React.JSX.Element {
                 if ('error' in r) {
                   setViewErr(
                     r.error === 'noKey'
-                      ? '卡组文件本身是加密的，要在「设置 → 游戏数据」里填上密钥才能看内容（复盘里的配装名字和花费不用填）'
+                      ? '卡组文件已加密，需在「设置 → 游戏数据」中填写密钥才能查看内容'
                       : r.error === 'noGameDb'
-                        ? '游戏自带的单位表还没读出来，去「设置 → 游戏数据」看看'
+                        ? '游戏单位表未读取，请检查「设置 → 游戏数据」'
                         : r.error
                   )
                 } else setView(r)
@@ -295,7 +295,7 @@ export default function Decks(): React.JSX.Element {
                     const r = await window.BA.backupDecks(front)
                     return 'error' in r
                       ? { ok: false, text: '备份失败：' + r.error }
-                      : { ok: true, text: `备份好了：${r.decks} 副 → ${r.file}` }
+                      : { ok: true, text: `已备份：${r.decks} 副 → ${r.file}` }
                   })
                 }
               >
@@ -309,7 +309,7 @@ export default function Decks(): React.JSX.Element {
                     const r = await window.BA.backupDecks()
                     return 'error' in r
                       ? { ok: false, text: '备份失败：' + r.error }
-                      : { ok: true, text: `全部备份好了：${r.decks} 副 → ${r.file}` }
+                      : { ok: true, text: `已全部备份：${r.decks} 副 → ${r.file}` }
                   })
                 }
               >
@@ -323,29 +323,29 @@ export default function Decks(): React.JSX.Element {
                 disabled={busy || !front.length}
                 onClick={() => {
                   const ask =
-                    `要删除前线的 ${front.length} 副卡组吗？\n\n` +
+                    `删除 ${front.length} 副游戏卡组？\n\n` +
                     `${front.join('\n')}\n\n` +
-                    '删之前会先自动备份一份当前卡组。'
+                    '删除前会自动备份当前卡组。'
                   if (!window.confirm(ask)) return
                   void run(async () => {
                     const r = await window.BA.deleteDecks(front)
                     return r.error
                       ? { ok: false, text: '删除失败：' + r.error }
-                      : { ok: true, text: `删掉了 ${r.removed} 副卡组（删前已自动备份）` }
+                      : { ok: true, text: `已删除 ${r.removed} 副卡组（已自动备份）` }
                   })
                 }}
               >
                 🗑 删除所选
               </button>
             </div>
-            <div className="deck-tip dim">删卡组之前会自动备份一份当前卡组，删错了能从右边捞回来。</div>
+            <div className="deck-tip dim">删除卡组前会自动备份，可从右侧备份包恢复。</div>
           </section>
 
           {/* 后勤：备份出来的 zip 包 */}
           <section className="deck-col">
             <div className="deck-col-head">
               <h3>
-                后勤仓库 <span className="dim">(.zip)</span>
+                备份包 <span className="dim">(.zip)</span>
               </h3>
               <span className="grow" />
               <span className="dim">
@@ -361,26 +361,26 @@ export default function Decks(): React.JSX.Element {
               </button>
             </div>
 
-            <PickList rows={backRows} sel={back} onChange={setBack} empty="还没有备份包" />
+            <PickList rows={backRows} sel={back} onChange={setBack} empty="暂无备份包" />
 
             <div className="deck-actions">
               <button
                 className="primary"
                 disabled={busy || back.length !== 1}
-                title={back.length > 1 ? '一次只能部署一个包' : undefined}
+                title={back.length > 1 ? '一次只能恢复一个备份包' : undefined}
                 onClick={() => {
                   const name = back[0]
                   if (!name) return
-                  if (!window.confirm(`把「${name}」部署到前线？\n\n同名卡组会被这个包里的覆盖掉。`)) return
+                  if (!window.confirm(`将「${name}」恢复到游戏卡组？\n\n同名卡组将被覆盖。`)) return
                   void run(async () => {
                     const r = await window.BA.restoreDecks(name, true)
-                    if ('error' in r) return { ok: false, text: '部署失败：' + r.error }
+                    if ('error' in r) return { ok: false, text: '恢复失败：' + r.error }
                     const skip = r.skipped.length ? `，跳过 ${r.skipped.length} 个（${r.skipped.join('、')}）` : ''
-                    return { ok: true, text: `部署了 ${r.restored} 副卡组到前线${skip}` }
+                    return { ok: true, text: `已恢复 ${r.restored} 副卡组${skip}` }
                   })
                 }}
               >
-                ⬇ 部署到前线
+                ⬇ 恢复到游戏
               </button>
               <button disabled={busy} onClick={() => void window.BA.openDeckDir('backups')}>
                 📂 打开目录
@@ -390,15 +390,15 @@ export default function Decks(): React.JSX.Element {
                 disabled={busy || !back.length}
                 onClick={() => {
                   const ask =
-                    `要删除 ${back.length} 个备份包吗？\n\n` +
+                    `删除 ${back.length} 个备份包？\n\n` +
                     `${back.join('\n')}\n\n` +
-                    '备份包删掉就没了，这一步不会再另存一份。'
+                    '备份包删除后无法恢复。'
                   if (!window.confirm(ask)) return
                   void run(async () => {
                     const r = await window.BA.deleteBackups(back)
                     return r.error
                       ? { ok: false, text: '删除失败：' + r.error }
-                      : { ok: true, text: `删掉了 ${r.removed} 个备份包` }
+                      : { ok: true, text: `已删除 ${r.removed} 个备份包` }
                   })
                 }}
               >
