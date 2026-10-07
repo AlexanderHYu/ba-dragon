@@ -4,6 +4,9 @@
 // 为什么现算而不是查 match_unit：那张表里的花费是存进去那一刻的口径（老版本是估算的），
 // 新旧混着不好比；raw 里存着 BATrace 的原始对局 JSON，拿现在的价目表重算一遍，
 // 口径永远是一致的。31 局、5000 多条记录，几十毫秒的事。
+//
+// 没武器的单位不算（卡车、运输机、RQ-170 这类侦察无人机、教练靶）：它们本来就不打东西，
+// 混在里面只会拉出一排「伤害 0、击杀 0」。按实际出兵的那套配装判断——同一架无人机挂了弹就照算。
 import type { Db } from './db'
 import type { GameDbService } from './gameDb'
 import { MODEL, teamOf } from '@shared/dragon'
@@ -11,6 +14,7 @@ import { ROLE_NAME } from '@shared/match'
 import type { MatchInfo, PlayerData } from '@shared/types/batrace'
 import type { UnitStatRow, UnitStatsFilter, UnitStatsResult } from '@shared/ipc'
 import { mapName } from './players'
+import { profileOf } from '@shared/combat/model'
 
 interface MatchRow {
   fid: string
@@ -66,6 +70,19 @@ export class Analytics {
   /** 按「单位 + 配装」聚合 */
   unitStats(f: UnitStatsFilter = {}): UnitStatsResult {
     const mine = new Set(this.localIds().map(String))
+    // 这个单位挂这套配装有没有能打东西的武器；查不到的单位宁可留着（不知道就别丢）
+    const combat = this.gamedb.combat()
+    const armedCache = new Map<string, boolean>()
+    const armedFor = (id: number, optionIds?: number[]): boolean => {
+      const k = id + '|' + (optionIds || []).join(',')
+      let v = armedCache.get(k)
+      if (v == null) {
+        const prof = profileOf(id, optionIds || [], combat ?? undefined)
+        v = !prof || prof.weapons.some((w) => w.ammo.length > 0)
+        armedCache.set(k, v)
+      }
+      return v
+    }
     const where: string[] = ['raw IS NOT NULL']
     const args: unknown[] = []
     if (f.mapId != null) {
@@ -108,6 +125,7 @@ export class Analytics {
           if (f.result === 'lose' && won) continue
         }
         for (const u of Object.values(p.UnitData || {})) {
+          if (!armedFor(u.Id, u.OptionIds)) continue
           records++
           const gl = this.gamedb.loadout(u.Id, u.OptionIds)
           if (!gl) unpriced++
