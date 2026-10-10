@@ -5,7 +5,7 @@
 //   3. 超时或 5xx：等 30 秒重试一次，再失败就放弃这一次，不连环重试
 //   4. 不发自定义 User-Agent：腾讯 EdgeOne 会把自定义 UA 判成机器人，
 //      让 Electron 的 net.fetch 用默认 UA 才能过人机验证
-import { net } from 'electron'
+import { app, net } from 'electron'
 import type { Db } from './db'
 import type {
   CategoryPreference,
@@ -15,7 +15,14 @@ import type {
   UnitInfo
 } from '@shared/types/batrace'
 
-const BASE = 'https://dash.batrace.top'
+// 程序用的接口地址（网页链接还是 dash.batrace.top）。BA_BATRACE_BASE 只给本地测试用
+const BASE = process.env.BA_BATRACE_BASE || 'https://bot.batrace.top'
+// BATrace 要求带上客户端标识。发给玩家的软件和我们自己的采集脚本用不同的标识，
+// 脚本那边是 ba-dragon-collector
+const CLIENT_HEADERS = (): Record<string, string> => ({
+  'User-Agent': `DragonClassifier/${app.getVersion()} (+https://github.com/AlexanderHYu/ba-dragon)`,
+  'X-Client': `ba-dragon-app/${app.getVersion()}`
+})
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** 真正的人机验证页（普通 5xx/维护页不算，免得误报） */
@@ -120,7 +127,7 @@ export class BatraceClient {
     this.onRequest?.(url)
     this.healthState.requests++
     const r = await net.fetch(BASE + url, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...CLIENT_HEADERS() },
       signal: AbortSignal.timeout(30000)
     })
     const ct = r.headers.get('content-type') || ''
