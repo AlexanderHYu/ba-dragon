@@ -283,7 +283,7 @@ export default function Settings(): React.JSX.Element {
           {upMsg && <span className="dim" style={{ marginLeft: 8 }}>{upMsg}</span>}
         </p>
         <p className="dim">
-          安装版在后台下载新版本，下载完成后顶部提示「重启更新」，未重启则在下次退出时安装。
+          安装版发现新版本后在顶部提示，点「更新并重启」才下载，下载完成后自动安装并重新打开。
           免安装版仅提示，需手动下载新 exe 替换。
         </p>
         <p>
