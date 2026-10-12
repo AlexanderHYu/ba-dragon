@@ -17,11 +17,11 @@ import type {
 
 // 程序用的接口地址（网页链接还是 dash.batrace.top）。BA_BATRACE_BASE 只给本地测试用
 const BASE = process.env.BA_BATRACE_BASE || 'https://bot.batrace.top'
-// BATrace 要求带上客户端标识。发给玩家的软件和我们自己的采集脚本用不同的标识，
-// 脚本那边是 ba-dragon-collector
+// BATrace 要求带上客户端标识，对方按 X-Client 放行，所以这个值固定不带版本号（版本号在 UA 里）。
+// 发给玩家的软件和我们自己的采集脚本用不同的标识，脚本那边是 ba-dragon-collector
 const CLIENT_HEADERS = (): Record<string, string> => ({
   'User-Agent': `DragonClassifier/${app.getVersion()} (+https://github.com/AlexanderHYu/ba-dragon)`,
-  'X-Client': `ba-dragon-app/${app.getVersion()}`
+  'X-Client': 'ba-dragon-app'
 })
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -48,6 +48,14 @@ export class NotFoundError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'NotFoundError'
+  }
+}
+
+/** 403：被对方防火墙拦了，马上重试也没用 */
+export class BlockedError extends Error {
+  constructor() {
+    super('BATrace 拒绝了这个请求（403），可能是对方的防火墙拦截，请稍后再试')
+    this.name = 'BlockedError'
   }
 }
 
@@ -137,6 +145,10 @@ export class BatraceClient {
         this.mark(false, '需要人机验证')
         throw new CaptchaError()
       }
+      if (r.status === 403) {
+        this.mark(false, '拒绝访问（403）')
+        throw new BlockedError()
+      }
       this.mark(false, '非 JSON 响应 HTTP ' + r.status)
       throw new Error('非 JSON 响应 HTTP ' + r.status)
     }
@@ -171,7 +183,7 @@ export class BatraceClient {
       this.db.cacheSet(key, v)
       return v
     } catch (e) {
-      if (e instanceof CaptchaError || e instanceof NotFoundError) throw e
+      if (e instanceof CaptchaError || e instanceof NotFoundError || e instanceof BlockedError) throw e
       // 超时/5xx：停 30 秒重试一次，再不行就用旧缓存兜底
       try {
         await sleep(30000)
