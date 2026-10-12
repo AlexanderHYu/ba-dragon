@@ -53,6 +53,8 @@ export function registerIpc(s: Services): void {
     if (dir) void shell.openPath(dir)
   })
 
+  // 顶栏点 BATrace 状态：马上重新探一次
+  on('api:probe', () => s.client.probe())
   on('app:status', () => {
     const logDir = String(s.config.get('logDir') || '')
     return {

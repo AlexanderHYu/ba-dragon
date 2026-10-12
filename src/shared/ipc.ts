@@ -192,6 +192,7 @@ export interface IpcMap {
   'config:detectDir': [void, { gameDir: string; logDir: string } | null]
   'config:openLogDir': [void, void]
   'app:status': [void, AppStatus]
+  'api:probe': [void, boolean]
   'session:get': [void, SessionState]
   'players:search': [string, PlayerCard[]]
   'player:card': [{ stbid: string; name?: string; refresh?: boolean }, PlayerCard]

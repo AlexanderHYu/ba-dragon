@@ -96,6 +96,7 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
   const [report, setReport] = useState<MatchReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'overview' | 'players' | 'units' | 'timeline'>('players')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -109,7 +110,7 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
     return () => {
       alive = false
     }
-  }, [fid])
+  }, [fid, attempt])
 
   return (
     <div className="rp">
@@ -129,7 +130,18 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
         </button>
       </div>
       {!report ? (
-        <div className="empty">{error ? error : <>计算中…（首次需下载对局数据）</>}</div>
+        <div className="empty">
+          {error ? (
+            <>
+              {error}
+              <div style={{ marginTop: 12 }}>
+                <button onClick={() => setAttempt((n) => n + 1)}>重试</button>
+              </div>
+            </>
+          ) : (
+            <>计算中…（首次需下载对局数据）</>
+          )}
+        </div>
       ) : (
         <>
           <div className="rp-tabs">

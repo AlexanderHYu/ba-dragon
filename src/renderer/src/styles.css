@@ -218,6 +218,12 @@ a {
   color: var(--text-2);
   cursor: default;
 }
+.status.clickable {
+  cursor: pointer;
+}
+.status.clickable:hover {
+  text-decoration: underline;
+}
 .status i {
   width: 9px;
   height: 9px;

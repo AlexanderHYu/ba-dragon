@@ -1,9 +1,10 @@
 // 顶栏：版本号、日志目录状态、BATrace 连接状态、设置入口。
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 
 export default function TopBar(): React.JSX.Element {
   const { status, setStatus, page, setPage } = useStore()
+  const [probing, setProbing] = useState(false)
 
   useEffect(() => {
     const pull = (): void => void window.BA.getStatus().then(setStatus)
@@ -28,9 +29,19 @@ export default function TopBar(): React.JSX.Element {
         <i />
         {logText}
       </span>
-      <span className={'status ' + apiCls} title={api?.at ? new Date(api.at).toLocaleTimeString('zh-CN') + ' · 本次启动请求 ' + api.requests + ' 次' : ''}>
+      <span
+        className={'status clickable ' + apiCls}
+        title={(api?.at ? new Date(api.at).toLocaleTimeString('zh-CN') + ' · 本次启动请求 ' + api.requests + ' 次 · ' : '') + '点击重新检测连接'}
+        onClick={() => {
+          if (probing) return
+          setProbing(true)
+          void window.BA.probeApi()
+            .then(() => window.BA.getStatus().then(setStatus))
+            .finally(() => setProbing(false))
+        }}
+      >
         <i />
-        {apiText}
+        {probing ? 'BATrace 检测中…' : apiText}
       </span>
       <span className="grow" />
       <button className={page.name === 'home' ? 'primary' : ''} onClick={() => setPage({ name: 'home' })}>

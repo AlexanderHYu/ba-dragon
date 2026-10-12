@@ -12,6 +12,7 @@ const api = {
   detectGameDir: () => invoke('config:detectDir'),
   openLogDir: () => invoke('config:openLogDir'),
   getStatus: () => invoke('app:status'),
+  probeApi: () => invoke('api:probe'),
 
   getSession: () => invoke('session:get'),
   searchPlayers: (q: string) => invoke('players:search', q),
