@@ -1,5 +1,5 @@
-// 新版本横幅：安装版显示下载进度和「重启更新」，免安装版提示去下载页。
-// 关掉后同一版本、同一阶段不再弹（下载好了会再提示一次）。
+// 新版本横幅：安装版点「更新并重启」才下载，下完自动安装重开；免安装版提示去下载页。
+// 关掉后同一版本、同一阶段不再弹。
 import { useEffect, useState } from 'react'
 import type { UpdateInfo } from '@shared/ipc'
 
@@ -21,9 +21,11 @@ export default function UpdateBanner(): React.JSX.Element | null {
   const cur = '（当前 v' + info.current + '）'
   let text: string
   if (info.mode === 'auto' && info.status === 'ready') {
-    text = '✅ 新版本 ' + v + ' 已下载。点击「重启更新」立即安装，否则在下次退出时自动安装。'
+    text = '正在关闭并安装新版本 ' + v + '…'
+  } else if (info.mode === 'auto' && info.status === 'downloading') {
+    text = '⬇ 正在下载新版本 ' + v + '… ' + (info.percent || 0) + '%，下载完成后自动重启'
   } else if (info.mode === 'auto') {
-    text = '⬇ 发现新版本 ' + v + cur + '，正在后台下载… ' + (info.percent || 0) + '%'
+    text = '🆕 新版本 ' + v + cur + '。设置和档案会保留。'
   } else if (info.portable) {
     text = '🆕 新版本 ' + v + cur + '。免安装版不支持自动更新，请下载新 exe 替换旧文件（推荐使用安装版）。设置和档案会保留。'
   } else {
@@ -32,8 +34,8 @@ export default function UpdateBanner(): React.JSX.Element | null {
 
   return (
     <div className="update-banner">
-      <span className="grow">{installing ? '正在关闭并安装新版本…' : text}</span>
-      {info.mode === 'auto' && info.status === 'ready' && (
+      <span className="grow">{text}</span>
+      {info.mode === 'auto' && info.status === 'available' && !installing && (
         <button
           className="primary"
           onClick={() => {
@@ -41,7 +43,7 @@ export default function UpdateBanner(): React.JSX.Element | null {
             void window.BA.installUpdate()
           }}
         >
-          重启更新
+          更新并重启
         </button>
       )}
       {info.mode !== 'auto' && (

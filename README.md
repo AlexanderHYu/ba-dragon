@@ -14,7 +14,7 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| **`DragonClassifier-Setup-x.y.z.exe`（推荐）** | 安装版，支持自动更新：新版本在后台下载，重启后完成安装 |
+| **`DragonClassifier-Setup-x.y.z.exe`（推荐）** | 安装版，支持一键更新：有新版本时顶部会提示，点「更新并重启」即可 |
 | `DragonClassifier-Portable-x.y.z.exe` | 免安装版，无法自动替换自身，只提示有新版本，需要手动下载 |
 
 首次启动时选择游戏目录（`broken_arrow`），之后进入对局会自动开始查询。
