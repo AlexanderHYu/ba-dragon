@@ -86,6 +86,8 @@ export interface PlayerCard {
   /** 搜索接口给的 ELO：BATrace 档案里的旧值，可能是几周前的，只在没有更新数据时兜底显示 */
   staleElo?: number | null
   staleEloAt?: number | null
+  /** 账号等级（搜索接口给的），重名时靠它分辨 */
+  level?: number | null
   updatedAt?: number
 }
 
