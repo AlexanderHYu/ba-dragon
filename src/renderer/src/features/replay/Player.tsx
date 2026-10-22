@@ -1,9 +1,10 @@
 // 录像内置播放器：<video> 走 replay:// 协议（支持 Range，拖进度条不会整文件加载），
 // 控制条自己画，因为要在进度条背景上铺一张这一局的兵力曲线。
 //
-// 对齐方式：录像是「进对局开录、打完停录」，和 BATrace 记的对局时长不一定分毫不差
-// （开录有一两秒延迟、结算画面也录进去了），所以曲线只能按**比例**铺满整条进度条，
-// 不做绝对时间对齐。界面上用小字说明这件事。
+// 对齐方式：录像从部署阶段就开始录（比 BATrace 记的开战时间早 1.5～2 分钟），
+// 结尾还录了约 1 分钟结算画面。所以曲线按真实时间铺：开录时间 = 存盘时间 − 视频时长，
+// 开战时间取 BATrace 的 StartTime，曲线只画在开战到结束那一段。
+// 算出来不合理（比如存盘时间不对）时退回按比例铺满整条进度条。
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReplayItem } from '@shared/ipc'
 import type { MatchReport } from '@shared/match'
@@ -34,6 +35,8 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
   const [rate, setRate] = useState(1)
   const [tl, setTl] = useState<Timeline | null>(null)
   const [hover, setHover] = useState<{ pct: number; i: number } | null>(null)
+  // 这一局的开战时间（毫秒）和时长（秒），用来把曲线对到视频上
+  const [span, setSpan] = useState<{ startMs: number; durSec: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [broken, setBroken] = useState(false)
 
@@ -49,10 +52,14 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
   useEffect(() => {
     let alive = true
     setTl(null)
+    setSpan(null)
     if (item.fid) {
       void window.BA.getMatchReport(item.fid).then(
         (r) => {
-          if (alive && r && !('error' in r)) setTl(r.timeline)
+          if (alive && r && !('error' in r)) {
+            setTl(r.timeline)
+            setSpan(r.startTime && r.durationSec ? { startMs: r.startTime, durSec: r.durationSec } : null)
+          }
         },
         () => {
           /* 静默：没有曲线就是普通进度条 */
@@ -99,6 +106,15 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
   // 曲线：从 0 画到全场最高的话，几千点的底座会把变化压平（用户原话「变化率有点小」）。
   // 所以纵轴只取数据自己的范围（min~max），而且另外画一条「兵力差」：A − B，
   // 正数说明 A 队在上风，这条比两条绝对曲线更容易一眼看出局势翻转。
+  // 对局在视频里占的那一段（0~1）。录像存盘时间就是 createdAt
+  const align = useMemo(() => {
+    if (!span || !(dur > 0) || !item.createdAt) return { a: 0, b: 1, abs: false }
+    const offset = (span.startMs - (item.createdAt - dur * 1000)) / 1000
+    // 合理范围：开战在开录后 0~10 分钟，且对局打完时视频还没结束（留 30 秒余量）
+    if (offset < 0 || offset > 600 || offset + span.durSec > dur + 30) return { a: 0, b: 1, abs: false }
+    return { a: offset / dur, b: Math.min(1, (offset + span.durSec) / dur), abs: true }
+  }, [span, dur, item.createdAt])
+
   const curve = useMemo(() => {
     const n = tl?.minutes || 0
     const field = tl?.field || []
@@ -109,12 +125,14 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
     const lo = Math.min(...flat)
     const hi = Math.max(...flat)
     const span = Math.max(1, hi - lo)
-    const x = (i: number): number => (i / (n - 1)) * 100
+    const x = (i: number): number => (align.a + (i / (n - 1)) * (align.b - align.a)) * 100
     // 上下各留 4%，曲线不贴边
     const y = (v: number): number => 96 - ((Math.max(lo, Number.isFinite(v) ? v : lo) - lo) / span) * 92
     const path = (row: number[]): string =>
       row.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(2) + ' ' + y(v).toFixed(2)).join(' ')
-    const area = (row: number[]): string => (row.length ? path(row) + ' L100 100 L0 100 Z' : '')
+    const x0 = x(0).toFixed(2)
+    const xn = x(n - 1).toFixed(2)
+    const area = (row: number[]): string => (row.length ? path(row) + ` L${xn} 100 L${x0} 100 Z` : '')
     // 兵力差：以中线为 0，按最大绝对差归一
     const diff = rows.length > 1 ? rows[0].map((v, i) => v - (rows[1][i] ?? 0)) : []
     const dMax = Math.max(1, ...diff.map((v) => Math.abs(v)))
@@ -122,7 +140,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
     const diffPath = diff.length
       ? diff.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(2) + ' ' + dy(v).toFixed(2)).join(' ')
       : ''
-    const diffArea = diff.length ? diffPath + ' L100 50 L0 50 Z' : ''
+    const diffArea = diff.length ? diffPath + ` L${xn} 50 L${x0} 50 Z` : ''
     return {
       n, lo, hi, rows, x, diff, dMax,
       paths: rows.map(path),
@@ -131,7 +149,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
       diffArea,
       events: tl.events || []
     }
-  }, [tl])
+  }, [tl, align])
 
   const ratioAt = (clientX: number): number => {
     const el = bar.current
@@ -210,7 +228,12 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
         }}
         onPointerMove={(e) => {
           const r = ratioAt(e.clientX)
-          if (curve) setHover({ pct: r * 100, i: Math.min(curve.n - 1, Math.max(0, Math.round(r * (curve.n - 1)))) })
+          if (curve) {
+            // 开战前是部署阶段、结束后是结算画面：i 记成 -1 / n
+            const f = (r - align.a) / Math.max(1e-6, align.b - align.a)
+            const i = f < 0 ? -1 : f > 1 ? curve.n : Math.round(f * (curve.n - 1))
+            setHover({ pct: r * 100, i })
+          }
           if (dragging) seek(e.clientX)
         }}
         onPointerUp={(e) => {
@@ -279,9 +302,13 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
         <i className="bplayer-head-mark" style={{ left: played + '%' }} />
         {hover && hoverVals && (
           <div className="bplayer-tip" style={{ left: hover.pct + '%' }}>
-            <b>第 {hover.i + 1} 分钟</b>
-            <span className="t0">A {Math.round(hoverVals[0] ?? 0)}</span>
-            <span className="t1">B {Math.round(hoverVals[1] ?? 0)}</span>
+            <b>{hover.i < 0 ? '部署阶段' : hover.i >= (curve?.n ?? 0) ? '结算画面' : '第 ' + (hover.i + 1) + ' 分钟'}</b>
+            {hover.i >= 0 && hover.i < (curve?.n ?? 0) && (
+              <>
+                <span className="t0">A {Math.round(hoverVals[0] ?? 0)}</span>
+                <span className="t1">B {Math.round(hoverVals[1] ?? 0)}</span>
+              </>
+            )}
             {curve?.events
               .filter((ev) => ev.min === hover.i)
               .map((ev, k) => (
@@ -336,7 +363,8 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
         {curve ? (
           <>
             曲线为兵力差：<span className="t0">中线以上 A 队领先</span>，<span className="t1">中线以下 B 队领先</span>
-            ；竖色带标出某队损失最大的一分钟。按比例对齐，可能有几秒误差
+            ；竖色带标出某队损失最大的一分钟。
+            {align.abs ? '曲线从开战开始，前面是部署阶段，最后是结算画面' : '没对上开战时间，曲线按比例铺满，可能有误差'}
           </>
         ) : (
           '本局无对局数据，仅显示普通进度条'
