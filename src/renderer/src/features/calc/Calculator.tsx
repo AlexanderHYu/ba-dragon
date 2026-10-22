@@ -64,6 +64,8 @@ export default function Calculator(): React.JSX.Element {
   const [stress, setStress] = useState(1)
   /** 近炸起爆距离比例 p（MIN ~ 1）；null = 按随机分布取平均 */
   const [fuseP, setFuseP] = useState<number | null>(null)
+  // 「按直击算」：假设导弹撞上目标，吃满直击伤害（游戏里近炸弹不会这样，用来对比）
+  const [direct, setDirect] = useState(false)
   const [open, setOpen] = useState<number | null>(null)
   /** 关掉的武器，不参与「同时开火」的总输出和曲线 */
   const [off, setOff] = useState<Set<string>>(new Set())
@@ -87,8 +89,13 @@ export default function Calculator(): React.JSX.Element {
   // 楼里的人数就按目标这一个班算（一个班占一栋楼）
   const occupants = inBuilding ? T?.squad.length || 0 : 0
   const opts = useMemo(
-    () => ({ flares, stress, building: occupants, ...(fuseP != null ? { fuse: fuseP } : {}) }),
-    [flares, stress, occupants, fuseP]
+    () => ({
+      flares,
+      stress,
+      building: occupants,
+      ...(direct ? { fuse: 'none' as const } : fuseP != null ? { fuse: fuseP } : {})
+    }),
+    [flares, stress, occupants, fuseP, direct]
   )
   const list = useMemo(() => (A && T ? engage(A, T, dist, facing, opts) : []), [A, T, dist, facing, opts])
 
@@ -169,11 +176,14 @@ export default function Calculator(): React.JSX.Element {
               <label className="calc-range">
                 近炸{' '}
                 <b>
-                  {fuseP == null
-                    ? '平均 ×' + fuseFactor(fuseAmmo)
-                    : '距外壳 ' + toM(fuseP * fuseAmmo.radioFuse) + ' m 起爆 ×' + fuseFactor(fuseAmmo, fuseP)}
+                  {direct
+                    ? '按直击 ×1'
+                    : fuseP == null
+                      ? '平均 ×' + fuseFactor(fuseAmmo)
+                      : '距外壳 ' + toM(fuseP * fuseAmmo.radioFuse) + ' m 起爆 ×' + fuseFactor(fuseAmmo, fuseP)}
                 </b>
                 <input
+                  disabled={direct}
                   type="range"
                   min={RADIOFUSE.pMin}
                   max={1}
@@ -182,13 +192,21 @@ export default function Calculator(): React.JSX.Element {
                   onChange={(e) => setFuseP(Number(e.target.value))}
                   title="起爆距离（距目标外壳）：越靠左越近，伤害越高；最左为游戏中可能出现的最近距离（引信半径的 60%），最右为引信半径边缘"
                 />
-                {fuseP == null ? (
+                {direct ? null : fuseP == null ? (
                   <span className="dim">起爆距离随机，拖动可固定</span>
                 ) : (
                   <button className="calc-mini" onClick={() => setFuseP(null)}>
                     恢复平均
                   </button>
                 )}
+              </label>
+            )}
+            {fuseAmmo && (
+              <label
+                className="calc-range dim"
+                title="假设导弹直接撞上目标、吃满直击伤害。游戏里近炸弹总在引信半径内提前起爆，不会出现这种情况，仅用于对比"
+              >
+                <input type="checkbox" checked={direct} onChange={(e) => setDirect(e.target.checked)} /> 按直击算（对比用，游戏里不会发生）
               </label>
             )}
           </UnitPicker>
@@ -341,7 +359,7 @@ export default function Calculator(): React.JSX.Element {
                         })
                       }
                       open={open === i}
-                      fuse={fuseP ?? undefined}
+                      fuse={direct ? 'none' : (fuseP ?? undefined)}
                       onToggle={() => setOpen(open === i ? null : i)}
                     />
                   ))}
@@ -453,7 +471,7 @@ function StressPanel({
   const sim = useMemo(() => simulate(list, target, { limit: 90, sit }), [list, target, sit])
   // 近炸引信是全游戏唯一一处单发伤害自带随机的地方：贴脸炸最疼、擦边炸最不疼。
   // 有近炸弹参战就把最好和最坏两条血线也算出来，画成一条带子。
-  const hasFuse = sim.firing.some((f) => usesRadioFuse(f.ammo))
+  const hasFuse = sit.fuse !== 'none' && sim.firing.some((f) => usesRadioFuse(f.ammo))
   const best = useMemo(
     () => (hasFuse ? simulate(list, target, { limit: 90, sit: { ...sit, fuse: 'best' } }) : null),
     [hasFuse, list, target, sit]
@@ -618,7 +636,7 @@ function Row({
   open: boolean
   onToggle: () => void
   /** 近炸按哪一档：不给 = 平均，数字 = 滑条固定的起爆距离比例 */
-  fuse?: number
+  fuse?: number | 'none'
 }): React.JSX.Element {
   const r = e.result
   const a = e.best
@@ -695,10 +713,14 @@ function Row({
                       '按溅射衰减积分的平均伤害为 ' +
                       Math.round(fuseFactor(a) * 100) +
                       '%（游戏内预估常量为 33%）' +
-                      (fuse != null ? '。当前按滑条固定在距外壳 ' + toM(fuse * a.radioFuse) + ' m 起爆' : '')
+                      (fuse === 'none'
+                        ? '。当前按直击算（不乘近炸系数）'
+                        : fuse != null
+                          ? '。当前按滑条固定在距外壳 ' + toM(fuse * a.radioFuse) + ' m 起爆'
+                          : '')
                     }
                   >
-                    近炸 {toM(a.radioFuse)}m · ×{fuseFactor(a, fuse ?? 'avg')}
+                    近炸 {toM(a.radioFuse)}m · {fuse === 'none' ? '按直击' : '×' + fuseFactor(a, fuse ?? 'avg')}
                   </i>
                 )}
                 {a.intercept && <i className="tag warn">可被拦</i>}
