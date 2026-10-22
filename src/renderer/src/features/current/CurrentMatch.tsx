@@ -59,7 +59,8 @@ export default function CurrentMatch(): React.JSX.Element {
         </div>
       )}
 
-      {host.known && (
+      {/* 房主只在房间里有意义，开打之后就不显示了 */}
+      {host.known && !cur && (
         <div className="dim cm-note">
           {host.me ? (
             <>
