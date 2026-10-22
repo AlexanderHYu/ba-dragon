@@ -22,6 +22,10 @@ TransportAvailabilities……每一条都是 base64，解开后是
 "fhk3s0g3" + 16 字节 IV + AES-256-CBC 密文（PKCS7 补齐）
 ```
 
+游戏 1.2.1（2026-10，升级到 Unity 6）起，对象名后面、第一张表前面多了一个 4 字节整数；
+读的时候发现开头不是 base64 的 `fhk3s0g3` 就跳过它。资源里同时有几份 DataBaseCompiled
+（新版的「数据库快照」），取 Units 最多的那份。
+
 解出来是 JSON。卡组文件（`%USERPROFILE%\AppData\LocalLow\SteelBalalaikaStudio\BrokenArrow\Decks\*.dek`）
 用的是同一套格式，只是不套 base64。
 

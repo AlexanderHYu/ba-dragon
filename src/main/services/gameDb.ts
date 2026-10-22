@@ -70,6 +70,8 @@ export const WANTED_COMBAT = new Set([
 const ASSET_NODE = 'globalgamemanagers.assets'
 const OBJ_NAME = 'DataBaseCompiled'
 const MARKER = Buffer.from('fhk3s0g3')
+/** 表在资源里是 base64 存的，开头就是 MARKER 的 base64 */
+const B64_MARKER = Buffer.from(MARKER.toString('base64').slice(0, 10), 'ascii')
 /** 数据库对象在资源文件末尾，往前扫这么多就该找到了；找不到再扫全文件 */
 const TAIL_SCAN = 128 * 1024 * 1024
 
@@ -270,6 +272,9 @@ function readOne(fs: UnityFsArchive, node: FsNode, nameOffset: number, key: stri
   const cur = new Cursor(fs, node, nameOffset)
   let [name, off] = cur.string(0)
   if (name.toString('ascii') !== OBJ_NAME) throw new Error('对象名不匹配')
+  // 游戏 1.2.1（Unity 6）起，名字后面多了一个 4 字节整数，表才开始。
+  // 表都以 base64 的 fhk3s0g3 开头，不是的话就跳过这 4 字节（老格式照样能读）
+  if (!cur.string(off)[0].subarray(0, B64_MARKER.length).equals(B64_MARKER)) off += 4
   const raw: Record<string, unknown> = {}
   for (const field of FIELDS) {
     const [data, next] = cur.string(off)
@@ -405,6 +410,9 @@ export function tablesToData(t: GameTables): GameData {
   return { meta: { updatedAt: new Date().toISOString().slice(0, 10), stamp: t.stamp }, units, options, countries, specs }
 }
 
+/** 版本戳是「游戏文件大小:修改时间」，取修改时间比新旧 */
+const stampTime = (stamp: string | null | undefined): number => Number(String(stamp || '').split(':')[1]) || 0
+
 export class GameDbService {
   /** 本机实时解出来的那份（填了密钥才有）。没有就退回软件自带的 data.json。 */
   private local: GameData | null = null
@@ -470,6 +478,12 @@ export class GameDbService {
     }
     const cached = this.readCache()
     if (!cached) return false
+    // 软件自带的那份是从更新的游戏版本导出的（升级了软件、本机缓存还是老游戏的），就用自带的
+    if (hasBundled() && stampTime(BUNDLED.meta.stamp) > stampTime(cached.meta.stamp)) {
+      this.local = null
+      this.localCombat = null
+      return false
+    }
     this.local = cached
     this.localCombat = this.readCombatCache()
     return true
