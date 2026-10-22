@@ -382,6 +382,12 @@ a {
 .prow.me {
   background: var(--accent-soft);
 }
+.prow-lv {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-2);
+}
 .prow-me {
   display: inline-block;
   margin-left: 5px;

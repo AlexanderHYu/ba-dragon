@@ -79,6 +79,7 @@ export function registerIpc(s: Services): void {
       card.name = p.name || card.name
       card.staleElo = p.rating ?? null
       card.staleEloAt = p.updated_at ? Date.parse(p.updated_at) : null
+      card.level = p.level ?? null
       return card
     })
   })

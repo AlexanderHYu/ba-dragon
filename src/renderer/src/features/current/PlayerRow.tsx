@@ -96,6 +96,11 @@ export default function PlayerRow({
       </div>
       <div className="name">
         {card.name || card.id}
+        {card.level != null && (
+          <span className="prow-lv" title="账号等级">
+            Lv.{card.level}
+          </span>
+        )}
         {me && <span className="prow-me">我</span>}
         {loading && <span className="spin" style={{ marginLeft: 6 }} />}
         {card.infoState === 'error' && (

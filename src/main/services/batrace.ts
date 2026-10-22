@@ -207,7 +207,7 @@ export class BatraceClient {
   searchPlayers(
     q: string,
     limit = 20
-  ): Promise<{ players?: { id: number | string; name: string; rating?: number; rating_games?: number; updated_at?: string }[] }> {
+  ): Promise<{ players?: { id: number | string; name: string; level?: number; rating?: number; rating_games?: number; updated_at?: string }[] }> {
     return this.get(
       `/api/players/search?q=${encodeURIComponent(q)}&limit=${limit}`,
       `search:${q}:${limit}`,
