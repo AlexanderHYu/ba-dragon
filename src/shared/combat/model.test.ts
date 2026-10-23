@@ -938,3 +938,33 @@ describe('反辐射 / 激光不吃干扰弹', () => {
     expect(ignoresCountermeasures(normal)).toBe(false)
   })
 })
+
+describe('班组武器的射击节奏', () => {
+  const ready = Object.keys(COMBAT.units || {}).length > 0
+  // Troopers（5 个人各背一具 AT4，一人一发）打 T-72B 正面：打不死，能压红
+  const setup = () => {
+    const troopers = profileOf(701, [], COMBAT)!
+    const t72 = profileOf(9, [], COMBAT)!
+    const list = engage(troopers, t72, 150, 'front')
+    return { t72, list, sim: simulate(list, t72, { limit: 90 }) }
+  }
+
+  it.runIf(ready)('N 个人的一次性火箭筒是间隔 ÷N 依次打出，不是一下全出去', () => {
+    const { sim } = setup()
+    const at4 = sim.firing.find((f) => f.weapon.name.startsWith('AT4'))!
+    expect(at4.stock).toBe(5)
+    // 第一发在瞄准后（1~2 秒），之后每发隔 装填 ÷ 5 ≈ 2.2 秒，第 5 发要到 10 秒左右
+    expect(at4.dry!).toBeGreaterThan(8)
+    expect(at4.dry!).toBeLessThan(13)
+  })
+
+  it.runIf(ready)('弹药打光、目标恢复正常之后曲线就收尾，不跑满 90 秒', () => {
+    const { sim } = setup()
+    const end = sim.samples[sim.samples.length - 1].t
+    const calm = sim.events.filter((e) => e.kind === 'calm').pop()
+    expect(end).toBeLessThan(90)
+    // 最后一个「恢复」事件之后 2 秒收尾
+    if (calm) expect(end).toBeCloseTo(calm.t + 2, 0)
+    expect(sim.samples[sim.samples.length - 1].level).toBe(0)
+  })
+})

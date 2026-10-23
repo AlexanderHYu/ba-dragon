@@ -916,6 +916,17 @@ export function timeForShots(w: WeaponProfile, n: number): number {
   return Math.round(t * 10) / 10
 }
 
+/**
+ * 班组 N 个人拿同一把枪：游戏里不是 N 个人同时打，而是每两发之间的间隔 ÷ N
+ * （`CalculateWeaponTimeTillNextShot` 尾巴的 `/= UsingAliveSoldierCount`）。
+ * 持续射击时总秒伤和「一次打 N 发」一样，但一次性武器（AT4 一人一发）差别很大：
+ * 5 个人的 AT4 是隔两秒多打一发，不是 1.5 秒五发一起出去。瞄准时间不除。
+ */
+export function squadPaced(w: WeaponProfile): WeaponProfile {
+  const n = Math.max(1, w.count)
+  return n === 1 ? w : { ...w, reload: w.reload / n, dtBurst: w.dtBurst / n, dtShot: w.dtShot / n }
+}
+
 /** 打一发平均占多少时间（弹匣打完 + 装填 + 瞄准，摊到每一发）——算秒伤用 */
 export function cycleTime(w: WeaponProfile): number {
   const bursts = Math.max(1, Math.ceil(w.mag / w.burst))
@@ -988,7 +999,7 @@ export function shotAt(
     splash,
     expected,
     shots,
-    seconds: shots == null ? null : timeForShots(wa, shots),
+    seconds: shots == null ? null : timeForShots(squadPaced(wa), shots),
     dps: r2((expected * w.count) / per),
     stressShots: a.stress > 0 ? Math.ceil(target.maxStress / a.stress) : null,
     inRange: dist >= a.minRange && dist <= range,
@@ -1243,6 +1254,8 @@ export function simulate(
     return {
       e,
       w,
+      // 射击节奏按班组人数摊开（见 squadPaced），每次只出一发
+      p: squadPaced(w),
       next: w.aim,
       left: Math.max(1, w.mag || 1),
       inBurst: burst,
@@ -1290,26 +1303,28 @@ export function simulate(
     g.left--
     if (g.left <= 0) {
       // 见 timeForShots：装填和连发是独立计时器，不额外加瞄准
-      g.next += Math.max(g.w.reload, g.w.dtBurst)
+      g.next += Math.max(g.p.reload, g.p.dtBurst)
       g.left = Math.max(1, g.w.mag || 1)
       g.inBurst = g.burst
     } else if (--g.inBurst <= 0) {
-      g.next += g.w.dtBurst
+      g.next += g.p.dtBurst
       g.inBurst = g.burst
     } else {
-      g.next += g.w.dtShot
+      g.next += g.p.dtShot
     }
   }
   const push = (t: number, kind: SimEvent['kind'], text: string): void => {
     events.push({ t: Math.round(t * 10) / 10, kind, text, hp: r2(Math.max(0, hp)), stress: Math.round(stress) })
   }
 
+  /** 弹药全打光、目标也恢复正常之后再记一小段就收尾，不空跑到上限 */
+  let endAt: number | null = null
   for (let t = 0; t <= limit + 1e-9 && deadAt == null; t += dt) {
     for (const g of guns) {
       while (g.next <= t + 1e-9 && deadAt == null && g.shots < g.stock) {
         const r = g.e.result as ShotResult
         const a = g.e.best as AmmoProfile
-        let n = g.w.count
+        let n = 1
         // APS 先拦一发：拦得住的弹种（导弹、反坦克火箭），冷却好了、备弹还有，这一发就没了。
         // 数据里所有 APS 都是 6 秒一发，所以齐射打过去只有第一发会被吃掉
         if (a.intercept && apsLeft > 0 && t >= apsReady) {
@@ -1393,6 +1408,16 @@ export function simulate(
     if (t - lastSample >= SAMPLE - 1e-9 || deadAt != null) {
       lastSample = t
       samples.push({ t: Math.round(t * 100) / 100, hp: r2(hp), stress: Math.round(stress), level, alive })
+    }
+
+    if (guns.length && guns.every((g) => g.shots >= g.stock)) {
+      // 还在黄/红就等它恢复；恢复正常（或者打光时根本没压住）之后再画 2 秒
+      if (level !== 0) endAt = null
+      else if (endAt == null) endAt = t + 2
+      if (endAt != null && t >= endAt - 1e-9) {
+        if (lastSample < t) samples.push({ t: Math.round(t * 100) / 100, hp: r2(hp), stress: Math.round(stress), level, alive })
+        break
+      }
     }
   }
 
