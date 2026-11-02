@@ -1,5 +1,5 @@
 // 龙区分模型：所有参数（各角色的「普通水平」、分项权重、汇总速度、分档、称号阈值）
-// 都来自真实数据拟合，由 scripts/fit-model.ts 生成，存在 model.json。这里只声明它的形状。
+// 都来自真实数据拟合，由 scripts/fit-outcome.ts、fit-trade.ts、fit-titles.ts 生成，存在 model.json。这里只声明它的形状。
 import raw from './model.json'
 
 /** 单位表的一项：[角色, 基础价格, 名称, 国家(1 俄 / 2 美), 单位库类别] */

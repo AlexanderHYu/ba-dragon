@@ -103,7 +103,7 @@ export class DeckService {
   }
 
   /**
-   * 打包卡组。only 给了就只打包这几副（前线那栏「备份选中」），不给就全部。
+   * 打包卡组。only 给了就只打包这几副（游戏卡组那栏「备份选中」），不给就全部。
    * name 不给就用时间戳。
    */
   backup(name?: string, only?: string[]): { file: string; decks: number } | { error: string } {
@@ -121,7 +121,7 @@ export class DeckService {
     return { file: out, decks: files.length }
   }
 
-  /** 删卡组（前线那栏的「删除所选」）。删之前先整体备份一份，免得手滑 */
+  /** 删卡组（游戏卡组那栏的「删除所选」）。删之前先整体备份一份，免得手滑 */
   deleteDecks(names: string[]): { removed: number; error?: string } {
     const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
     if (!want.length) return { removed: 0, error: '未选择卡组' }
@@ -138,7 +138,7 @@ export class DeckService {
     return { removed }
   }
 
-  /** 删备份包（后勤那栏的「删除所选」） */
+  /** 删备份包（备份包那栏的「删除所选」） */
   deleteBackups(names: string[]): { removed: number; error?: string } {
     const want = (names || []).map((x) => safeName(x)).filter(Boolean) as string[]
     if (!want.length) return { removed: 0, error: '未选择备份' }

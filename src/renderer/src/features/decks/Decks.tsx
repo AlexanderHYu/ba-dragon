@@ -1,4 +1,4 @@
-// 卡组工具：左边「前线卡组」（游戏目录里的 .dek），右边「后勤仓库」（备份出来的 .zip）。
+// 卡组工具：左边「游戏卡组」（游戏目录里的 .dek），右边「备份包」（备份出来的 .zip）。
 // 两边都是多选列表，选中后批量备份／部署／删除。删除有确认框。
 import { useCallback, useEffect, useState } from 'react'
 import type { BackupFile, DeckFile, DeckView } from '@shared/ipc'
@@ -242,7 +242,7 @@ export default function Decks(): React.JSX.Element {
         {msg && <div className={msg.ok ? 'deck-msg ok' : 'deck-msg bad'}>{msg.text}</div>}
 
         <div className="deck-grid">
-          {/* 前线：游戏目录里正在用的卡组 */}
+          {/* 游戏卡组：游戏目录里正在用的卡组 */}
           <section className="deck-col">
             <div className="deck-col-head">
               <h3>
@@ -341,7 +341,7 @@ export default function Decks(): React.JSX.Element {
             <div className="deck-tip dim">删除卡组前会自动备份，可从右侧备份包恢复。</div>
           </section>
 
-          {/* 后勤：备份出来的 zip 包 */}
+          {/* 备份包：备份出来的 zip 包 */}
           <section className="deck-col">
             <div className="deck-col-head">
               <h3>

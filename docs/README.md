@@ -10,7 +10,7 @@
 | [使用说明](../使用说明.md) | 各功能怎么用 | 现行 |
 | [algorithm.md](algorithm.md) | 龙区分和单局称号的算法 | 现行 |
 | [game-db.md](game-db.md) | 游戏数据解包、配装计算器的公式和依据 | 现行 |
-| [rating-design.md](rating-design.md) | 龙区分和称号的设计取舍、拟合数据 | 4.0.x 时期写的，代码路径和命令是旧仓库的 |
+| [rating-design.md](rating-design.md) | 龙区分和称号的设计取舍、拟合数据 | 历史记录：4.0.x 时期写的，代码路径和命令指向旧仓库 |
 | [rewrite-plan.md](rewrite-plan.md) | 从 4.0.x 重写的方案 | 历史记录，不代表现状 |
 
 版本变化记录在 [GitHub Releases](https://github.com/AlexanderHYu/ba-dragon/releases)。

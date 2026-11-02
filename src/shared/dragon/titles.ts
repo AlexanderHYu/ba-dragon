@@ -3,7 +3,7 @@
 // 称号只看「这一局对战局的实际作用」，不考虑 ELO —— 高分老哥带低分队友，功劳就是功劳。
 // 功劳最大 / 背锅也做成称号（大腿 / 背锅侠 / 掉线狗），外加各种突出表现（好的坏的都有）。
 // 「突出表现」的阈值来自真实数据：按每局最突出者的分布，让每种称号只在少数对局里出现
-// （model.json 的 titles，由 scripts/fit-model.ts 生成）。
+// （model.json 的 titles，由 scripts/fit-titles.ts 生成）。
 import { num, type MatchInfo, type PlayerData } from '../types/batrace'
 import { MODEL } from './model'
 import type { UnitMap } from './roles'
