@@ -8,6 +8,20 @@
 > 新版使用相同的 `appId` 和数据目录，安装后会覆盖旧版，设置和对局档案保留。
 > 由于版本号重新开始（1.0.0 < 4.0.3），4.0.x 的自动更新不会提示升级，首次需要手动安装。
 
+## 功能
+
+- **当前对局**：读取游戏日志，进入对局后自动查询名单里每个玩家的 ELO、胜率、K/D、常用单位和龙区分。
+- **玩家查询**：按名字或 ID 搜索，查看龙区分、兵种构成、地图表现、最近对局和相遇记录。
+- **单局复盘**：给每个玩家标记龙/区/泯并发称号，查看双方对比、玩家明细、单位数据和兵力曲线。
+- **对局档案**：保存打过的对局，可以打开复盘或播放录像。
+- **行车记录仪**：可选功能，自动录制每局并保存为 MP4，进度条上显示兵力曲线。
+- **单位效能**：按本地对局统计各单位和配装的死亡率、伤害、花费效率。
+- **配装计算器**：选择攻击方、目标和距离，计算命中、穿深、伤害、击杀时间和压制。
+- **卡组工具**：备份、恢复、删除卡组，填写密钥后可以查看内容。
+- **封禁监控**：提示你遇到过的玩家是否被封禁。
+
+各功能的用法见 [使用说明](使用说明.md)。
+
 ## 下载
 
 从 [Releases](https://github.com/AlexanderHYu/ba-dragon/releases/latest) 下载最新版：
@@ -47,21 +61,23 @@ npm run dist       # 打包 Windows 安装版和免安装版
 `BA_SMOKE_REC=1` 实际录制 6 秒并检查能否生成 MP4（需要 `vendor/ffmpeg`，屏幕不能处于休眠）；
 `BA_SMOKE_EVAL='<一段表达式>'` 在界面中执行一段 JS 并返回结果（用于测量尺寸、点击元素），执行后再截一张图。
 
-游戏大版本更新后，更新单位表：`npm run export-gamedata -- --key <密钥>`，然后提交 `src/shared/game/data.json`。
+游戏大版本更新后，更新单位表：`npm run export-gamedata -- --key <密钥>`，然后提交 `src/shared/game/data.json` 和 `combat.json`。
 
 ## 结构
 
 ```
 src/
-  shared/   纯逻辑，不碰 Electron，可单测：龙区分、称号、复盘、日志解析、IPC 契约与类型
-  main/     主进程：services（日志、BATrace、存储、录像）+ ipc（按域注册）
-  preload/  contextBridge
+  shared/   纯逻辑，不依赖 Electron：龙区分、称号、复盘、计算器、日志解析、IPC 类型
+  main/     主进程：日志、BATrace、本地库、录像、游戏数据
+  preload/  向界面暴露接口
   renderer/ React 界面，按功能分目录
 ```
 
+完整的文档目录和代码地图见 [docs/README.md](docs/README.md)，开发约定和发版步骤见 [CLAUDE.md](CLAUDE.md)。
+
 ## 说明
 
-龙区分和称号的算法、模型参数怎么来的，见 `docs/`。
+龙区分和称号的算法见 [docs/algorithm.md](docs/algorithm.md)，配装计算器的公式见 [docs/game-db.md](docs/game-db.md)。
 
 本项目最初 fork 自 Zola 的 [断箭蛆工具](https://github.com/Zawinzala/brokenarrow-log-maggot)（MIT）。
 本仓库为重写版本：龙区分、称号、单局复盘、自动更新为本项目编写；
