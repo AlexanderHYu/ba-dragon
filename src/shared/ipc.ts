@@ -183,6 +183,10 @@ export interface ArchiveItem {
     eloAfter: number | null
     score: number | null
     mark: string | null
+    /** 这局在哪队（0 = A，1 = B） */
+    team: number | null
+    /** 这局拿到的称号 id（最多 2 个） */
+    titles: string[]
   } | null
 }
 

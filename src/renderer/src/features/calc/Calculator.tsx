@@ -151,8 +151,7 @@ export default function Calculator(): React.JSX.Element {
     <div className="calc">
       <div className="card">
         <h2>
-          <span className="ico">🧮</span>
-          配装计算器
+          攻击方与目标
           <span className="dim">基于游戏本体算法{data.meta?.updatedAt ? ' · 数据 ' + data.meta.updatedAt : ''}</span>
         </h2>
 

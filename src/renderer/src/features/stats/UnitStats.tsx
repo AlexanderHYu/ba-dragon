@@ -102,8 +102,7 @@ export default function UnitStats(): React.JSX.Element {
   return (
     <div className="card">
       <h2>
-        <span className="ico">📊</span>
-        单位效能
+        单位统计
         <span className="dim">
           {res
             ? '仅统计本人出兵 · ' + res.matches + ' 局 · ' + res.records.toLocaleString('zh-CN') + ' 条出兵记录'
@@ -170,7 +169,7 @@ export default function UnitStats(): React.JSX.Element {
                   }
                 >
                   {label}
-                  {sort.key === k ? (sort.dir === -1 ? ' ▾' : ' ▴') : ''}
+                  {sort.key === k ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
                 </th>
               ))}
             </tr>

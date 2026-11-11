@@ -51,7 +51,7 @@ table.st-table thead th {
   margin-left: 6px;
   font-size: 10.5px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius);
   border: 1px solid var(--line-hi);
   color: var(--text-2);
 }

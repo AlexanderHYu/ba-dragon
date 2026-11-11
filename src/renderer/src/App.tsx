@@ -3,6 +3,7 @@ import { useStore } from './store'
 import Sidebar from './components/Sidebar'
 import UpdateBanner from './components/UpdateBanner'
 import Toasts from './components/Toasts'
+import PageBar from './components/PageBar'
 import CurrentMatch from './features/current/CurrentMatch'
 import Archive from './features/archive/Archive'
 import Replays from './features/replay/Replays'
@@ -58,14 +59,44 @@ export default function App(): React.JSX.Element {
         {page.name === 'archive' && <Archive onOpen={openReport} />}
         {page.name === 'replays' && <Replays />}
         {page.name === 'players' && <PlayerPanel />}
-        {page.name === 'stats' && <UnitStats />}
-        {page.name === 'calc' && <Calculator />}
-        {page.name === 'decks' && <Decks />}
-        {page.name === 'bans' && <Bans />}
-        {page.name === 'settings' && <Settings />}
+        {page.name === 'stats' && (
+          <Simple title="单位效能" note="档案里本人出兵的统计">
+            <UnitStats />
+          </Simple>
+        )}
+        {page.name === 'calc' && (
+          <Simple title="伤害计算">
+            <Calculator />
+          </Simple>
+        )}
+        {page.name === 'decks' && (
+          <Simple title="卡组">
+            <Decks />
+          </Simple>
+        )}
+        {page.name === 'bans' && (
+          <Simple title="封禁追踪" note="只看你遇到过的人">
+            <Bans />
+          </Simple>
+        )}
+        {page.name === 'settings' && (
+          <Simple title="设置">
+            <Settings />
+          </Simple>
+        )}
         {page.name === 'report' && <ReportPage fid={page.fid} onBack={() => setPage(back)} />}
       </main>
       <Toasts />
     </div>
+  )
+}
+
+/** 没有自己顶栏的页面：标题 + 一句说明，下面是原来的那几张卡片 */
+function Simple({ title, note, children }: { title: string; note?: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <>
+      <PageBar title={title}>{note && <span className="m">{note}</span>}</PageBar>
+      <div className="page">{children}</div>
+    </>
   )
 }

@@ -1,4 +1,6 @@
 // 封禁监控：启动时查一次，其余时候点「刷新」。只看我遇到过的人。
+import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react'
+import Ico from '../../components/Icon'
 import { useEffect, useState } from 'react'
 import type { BanResult } from '@shared/ipc'
 
@@ -13,8 +15,7 @@ export default function Bans(): React.JSX.Element {
   return (
     <div className="card">
       <h2>
-        <span className="ico">🛡</span>
-        封禁监控
+        你遇到过的被封禁玩家
         <span className="grow" />
         {data && <span className="dim">检查于 {new Date(data.checkedAt).toLocaleString('zh-CN')}</span>}
         <button
@@ -28,10 +29,16 @@ export default function Bans(): React.JSX.Element {
             setBusy(false)
           }}
         >
-          {busy ? '查询中…' : '↻ 刷新'}
+          <Ico i={IconRefresh} />
+          {busy ? '查询中…' : '刷新'}
         </button>
       </h2>
-      {err && <div style={{ color: 'var(--bad)' }}>{err}</div>}
+      {err && (
+        <div className="banner err" style={{ margin: '0 0 10px' }}>
+          <Ico i={IconAlertTriangle} />
+          {err}
+        </div>
+      )}
       {!data ? (
         <div className="empty">尚未检查。开启「启动时查一次封禁名单」后会在启动时自动检查。</div>
       ) : !data.met.length ? (

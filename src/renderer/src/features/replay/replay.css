@@ -1,60 +1,115 @@
-/* 行车记录仪：录像列表的可点行 + 内置播放器。
-   颜色只用 styles.css 里的变量，这里不新定义主题色。 */
+/* 录像页 + 内置播放器。颜色只用 styles.css 里的变量。 */
 
-/* ---------- 设置菜单（右上角 ⚙ 设置 点开） ---------- */
+/* ---------- 页面：左播放器，右列表 ---------- */
+.rec-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1050px) {
+  .rec-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.rec-main {
+  min-width: 0;
+}
+.rec-side {
+  min-width: 0;
+}
 button.rec-set-btn.open {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--sel-ink);
 }
 
-.rec-set {
+.recst {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
   padding: 10px 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
 }
 
+/* 列表：一行 = 一条录像 */
+.rl .replay-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line-2);
+  cursor: pointer;
+}
+.rl .replay-row:last-child {
+  border-bottom: none;
+}
+.rl .replay-row:hover {
+  background: var(--row-hover);
+}
+.rl .replay-row.active {
+  background: var(--sel-bg);
+  box-shadow: inset 2px 0 0 var(--sel);
+}
+.rl .x {
+  flex: 1;
+  min-width: 0;
+}
+.rl .x b {
+  display: block;
+  color: var(--text-hi);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl .x span {
+  font: 11px var(--mono);
+  color: var(--faint);
+}
+.rl .replay-row button {
+  padding: 3px 6px;
+  color: var(--faint);
+}
+
+/* ---------- 设置 ---------- */
+.rec-set-card {
+  margin-top: 14px;
+}
+.rec-set {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px 20px;
+}
 .rec-field {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
 }
 .rec-field > select {
   width: 100%;
 }
-
 .rec-label {
   font-size: 12px;
   color: var(--text-2);
 }
 .rec-val {
-  margin-left: 6px;
-  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+  font: 12px var(--mono);
+  color: var(--text-hi);
 }
 .rec-hint {
   font-size: 11.5px;
   line-height: 1.5;
 }
-
 .rec-range {
   width: 100%;
   padding: 0;
-  accent-color: var(--accent);
   background: none;
   border: none;
-  cursor: pointer;
 }
-
-.rec-est {
-  font-size: 12.5px;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
 .rec-dir {
   font-size: 11.5px;
   overflow: hidden;
@@ -63,31 +118,16 @@ button.rec-set-btn.open {
   max-width: 100%;
 }
 
-/* ---------- 列表：整行可点，点了就在卡片里开播放器 ---------- */
-tr.replay-row {
-  cursor: pointer;
-}
-tr.replay-row:hover > td {
-  background: var(--card-hi);
-  color: var(--text);
-}
-tr.replay-row.active > td {
-  background: var(--card-hi);
-}
-tr.replay-row.active > td:first-child {
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-
 /* ---------- 播放器 ---------- */
 .bplayer {
-  background: var(--bg-2);
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
   padding: 10px;
-  margin-bottom: 12px;
-  box-shadow: var(--shadow);
 }
-
+.bplayer.compact {
+  border: none;
+  padding: 0;
+}
 .bplayer-head {
   display: flex;
   align-items: center;
@@ -97,43 +137,38 @@ tr.replay-row.active > td:first-child {
 }
 .bplayer-head b {
   font-size: 13px;
+  color: var(--text-hi);
+  font-weight: 600;
 }
 .bplayer-head .grow {
   flex: 1;
 }
-
 .bplayer video {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 60vh;
-  background: #000;
-  border-radius: 8px;
+  max-height: 62vh;
+  background: var(--video-bg);
   cursor: pointer;
 }
 
-/* ---------- 进度条（兵力曲线铺在背景上） ---------- */
+/* 进度条（兵力差曲线铺在背景上） */
 .bplayer-bar {
   position: relative;
-  height: 12px;
+  height: 10px;
   margin-top: 8px;
-  background: var(--line);
+  background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
   overflow: visible;
   cursor: pointer;
   touch-action: none;
-  transition: border-color 0.12s;
 }
 .bplayer-bar.has-curve {
   height: 46px;
-  border-radius: 8px;
-  background: var(--card);
 }
 .bplayer-bar:hover {
   border-color: var(--line-hi);
 }
-
 .bplayer-curve {
   position: absolute;
   inset: 0;
@@ -141,39 +176,17 @@ tr.replay-row.active > td:first-child {
   height: 100%;
   pointer-events: none;
 }
-.bplayer-curve .line {
-  fill: none;
-  stroke-width: 1.5px;
-  stroke-linejoin: round;
-}
-.bplayer-curve .line.t0 {
-  stroke: var(--t0);
-}
-.bplayer-curve .line.t1 {
-  stroke: var(--t1);
-}
-.bplayer-curve .fill {
-  stroke: none;
-}
-.bplayer-curve .fill.t0 {
-  fill: color-mix(in srgb, var(--t0) 22%, transparent);
-}
-.bplayer-curve .fill.t1 {
-  fill: color-mix(in srgb, var(--t1) 22%, transparent);
-}
 .bplayer-curve .ev {
   stroke-width: 1px;
   stroke-dasharray: 3 2;
 }
 .bplayer-curve .ev.leave {
-  stroke: var(--bad);
+  stroke: var(--warn);
 }
 .bplayer-curve .ev.spike {
   stroke: var(--warn);
 }
-
-/* 损失最惨的那一分钟：整整一分钟，所以是一条带，左右两条边就是这一分钟的头和尾。
-   颜色跟着损失的那一队走（A 蓝 B 红）。 */
+/* 损失最多的那一分钟：一条带，颜色跟着损失的那一队走（A 蓝 B 红） */
 .bplayer-curve .ev-band .band {
   opacity: 0.16;
 }
@@ -193,7 +206,6 @@ tr.replay-row.active > td:first-child {
 .bplayer-curve .ev-band.t1 .edge {
   stroke: var(--t1);
 }
-
 /* 已播放的部分：压一层，不挡曲线 */
 .bplayer-played {
   position: absolute;
@@ -201,22 +213,19 @@ tr.replay-row.active > td:first-child {
   top: 0;
   bottom: 0;
   display: block;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-radius: 6px 0 0 6px;
+  background: color-mix(in srgb, var(--sel) 8%, transparent);
   pointer-events: none;
 }
 .bplayer-head-mark {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -2px;
+  bottom: -2px;
   width: 2px;
   margin-left: -1px;
   display: block;
-  background: var(--accent);
+  background: var(--sel);
   pointer-events: none;
 }
-
-/* 悬浮提示：贴在鼠标那一分钟上方 */
 .bplayer-tip {
   position: absolute;
   bottom: calc(100% + 6px);
@@ -224,29 +233,20 @@ tr.replay-row.active > td:first-child {
   display: flex;
   gap: 8px;
   white-space: nowrap;
-  background: var(--card);
+  background: var(--bg-3);
   border: 1px solid var(--line-hi);
-  border-radius: 6px;
   padding: 3px 8px;
-  font-size: 11.5px;
+  font: 11.5px var(--mono);
   color: var(--text-2);
-  box-shadow: var(--shadow);
   pointer-events: none;
   z-index: 3;
 }
-.bplayer-tip .t0 {
-  color: var(--t0);
-}
-.bplayer-tip .t1 {
-  color: var(--t1);
-}
-.bplayer-tip .bad {
-  color: var(--bad);
-}
+.bplayer-tip .bad,
 .bplayer-tip .warn {
   color: var(--warn);
 }
-/* ---------- 控制条 ---------- */
+
+/* 控制条 */
 .bplayer-ctrl {
   display: flex;
   align-items: center;
@@ -257,37 +257,32 @@ tr.replay-row.active > td:first-child {
   flex: 1;
 }
 .bplayer-ctrl button.play {
-  width: 38px;
-  text-align: center;
-  padding: 5px 0;
+  width: 36px;
+  justify-content: center;
+  padding: 4px 0;
 }
 .bplayer-time {
-  font-variant-numeric: tabular-nums;
+  font: 12px var(--mono);
   color: var(--text-2);
-  font-size: 12.5px;
   min-width: 92px;
 }
-
 .bplayer-rate {
   display: inline-flex;
-  gap: 4px;
+  border: 1px solid var(--line-hi);
 }
 .bplayer-rate button {
-  padding: 3px 8px;
-  font-size: 11.5px;
+  padding: 2px 8px;
+  font: 11.5px var(--mono);
+  border: none;
 }
 .bplayer-rate button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 600;
+  background: var(--sel);
+  color: var(--sel-ink);
 }
 .bplayer-rate button.active:hover {
-  background: color-mix(in srgb, var(--accent) 85%, white);
-  border-color: color-mix(in srgb, var(--accent) 85%, white);
-  color: var(--accent-ink);
+  background: var(--sel);
+  color: var(--sel-ink);
 }
-
 .bplayer-vol {
   display: inline-flex;
   align-items: center;
@@ -296,21 +291,16 @@ tr.replay-row.active > td:first-child {
 .bplayer-vol input[type='range'] {
   width: 80px;
   padding: 0;
-  accent-color: var(--accent);
   background: none;
   border: none;
-  cursor: pointer;
 }
 .bplayer-vol button {
-  padding: 4px 8px;
+  padding: 3px 7px;
 }
-
 .bplayer-note {
   margin-top: 6px;
   font-size: 11px;
 }
-
-/* 窄栏（卡片被放到右边一栏时）音量条先让位 */
 @media (max-width: 560px) {
   .bplayer-vol input[type='range'] {
     width: 54px;
@@ -320,13 +310,11 @@ tr.replay-row.active > td:first-child {
   }
 }
 
-
-/* 全屏播放：video 上的 max-height 必须解除，否则进了全屏画面还是只有 60vh 那么大 */
+/* 全屏：video 上的 max-height 必须解除，否则进了全屏画面还是只有 62vh */
 .bplayer:fullscreen,
 .bplayer.full {
   background: #000;
   border: none;
-  border-radius: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -340,7 +328,6 @@ tr.replay-row.active > td:first-child {
   max-height: none;
   height: auto;
   width: 100%;
-  border-radius: 0;
   object-fit: contain;
   background: #000;
 }
@@ -368,51 +355,27 @@ tr.replay-row.active > td:first-child {
   padding: 3px 9px;
 }
 
-
-/* ---------- 播放器占位 ---------- */
-/* 播放器一直占着这块地方：没在放的时候是个提示框，点一条录像就换成真的播放器，
-   位置和高度都不变，界面不会忽然弹出一块。 */
-.bplayer-slot {
-  margin-bottom: 12px;
-}
-.bplayer-slot .bplayer {
-  margin-bottom: 0;
-}
-
+/* 播放器占位：没在放的时候是个提示框，点一条录像就换成播放器，位置不跳 */
 .bplayer-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   aspect-ratio: 16 / 9;
-  max-height: 34vh;
-  background: var(--bg-2);
-  border: 1px dashed var(--line-hi);
-  border-radius: var(--radius);
-  color: var(--dim);
+  max-height: 62vh;
+  background: var(--video-bg);
+  border: 1px solid var(--line);
+  color: var(--faint);
   font-size: 12.5px;
   text-align: center;
   padding: 10px;
 }
 .bplayer-empty-ico {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
   border: 1px solid var(--line-hi);
   color: var(--text-2);
-  font-size: 15px;
-  padding-left: 3px;
-}
-
-/* 等高两栏里：录像列表吃掉剩下的高度，翻页条贴住底部 */
-.replay-wrap {
-  overflow: auto;
-}
-.cols.stretch .replay-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
 }

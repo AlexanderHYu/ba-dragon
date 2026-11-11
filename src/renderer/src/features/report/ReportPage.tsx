@@ -12,6 +12,7 @@ import PageBar from '../../components/PageBar'
 import Ico from '../../components/Icon'
 import { goodBad, scoreColor } from '../../components/scoreColor'
 import { useStore } from '../../store'
+import { TITLE_NAME } from '../../components/titleNames'
 import Player, { type PlayerApi } from '../replay/Player'
 import './report.css'
 
@@ -22,13 +23,6 @@ const ROLE_COLOR: Record<string, string> = {
 }
 const ROLE_NAME: Record<string, string> = {
   armor: '装甲', inf: '步兵', recon: '侦察', arty: '炮兵', aa: '防空', heli: '直升机', jet: '固定翼'
-}
-const TITLE_NAME: Record<string, string> = {
-  carry: '大腿', blame: '背锅侠', deserter: '掉线狗', tryhard: '带不动', passenger: '躺赢狗', lonewolf: '孤勇者',
-  reaper: '收割机', untouched: '保活能手', landlord: '地产大亨', artygod: '大炮兵主义', bandit: '土匪', canteen: '奶妈',
-  weightlifter: '举重冠军', killsteal: '抢人头', demolition: '拆迁队', courier: '快递员', refund: '七天无理由退货',
-  backstabbed: '被背刺', atm: '开送', scraper: '刮痧师傅', boxed: '落地成盒', camper: '蹲逼', convoy: '运输大队长',
-  freeloader: '吃白食', spender: '败家子', traitor: '内鬼', crash: '曼巴out'
 }
 
 /** 称号的说明（鼠标放上去看），{x} 换成这一局的数字 */

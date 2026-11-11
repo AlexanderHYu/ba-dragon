@@ -124,6 +124,7 @@
   --card: var(--bg);
   --card-hi: var(--bg-2);
   --card-3: var(--bg-3);
+  --card-2: var(--bg-2);
   --accent: var(--sel);
   --accent2: var(--sel);
   --accent-ink: var(--sel-ink);
@@ -659,7 +660,7 @@ a {
 /* 玩家一行 */
 .prow {
   display: grid;
-  grid-template-columns: 76px minmax(90px, 1.4fr) 58px 58px 52px 40px minmax(90px, 1.3fr);
+  grid-template-columns: 74px minmax(120px, 1.7fr) 52px 54px 48px 34px minmax(80px, 1.1fr);
   gap: 8px;
   align-items: center;
   padding: 7px 12px;
@@ -813,6 +814,13 @@ a {
 .v-dn::after {
   content: '\25BC';
   color: var(--faint);
+}
+/* 正负变化：正的绿，负的灰（不用红色，红色是 B 队） */
+.pos {
+  color: var(--ok);
+}
+.neg {
+  color: var(--dim);
 }
 /* 胜 / 负 */
 .res-win,

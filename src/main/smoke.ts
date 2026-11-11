@@ -144,9 +144,11 @@ export async function run(win: BrowserWindow): Promise<void> {
       // 搜到人的话点开他的详情截一张（玩家详情是整个界面里最重的一块）。
       // 要走界面自己的搜索：直接调 IPC 不会把结果放进界面状态
       if (process.env.BA_SMOKE_SEARCH) {
+        await win.webContents.executeJavaScript(`window.__goto && window.__goto('players')`)
+        await new Promise((r) => setTimeout(r, 400))
         await win.webContents.executeJavaScript(`(() => {
-          const input = document.querySelector('.card input[placeholder*="玩家名"]')
-          const btn = [...document.querySelectorAll('.card button')].find((b) => /搜索/.test(b.textContent || ''))
+          const input = document.querySelector('.pp-search input')
+          const btn = [...document.querySelectorAll('.pagebar button')].find((b) => /搜索/.test(b.textContent || ''))
           if (!input || !btn) return false
           const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
           setter.call(input, '${process.env.BA_SMOKE_SEARCH}')
@@ -156,20 +158,23 @@ export async function run(win: BrowserWindow): Promise<void> {
         })()`)
         await new Promise((r) => setTimeout(r, 3000))
         const hit = await win.webContents.executeJavaScript(
-          `(() => { const r = document.querySelector('.search-list .prow:not(.head)'); if (r) r.click(); return !!r })()`
+          // 只搜到一个人时会直接打开详情，不出搜索结果列表
+          `(() => { const r = document.querySelector('.search-list .prow:not(.head)'); if (r) r.click(); return !!r || !!document.querySelector('.pdetail') })()`
         )
         if (hit) {
           await new Promise((r) => setTimeout(r, 1200))
           writeFileSync(shot.replace(/\.png$/, '') + '-player.png', (await win.webContents.capturePage()).toPNG())
           // 往下滚一屏，看面板下半部分（档案 + 地图表现 + 战绩表）
           await win.webContents.executeJavaScript(
-            `(() => { const m = document.querySelector('.main'); if (m) m.scrollTop = m.scrollTop + 900; return true })()`
+            `(() => { const m = document.querySelector('.page'); if (m) m.scrollTop = m.scrollTop + 900; return true })()`
           )
           await new Promise((r) => setTimeout(r, 600))
           writeFileSync(shot.replace(/\.png$/, '') + '-player2.png', (await win.webContents.capturePage()).toPNG())
         }
       }
-      // 点开第一条录像，看播放器和兵力曲线渲染出来没有
+      // 点开第一条录像，看播放器和兵力曲线渲染出来没有（录像列表在「录像」页）
+      await win.webContents.executeJavaScript(`window.__goto && window.__goto('replays')`)
+      await new Promise((r) => setTimeout(r, 800))
       const opened = await win.webContents.executeJavaScript(`(() => {
         const row = document.querySelector('.replay-row')
         if (!row) return false
@@ -205,7 +210,8 @@ export async function run(win: BrowserWindow): Promise<void> {
         await win.webContents.executeJavaScript('document.exitFullscreen && document.exitFullscreen()', true)
         await new Promise((r) => setTimeout(r, 500))
       }
-      // 亮色配色也来一张
+      // 亮色配色也来一张（当前对局页）
+      await win.webContents.executeJavaScript(`window.__goto && window.__goto('current')`)
       await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'light'`)
       await new Promise((r) => setTimeout(r, 300))
       writeFileSync(shot.replace(/\.png$/, '') + '-light.png', (await win.webContents.capturePage()).toPNG())
@@ -229,7 +235,7 @@ export async function run(win: BrowserWindow): Promise<void> {
         })()`)
         await new Promise((r) => setTimeout(r, 700))
         out.ctxJump = await win.webContents.executeJavaScript(
-          `!!document.querySelector('.pdetail') || !!document.querySelector('.card .empty')`
+          `!!document.querySelector('.pdetail') || !!document.querySelector('.page .empty')`
         )
         // 回到复盘页继续截图
         await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
@@ -240,6 +246,18 @@ export async function run(win: BrowserWindow): Promise<void> {
         )
         await new Promise((r) => setTimeout(r, 800))
         writeFileSync(shot.replace(/\.png$/, '') + '-overview.png', (await win.webContents.capturePage()).toPNG())
+      }
+      // 逐页截图验收：BA_SMOKE_PAGES=archive,replays,players:light（冒号后面是配色，默认深色）
+      if (process.env.BA_SMOKE_PAGES) {
+        for (const spec of process.env.BA_SMOKE_PAGES.split(',').map((x) => x.trim()).filter(Boolean)) {
+          const [name, theme = 'dark'] = spec.split(':')
+          await win.webContents.executeJavaScript(
+            `(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme)}; window.__goto && window.__goto(${JSON.stringify(name)}); return true })()`
+          )
+          await new Promise((r) => setTimeout(r, 1500))
+          writeFileSync(shot.replace(/\.png$/, '') + '-page-' + name + '-' + theme + '.png', (await win.webContents.capturePage()).toPNG())
+        }
+        await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'dark'`)
       }
       out.shots = true
     }

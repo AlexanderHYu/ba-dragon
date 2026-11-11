@@ -56,12 +56,6 @@
   line-height: 1.7;
 }
 
-.pos {
-  color: var(--ok);
-}
-.neg {
-  color: var(--dim);
-}
 
 /* ---------- 概况：两队对垒条 ---------- */
 .rp-faceoff {

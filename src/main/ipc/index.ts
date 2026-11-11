@@ -119,6 +119,17 @@ export function registerIpc(s: Services): void {
     }
   })
 
+  /** 库里存的称号是 JSON 数组（id 列表）；旧数据可能是空的或坏的，一律当没有 */
+  const parseTitles = (raw: string | null): string[] => {
+    if (!raw) return []
+    try {
+      const v = JSON.parse(raw)
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
   // 对局档案：本地库里算过的 + 本次会话日志里打完但还没算的
   on('archive:list', () => {
     const rows = s.db.all<{
@@ -140,8 +151,9 @@ export function registerIpc(s: Services): void {
             team: number
             elo_before: number | null
             elo_after: number | null
+            titles: string | null
           }>(
-            'SELECT name, score, mark, team, elo_before, elo_after FROM match_player WHERE fid = ? AND pid IN (' +
+            'SELECT name, score, mark, team, elo_before, elo_after, titles FROM match_player WHERE fid = ? AND pid IN (' +
               [...localIds].map(() => '?').join(',') +
               ') LIMIT 1',
             [r.fid, ...localIds]
@@ -161,7 +173,9 @@ export function registerIpc(s: Services): void {
               eloBefore: mineRow.elo_before,
               eloAfter: mineRow.elo_after,
               score: mineRow.score,
-              mark: mineRow.mark
+              mark: mineRow.mark,
+              team: mineRow.team ?? null,
+              titles: parseTitles(mineRow.titles)
             }
           : null
       }

@@ -1,5 +1,7 @@
 // 卡组工具：左边「游戏卡组」（游戏目录里的 .dek），右边「备份包」（备份出来的 .zip）。
 // 两边都是多选列表，选中后批量备份／部署／删除。删除有确认框。
+import { IconCheck, IconDownload, IconEye, IconFolder, IconRefresh, IconTrash, IconTruck, IconUpload, IconX } from '@tabler/icons-react'
+import Ico from '../../components/Icon'
 import { useCallback, useEffect, useState } from 'react'
 import type { BackupFile, DeckFile, DeckView } from '@shared/ipc'
 import './decks.css'
@@ -73,7 +75,7 @@ function PickList({
               onClick={() => onChange(on ? sel.filter((n) => n !== r.name) : [...sel, r.name])}
             >
               <span className="deck-check" aria-hidden="true">
-                {on ? '✓' : ''}
+                {on && <Ico i={IconCheck} />}
               </span>
               <span className="deck-name">{r.name}</span>
               {r.badge && <span className="deck-badge">{r.badge}</span>}
@@ -87,7 +89,7 @@ function PickList({
                     onPeek(r.name)
                   }}
                 >
-                  👁
+                  <Ico i={IconEye} />
                 </button>
               )}
             </div>
@@ -110,7 +112,9 @@ function DeckContent({ view, onClose }: { view: DeckView; onClose: () => void })
           {view.cards} 张卡
         </span>
         <span className="grow" />
-        <button onClick={onClose}>✕</button>
+        <button onClick={onClose} title="关闭" aria-label="关闭">
+          <Ico i={IconX} />
+        </button>
       </div>
       {view.cats.map((c) => (
         <div key={c.key} className="deck-cat">
@@ -126,7 +130,7 @@ function DeckContent({ view, onClose }: { view: DeckView; onClose: () => void })
                 {!!it.loadout && <div className="dim deck-card-load">{it.loadout}</div>}
                 {it.transport && (
                   <div className="dim deck-card-load">
-                    🚚 {it.transport}
+                    <Ico i={IconTruck} /> {it.transport}
                     {it.transportCost ? '（' + it.transportCost + '）' : ''}
                   </div>
                 )}
@@ -178,10 +182,7 @@ export default function Decks(): React.JSX.Element {
     return (
       <>
         <div className="card">
-          <h2>
-            <span className="ico">🃏</span>
-            卡组工具
-          </h2>
+          <h2>卡组</h2>
           <div className="empty">正在读取卡组…</div>
         </div>
       </>
@@ -192,10 +193,7 @@ export default function Decks(): React.JSX.Element {
     return (
       <>
         <div className="card">
-          <h2>
-            <span className="ico">🃏</span>
-            卡组工具
-          </h2>
+          <h2>卡组</h2>
           <div className="deck-note">
             <p>未找到游戏卡组目录。</p>
             <p className="deck-path">{data.dir || '（路径为空）'}</p>
@@ -206,10 +204,12 @@ export default function Decks(): React.JSX.Element {
           </div>
           <div className="deck-actions">
             <button disabled={busy} onClick={() => void reload()}>
-              ↻ 刷新
+              <Ico i={IconRefresh} />
+              刷新
             </button>
             <button disabled={busy} onClick={() => void window.BA.openDeckDir('backups')}>
-              📂 打开备份目录
+              <Ico i={IconFolder} />
+              打开备份目录
             </button>
           </div>
         </div>
@@ -230,12 +230,13 @@ export default function Decks(): React.JSX.Element {
     <>
       <div className="card">
         <h2>
-          <span className="ico">🃏</span>
-          卡组工具
+          备份与部署
+          <span className="sub">游戏卡组和备份包</span>
           <span className="grow" />
           {busy && <span className="spin" />}
           <button disabled={busy} onClick={() => void reload()}>
-            ↻ 刷新
+            <Ico i={IconRefresh} />
+            刷新
           </button>
         </h2>
 
@@ -299,7 +300,8 @@ export default function Decks(): React.JSX.Element {
                   })
                 }
               >
-                ⬆ 备份选中
+                <Ico i={IconUpload} />
+                备份选中
               </button>
               <button
                 className="primary"
@@ -313,10 +315,12 @@ export default function Decks(): React.JSX.Element {
                   })
                 }
               >
-                ⬆ 备份全部
+                <Ico i={IconUpload} />
+                备份全部
               </button>
               <button disabled={busy} onClick={() => void window.BA.openDeckDir('decks')}>
-                📂 打开目录
+                <Ico i={IconFolder} />
+                打开目录
               </button>
               <button
                 className="danger"
@@ -335,7 +339,8 @@ export default function Decks(): React.JSX.Element {
                   })
                 }}
               >
-                🗑 删除所选
+                <Ico i={IconTrash} />
+                删除所选
               </button>
             </div>
             <div className="deck-tip dim">删除卡组前会自动备份，可从右侧备份包恢复。</div>
@@ -380,10 +385,12 @@ export default function Decks(): React.JSX.Element {
                   })
                 }}
               >
-                ⬇ 恢复到游戏
+                <Ico i={IconDownload} />
+                恢复到游戏
               </button>
               <button disabled={busy} onClick={() => void window.BA.openDeckDir('backups')}>
-                📂 打开目录
+                <Ico i={IconFolder} />
+                打开目录
               </button>
               <button
                 className="danger"
@@ -402,7 +409,8 @@ export default function Decks(): React.JSX.Element {
                   })
                 }}
               >
-                🗑 删除所选
+                <Ico i={IconTrash} />
+                删除所选
               </button>
             </div>
           </section>

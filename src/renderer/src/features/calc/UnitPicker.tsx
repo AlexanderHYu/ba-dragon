@@ -1,5 +1,7 @@
 // 选单位：一个铺开的浏览器，按国家 / 类别 / 专精筛，可以搜名字。
 // 选好之后下面是这个单位的配装槽位（默认按游戏的默认件选好）。
+import { IconChevronDown, IconX } from '@tabler/icons-react'
+import Ico from '../../components/Icon'
 import { useMemo, useState } from 'react'
 import { BUNDLED } from '@shared/game'
 import { U, type CombatData } from '@shared/game/combat'
@@ -94,7 +96,9 @@ export function UnitBrowser({
             显示变体和隐藏单位
           </label>
           <span className="grow" />
-          <button onClick={onClose}>✕</button>
+          <button onClick={onClose} title="关闭" aria-label="关闭">
+          <Ico i={IconX} />
+        </button>
         </div>
 
         <div className="ub-filters">
@@ -202,7 +206,7 @@ export default function UnitPicker({
         <button className="pick-name" onClick={() => setOpen(true)}>
           {profile ? profile.name : '选择单位'}
           <span className="dim"> {profile ? profile.cost + ' 分 · ' + CLASS_NAME[profile.klass] : ''}</span>
-          <span className="dim"> ▾</span>
+          <span className="dim"> <Ico i={IconChevronDown} /></span>
         </button>
       </div>
 

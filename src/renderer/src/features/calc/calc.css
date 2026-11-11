@@ -13,7 +13,7 @@
 .pick {
   background: var(--card-hi);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 10px 12px;
   position: relative;
 }
@@ -52,7 +52,7 @@ button.pick-name:hover {
   top: 36px;
   background: var(--card-3);
   border: 1px solid var(--line-hi);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 8px;
   box-shadow: var(--shadow);
 }
@@ -74,7 +74,7 @@ button.pick-name:hover {
   border: none;
   text-align: left;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-size: 12.5px;
 }
 .pick-items button:hover,
@@ -157,7 +157,7 @@ table.calc-table thead th {
   font-style: normal;
   font-size: 10px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius);
   border: 1px solid var(--line-hi);
   color: var(--text-2);
 }
@@ -216,7 +216,7 @@ table.calc-table thead th {
 .ub {
   background: var(--card);
   border: 1px solid var(--line-hi);
-  border-radius: 14px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
   width: min(1000px, 96vw);
   max-height: 86vh;
@@ -273,7 +273,7 @@ button.ub-item {
   border: none;
   text-align: left;
   padding: 4px 7px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-size: 12.5px;
 }
 button.ub-item:hover,
@@ -326,7 +326,7 @@ button.ub-item.on {
   font-size: 12.5px;
   padding: 8px 10px;
   background: var(--card-2);
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin-bottom: 8px;
 }
 
@@ -348,7 +348,7 @@ button.ub-item.on {
   margin-top: 8px;
   padding: 7px 10px;
   background: var(--card-2);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 12.5px;
   line-height: 1.6;
 }

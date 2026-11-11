@@ -1,5 +1,7 @@
 // 新版本横幅：安装版点「更新并重启」才下载，下完自动安装重开；免安装版提示去下载页。
 // 关掉后同一版本、同一阶段不再弹。
+import { IconDownload, IconX } from '@tabler/icons-react'
+import Ico from './Icon'
 import { useEffect, useState } from 'react'
 import type { UpdateInfo } from '@shared/ipc'
 
@@ -23,17 +25,18 @@ export default function UpdateBanner(): React.JSX.Element | null {
   if (info.mode === 'auto' && info.status === 'ready') {
     text = '正在关闭并安装新版本 ' + v + '…'
   } else if (info.mode === 'auto' && info.status === 'downloading') {
-    text = '⬇ 正在下载新版本 ' + v + '… ' + (info.percent || 0) + '%，下载完成后自动重启'
+    text = '正在下载新版本 ' + v + '… ' + (info.percent || 0) + '%，下载完成后自动重启'
   } else if (info.mode === 'auto') {
-    text = '🆕 新版本 ' + v + cur + '。设置和档案会保留。'
+    text = '新版本 ' + v + cur + '。设置和档案会保留。'
   } else if (info.portable) {
-    text = '🆕 新版本 ' + v + cur + '。免安装版不支持自动更新，请下载新 exe 替换旧文件（推荐使用安装版）。设置和档案会保留。'
+    text = '新版本 ' + v + cur + '。免安装版不支持自动更新，请下载新 exe 替换旧文件（推荐使用安装版）。设置和档案会保留。'
   } else {
-    text = '🆕 新版本 ' + v + cur + '。请下载安装包覆盖安装，设置和档案会保留。'
+    text = '新版本 ' + v + cur + '。请下载安装包覆盖安装，设置和档案会保留。'
   }
 
   return (
-    <div className="update-banner">
+    <div className="banner">
+      <Ico i={IconDownload} />
       <span className="grow">{text}</span>
       {info.mode === 'auto' && info.status === 'available' && !installing && (
         <button
@@ -51,7 +54,9 @@ export default function UpdateBanner(): React.JSX.Element | null {
           打开下载页
         </button>
       )}
-      <button onClick={() => setDismissed(stage)}>✕</button>
+      <button className="ghost" onClick={() => setDismissed(stage)} title="关闭" aria-label="关闭">
+        <Ico i={IconX} />
+      </button>
     </div>
   )
 }

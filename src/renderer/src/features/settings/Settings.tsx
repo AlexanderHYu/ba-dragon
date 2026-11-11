@@ -1,5 +1,7 @@
 // 设置：对着 4.0.3 那份设置来的——游戏目录、外观、查询、同步、录像管理、关于。
 // 设置文件和 4.0.x 是同一个 settings.json，两个版本能共存。
+import { IconFolder, IconRefresh } from '@tabler/icons-react'
+import Ico from '../../components/Icon'
 import { useEffect, useState } from 'react'
 import type { GameDbStatus } from '@shared/ipc'
 import { useStore } from '../../store'
@@ -57,7 +59,7 @@ export default function Settings(): React.JSX.Element {
   return (
     <>
       <div className="card">
-        <h2>📁 游戏目录</h2>
+        <h2>游戏目录</h2>
         <div className="stack">
           <div className="row wrap">
             <input readOnly value={String(config.gameDir || config.logDir || '（未设置）')} style={{ flex: 1, minWidth: 240 }} />
@@ -66,19 +68,22 @@ export default function Settings(): React.JSX.Element {
             </button>
             <button onClick={() => void window.BA.detectGameDir().then(afterDir)}>自动检测</button>
             <button disabled={!status?.logFound} onClick={() => void window.BA.openLogDir()}>
-              📂 打开日志文件夹
+              <Ico i={IconFolder} />
+          打开日志文件夹
             </button>
           </div>
           <div className="dim">
             选择断箭安装目录（…\steamapps\common\broken_arrow），日志目录自动识别。
             {status?.logDir ? '　当前日志目录：' + status.logDir : ''}
-            {status?.watching ? '　✅ 正在监听' : status?.logFound ? '　等待游戏日志' : ''}
+            {status?.watching ? '　正在监听' : status?.logFound ? '　等待游戏日志' : ''}
           </div>
         </div>
       </div>
 
       <div className="card">
-        <h2>🧩 游戏数据（配装名字 / 精确花费）</h2>
+        <h2>
+          游戏数据<span className="sub">配装名字、精确花费</span>
+        </h2>
         <div className="stack">
           <div className="dim">
             复盘中的配装名称（「配装 A」→「M1A1 FEP Trophy」）和精确花费来自游戏单位表。软件内置一份，游戏更新后可能略旧。
@@ -116,14 +121,15 @@ export default function Settings(): React.JSX.Element {
               }}
               title="游戏更新后重新读取单位表"
             >
-              ↻ 重新读取
+              <Ico i={IconRefresh} />
+            重新读取
             </button>
           </div>
           <div className={gdb?.source === 'local' ? 'lit-ok' : gdb?.error ? 'lit-bad' : 'dim'}>
             {gdb?.error
               ? '读取失败：' + gdb.error + '（暂用内置单位表）'
               : gdb?.source === 'local'
-                ? '✅ 本机单位表：' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
+                ? '本机单位表：' + gdb.units + ' 个单位、' + gdb.options + ' 套配装选项'
                 : gdb?.source === 'bundled'
                   ? '内置单位表（' +
                     (gdb.updatedAt || '未知日期') +
@@ -131,7 +137,7 @@ export default function Settings(): React.JSX.Element {
                     gdb.units +
                     ' 个单位）。填写密钥可读取本机最新版本'
                   : '无单位表，复盘花费为估算值'}
-            {gdb?.stale && '　⚠ 游戏已更新，请点「重新读取」'}
+            {gdb?.stale && '　游戏已更新，请点「重新读取」'}
           </div>
           <div className="dim" style={{ fontSize: 11.5 }}>
             读取结果会缓存，启动时不重复读取。游戏更新后需手动重新读取。
@@ -140,7 +146,7 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <div className="card">
-        <h2>🎨 外观</h2>
+        <h2>外观</h2>
         <div className="row">
           <span className="set-label">配色</span>
           {(
@@ -157,7 +163,7 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <div className="card">
-        <h2>🔍 查询与同步</h2>
+        <h2>查询与同步</h2>
         <div className="stack">
           <Switch
             checked={!!config.autoQueryCurrentMatch}
@@ -220,7 +226,7 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <div className="card">
-        <h2>📼 本地录像管理</h2>
+        <h2>本地录像管理</h2>
         <div className="stack">
           <div className="row wrap">
             <span className="set-label">保存目录</span>
@@ -228,7 +234,10 @@ export default function Settings(): React.JSX.Element {
             <button onClick={() => void window.BA.selectReplayDir().then(() => void window.BA.getConfig().then(setConfig))}>
               换目录
             </button>
-            <button onClick={() => void window.BA.openReplayFolder()}>📂 打开</button>
+            <button onClick={() => void window.BA.openReplayFolder()}>
+              <Ico i={IconFolder} />
+              打开
+            </button>
           </div>
           <div className="row wrap">
             <span className="dim">本地共 {replayCount ?? '…'} 个录像</span>
@@ -262,9 +271,9 @@ export default function Settings(): React.JSX.Element {
       </div>
 
       <div className="card about">
-        <h2>ℹ 关于</h2>
+        <h2>关于</h2>
         <p>
-          🐉 <b>龙区分类器</b> v{status?.version || ''} · 只读取游戏日志（GameLogs）和 BATrace 的公开接口，
+          <b>龙区分类器</b> v{status?.version || ''} · 只读取游戏日志（GameLogs）和 BATrace 的公开接口，
           <b>不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊。</b>
           <button
             style={{ marginLeft: 8 }}

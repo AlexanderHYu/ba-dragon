@@ -1,124 +1,163 @@
-/* 对局档案表：这张卡可能只有 ~600px 宽，所以列要压得住。颜色只用全局变量。 */
+/* 对局档案 */
 
-/* 一页 30 条：表格本身滚动，别把整页撑得没边；表头钉在顶上 */
-.archive-wrap {
-  overflow: auto;
-  max-height: 520px;
+/* 近期汇总：一排格子 */
+.ar-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
 }
-/* 在等高的两栏里：flex-basis 给 0，让这张表不去决定卡片多高（否则 30 条能把整页拉得很长），
-   而是反过来把右边那张卡剩下的高度吃满，表格自己滚。两张卡的底边就齐了。 */
-.cols.stretch .archive-wrap {
-  flex: 1 1 0;
-  min-height: 160px;
-  max-height: none;
+.ar-stats > div {
+  background: var(--bg);
+  padding: 10px 14px;
+  min-width: 0;
+}
+.ar-stats span {
+  font: 10px var(--mono);
+  color: var(--faint);
+  letter-spacing: 1px;
+}
+.ar-stats b {
+  display: block;
+  font: 20px/1.3 var(--mono);
+  color: var(--text-hi);
+  font-weight: normal;
+  margin-top: 3px;
+}
+.ar-stats small {
+  display: block;
+  font: 11px var(--mono);
+  color: var(--faint);
+  margin-top: 2px;
+}
+.ar-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+  margin-top: 4px;
+}
+.ar-spark i {
+  width: 6px;
+  display: block;
+}
+.ar-spark i.w {
+  height: 100%;
+  background: var(--text);
+}
+.ar-spark i.l {
+  height: 40%;
+  background: var(--line-hi);
+}
+.ar-marks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ar-marks em {
+  font: 13px var(--mono);
+  font-style: normal;
+  color: var(--text-hi);
+  margin-right: 8px;
+}
+.ar-marks .tag {
+  margin-right: 3px;
+}
+@media (max-width: 1100px) {
+  .ar-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-table.archive-t {
-  min-width: 560px;
+/* 筛选条 */
+.ar-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.ar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-hi);
+  padding: 0 8px;
+  color: var(--faint);
+  background: var(--bg-2);
+}
+.ar-search input {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  width: 180px;
 }
 
-table.archive-t thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--card);
+/* 表格 */
+.archive-t {
+  table-layout: auto;
 }
-
-/* 列：胜负 | 模式 | 龙区分 | 地图 | ELO | 账号 | 时间 | ▶
-   .t 默认靠右（首列靠左），这里把文字列（模式/地图/账号）扳回左对齐 */
-table.archive-t th:nth-child(2),
-table.archive-t td:nth-child(2),
-table.archive-t th:nth-child(4),
-table.archive-t td:nth-child(4),
-table.archive-t th:nth-child(6),
-table.archive-t td:nth-child(6) {
-  text-align: left;
-}
-
-table.archive-t tbody tr {
+.archive-t tbody tr {
   cursor: pointer;
 }
-table.archive-t tbody tr:hover {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+.archive-t td {
+  vertical-align: middle;
 }
-table.archive-t tbody tr:hover .archive-map,
-table.archive-t tbody tr:hover .archive-time {
-  color: var(--accent);
+.archive-t tr.ea td:first-child {
+  box-shadow: inset 3px 0 0 var(--t0);
+  padding-left: 12px;
 }
-
-.archive-time {
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
+.archive-t tr.eb td:first-child {
+  box-shadow: inset 3px 0 0 var(--t1);
+  padding-left: 12px;
+}
+.archive-t th:first-child,
+.archive-t td:first-child {
+  padding-left: 12px;
+}
+.page table.t.archive-t th,
+.page table.t.archive-t td {
+  text-align: left;
+}
+.archive-map,
+.archive-account,
+.ar-text {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif !important;
 }
 .archive-map {
-  max-width: 150px;
+  color: var(--text-hi) !important;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .archive-account {
-  max-width: 130px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--dim) !important;
 }
-
-/* ---------- 模式标签（对齐老版 .mode-tag：排位强调色、自定义警告色） ---------- */
-.archive-mode {
-  padding-right: 2px;
-}
-.mode-tag {
-  display: inline-block;
-  font-size: 11px;
-  line-height: 17px;
-  padding: 0 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--dim);
-  white-space: nowrap;
-}
-.mode-tag.ranked {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.mode-tag.custom {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
-}
-
-/* ---------- 行末尾的「播放这局录像」 ---------- */
-.archive-play {
-  width: 1%;
-  padding-left: 0;
-}
-button.archive-play-btn {
-  padding: 1px 7px;
-  font-size: 11px;
-  line-height: 17px;
-  color: var(--accent);
-}
-
-.archive-elo {
-  font-variant-numeric: tabular-nums;
+.ar-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .elo {
   white-space: nowrap;
 }
-.elo-arrow {
-  margin: 0 3px;
-}
 .elo-delta {
+  margin-left: 6px;
   font-size: 11.5px;
 }
-
-/* 再窄一点就把 ELO 的「赛前 →」收起来，只留赛后分和涨跌 */
-@media (max-width: 560px) {
-  .elo-arrow,
-  .elo > .dim:first-child {
-    display: none;
-  }
-}
-
-.archive-dur {
+.ar-acts {
+  text-align: right !important;
   white-space: nowrap;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
+}
+.ar-acts button {
+  padding: 2px 8px;
+  margin-left: 4px;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
 }
