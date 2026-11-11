@@ -2,21 +2,25 @@
 import { create } from 'zustand'
 import type { AppStatus, PlayerCard, QueryState, SessionState, Settings } from '@shared/ipc'
 
-/** 主界面 / 复盘整页 / 设置 */
-export type Page = { name: 'home' } | { name: 'report'; fid: string } | { name: 'stats' } | { name: 'calc' } | { name: 'settings' }
+/** 侧栏里的页面 */
+export type NavPage = 'current' | 'archive' | 'replays' | 'players' | 'stats' | 'calc' | 'decks' | 'bans' | 'settings'
+/** 侧栏页面 + 复盘整页（从档案、录像、上一局进入，带返回） */
+export type Page = { name: NavPage } | { name: 'report'; fid: string; tab?: string }
 
 interface State {
   config: Settings | null
   status: AppStatus | null
   session: SessionState | null
   query: QueryState
-  /** 玩家查询卡片里正在看的人 */
+  /** 玩家查询页正在看的人 */
   openPlayer: string | null
   /** 手动搜出来的人 */
   search: PlayerCard[]
   searching: boolean
   page: Page
-  /** 档案里点了 ▶：行车记录仪看到非空就播这一条，然后清空 */
+  /** 进复盘页之前在哪一页，「返回」回到这里 */
+  back: Page
+  /** 档案里点了播放：录像页看到非空就播这一条，然后清空 */
   playReplay: string | null
   setConfig: (c: Settings) => void
   setStatus: (s: AppStatus) => void
@@ -39,7 +43,8 @@ export const useStore = create<State>((set) => ({
   openPlayer: null,
   search: [],
   searching: false,
-  page: { name: 'home' },
+  page: { name: 'current' },
+  back: { name: 'archive' },
   playReplay: null,
   setConfig: (config) => set({ config }),
   setStatus: (status) => set({ status }),
@@ -57,7 +62,12 @@ export const useStore = create<State>((set) => ({
     }),
   setOpenPlayer: (openPlayer) => set({ openPlayer }),
   setSearch: (search, searching = false) => set({ search, searching }),
-  setPage: (page) => set({ page }),
+  setPage: (page) =>
+    set((s) => ({
+      page,
+      // 从别的页进复盘时记下来源；复盘里切标签不算
+      back: page.name === 'report' && s.page.name !== 'report' ? s.page : s.back
+    })),
   setPlayReplay: (playReplay) => set({ playReplay })
 }))
 

@@ -116,6 +116,16 @@ const C_SCORE = 200 // 摧毁/损失分的平滑量（避免 0 分时 log 爆掉
 const eloExpect = (own: number, opp: number, scale: number): number =>
   1 / (1 + Math.pow(10, (opp - own) / scale))
 
+/**
+ * 赛前预期胜率（A 队视角），和模型里逐场算 E 用同一个公式和尺度：两队平均 ELO 代进去。
+ * 开局前看不出谁会掉线，所以不扣掉线惩罚。任一队没有 ELO 时返回 null。
+ */
+export function teamWinExpect(eloA: number[], eloB: number[]): number | null {
+  if (!eloA.length || !eloB.length) return null
+  const avg = (a: number[]): number => a.reduce((s, v) => s + v, 0) / a.length
+  return eloExpect(avg(eloA), avg(eloB), MODEL.expect.scale)
+}
+
 export interface MatchFeatures {
   fid: string
   mapId: number | null

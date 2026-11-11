@@ -211,7 +211,7 @@ export async function run(win: BrowserWindow): Promise<void> {
       writeFileSync(shot.replace(/\.png$/, '') + '-light.png', (await win.webContents.capturePage()).toPNG())
       await win.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'dark'`)
       if (fid) {
-        await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}')`)
+        await win.webContents.executeJavaScript(`window.__openReport && window.__openReport('${fid}', 'players')`)
         await new Promise((r) => setTimeout(r, 1500))
         writeFileSync(shot.replace(/\.png$/, '') + '-report.png', (await win.webContents.capturePage()).toPNG())
         // 右键一个玩家：菜单要弹出来，点「调查羁绊」要跳回主界面并打开这个人
@@ -236,7 +236,7 @@ export async function run(win: BrowserWindow): Promise<void> {
         await new Promise((r) => setTimeout(r, 1200))
         // 总览页（双方对比横条那一页）也截一张
         await win.webContents.executeJavaScript(
-          `(() => { const b = [...document.querySelectorAll('.rp-tab')].find((x) => /总览/.test(x.textContent || '')); if (b) b.click(); return !!b })()`
+          `(() => { const b = [...document.querySelectorAll('.rp-tab')].find((x) => /概况/.test(x.textContent || '')); if (b) b.click(); return !!b })()`
         )
         await new Promise((r) => setTimeout(r, 800))
         writeFileSync(shot.replace(/\.png$/, '') + '-overview.png', (await win.webContents.capturePage()).toPNG())

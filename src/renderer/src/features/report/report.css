@@ -1,248 +1,295 @@
-/* 单局复盘（整页版）自己的样式。
-   排版抄 4.0.3 的 .mr-* 那一套（双方对比横条、全场之最网格、玩家表），
-   但颜色一律走 styles.css 里的主题变量，这里不写死颜色，深色/浅色两套主题都跟着变。
-   全部选择器都挂在 .rp 下面，不影响别的页面。 */
+/* 单局复盘（整页）自己的样式。颜色一律走 styles.css 里的主题变量，这里不写死颜色。
+   全部选择器都挂在 .rp / .rp-* 下面，不影响别的页面。 */
 
 .rp {
-  /* 本页自用的两档交互底色：用 --text 混出来，深色主题变亮、浅色主题变暗，两边都看得见 */
-  --rp-hover: color-mix(in srgb, var(--text) 9%, var(--card));
-  --rp-hit: color-mix(in srgb, var(--accent) 16%, var(--card));
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+}
+.rp > * {
+  max-width: 1500px;
 }
 
-/* ---------- 顶部一行：返回 + 标题 + 外链 ---------- */
-.rp-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-bottom: 10px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--line);
-}
-.rp-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-.rp-title .dim {
-  font-weight: 400;
-  font-size: 14px;
-}
-.rp-back:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* ---------- 标签页 ---------- */
+/* ---------- 标签页（在页面顶栏下面，横贯整页） ---------- */
 .rp-tabs {
+  height: 40px;
+  flex: none;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
-  flex-wrap: wrap;
+  padding: 0 20px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
 }
 .rp-meta {
-  font-size: 12px;
+  align-self: center;
+  font: 11px var(--mono);
+  color: var(--faint);
 }
-/* 主标签：老版那种下划线式（.mr-tab），不是色块按钮 */
 .rp-tab {
   background: none;
   border: none;
   border-radius: 0;
   color: var(--dim);
-  padding: 8px 14px;
-  font-size: 14px;
+  padding: 0 14px;
+  font-size: 13px;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 .rp-tab:hover:not(:disabled) {
-  background: var(--row-hover);
-  border-color: transparent;
-  color: var(--text-2);
+  background: none;
+  color: var(--text-hi);
 }
 .rp-tab.active {
-  background: none;
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 700;
-}
-.rp-tab.active:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 26%, var(--card));
-  border-color: var(--accent);
-  color: var(--accent);
+  color: var(--sel);
+  border-bottom-color: var(--sel);
 }
 
-/* 卡片里的小工具条（单位页的分队筛选） */
 .rp-subbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
 .rp-note {
-  font-size: 12px;
+  font-size: 11.5px;
+  color: var(--faint);
   flex: 1 1 320px;
   line-height: 1.7;
 }
-/* 卡片标题后面跟的那句灰字说明（老版 .mr-sec h4 .dim） */
-.rp .rp-sub {
-  font-weight: 400;
-  font-size: 12px;
-  margin-left: 4px;
+
+.pos {
+  color: var(--ok);
 }
-.rp-hint {
-  font-size: 12px;
-  margin-bottom: 8px;
+.neg {
+  color: var(--dim);
 }
 
-/* ---------- 总览：顶上一行摘要（老版对比表里没有的阵营/ELO/预期/掉线） ---------- */
-.rp-sum {
+/* ---------- 概况：两队对垒条 ---------- */
+.rp-faceoff {
+  display: grid;
+  grid-template-columns: 1fr 200px 1fr;
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.rp-side {
+  padding: 12px 18px 14px;
+  min-width: 0;
+}
+.rp-side.t0 {
+  background: var(--t0-tint);
+  border-top: 3px solid var(--t0);
+}
+.rp-side.t1 {
+  background: var(--t1-tint);
+  border-top: 3px solid var(--t1);
+  text-align: right;
+}
+.rp-side-h {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.rp-sum-team {
-  flex: 1 1 280px;
-  display: flex;
-  align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 13px;
 }
-.rp-sum-team .rp-sum-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: inherit;
+.rp-side.t1 .rp-side-h {
+  flex-direction: row-reverse;
 }
-.rp-sum-team .dim b {
-  color: var(--text);
+.rp-side-h > b {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
-.rp-sum-vs {
-  color: var(--dim);
-  font-weight: 800;
-  flex: 0 0 auto;
+.rp-side.t0 .rp-side-h > b {
+  color: var(--t0);
 }
-.rp-sum-gone {
-  color: var(--bad);
-  font-size: 12px;
+.rp-side.t1 .rp-side-h > b {
+  color: var(--t1);
 }
-
-/* 本局要点：整页宽了，窄屏一列、宽屏两列，省得一条条排到天边 */
-.rp-insights {
-  margin: 0;
-  padding-left: 18px;
-  columns: 1;
-  column-gap: 32px;
-  line-height: 1.8;
+.rp-gone {
+  font-size: 11.5px;
+  color: var(--warn);
 }
-.rp-insights li {
-  break-inside: avoid;
-  margin-bottom: 4px;
+.rp-side-kv {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font: 11px var(--mono);
+  color: var(--faint);
 }
-/* 好的绿、坏的红（老版 .win / .loss） */
-.rp-insights li.ins-good {
-  color: var(--good);
+.rp-side.t1 .rp-side-kv {
+  justify-content: flex-end;
 }
-.rp-insights li.ins-bad {
-  color: var(--bad);
+.rp-side-kv b {
+  display: block;
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--text-hi);
+  margin-top: 2px;
 }
-@media (min-width: 1000px) {
-  .rp-insights {
-    columns: 2;
+.rp-vs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-top: 3px solid var(--line-hi);
+  padding: 10px;
+}
+.rp-vs .p {
+  font: 10px var(--mono);
+  color: var(--faint);
+  letter-spacing: 2px;
+}
+.rp-vs .w {
+  font: 22px var(--mono);
+  margin: 4px 0 6px;
+}
+.rp-vs .wpbar .track {
+  width: 140px;
+  height: 5px;
+}
+@media (max-width: 900px) {
+  .rp-faceoff {
+    grid-template-columns: 1fr;
+  }
+  .rp-side.t1,
+  .rp-side.t1 .rp-side-kv {
+    text-align: left;
+    justify-content: flex-start;
+  }
+  .rp-side.t1 .rp-side-h {
+    flex-direction: row;
   }
 }
 
-/* ---------- 双方对比：横着的双色条（老版 .mr-cmp） ----------
-   一行三格：[左数值] [中间一条条，条上居中压着指标名] [右数值]。
-   条里左蓝右红，宽度按 a/(a+b)、b/(a+b) 分。 */
-.rp-cmp-list {
-  max-width: 820px;
-  margin: 0 auto;
+/* 本局要点：方块圆点，好的金色、差的虚线框 */
+.rp-insights {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
+.rp-insights li {
+  position: relative;
+  padding: 6px 0 6px 18px;
+  line-height: 1.6;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--text);
+}
+.rp-insights li:last-child {
+  border-bottom: none;
+}
+.rp-insights li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 13px;
+  width: 6px;
+  height: 6px;
+  background: var(--line-hi);
+}
+.rp-insights li.ins-good::before {
+  background: var(--gold);
+}
+.rp-insights li.ins-bad::before {
+  background: transparent;
+  border: 1px dashed var(--qu-line);
+}
+
+/* ---------- 双方对比 ---------- */
 .rp-cmp {
   display: grid;
-  grid-template-columns: 96px 1fr 96px;
+  grid-template-columns: 72px 1fr 72px;
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 10px;
-  margin: 5px 0;
-  font-size: 12.5px;
+  column-gap: 10px;
+  padding: 4px 0;
+  cursor: help;
+}
+.rp-cmp-l {
+  grid-column: 1 / 4;
+  font-size: 11.5px;
+  color: var(--dim);
 }
 .rp-cmp-a,
 .rp-cmp-b {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font: 12.5px var(--mono);
 }
 .rp-cmp-a {
   text-align: right;
   color: var(--t0);
 }
 .rp-cmp-b {
-  text-align: left;
   color: var(--t1);
 }
 .rp-cmp-bar {
-  position: relative;
   display: flex;
-  height: 20px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--card-hi);
-  cursor: help;
+  gap: 2px;
+  height: 8px;
 }
 .rp-cmp-bar i {
   display: block;
   height: 100%;
 }
 .rp-cmp-bar i.a {
-  background: color-mix(in srgb, var(--t0) 55%, transparent);
+  background: var(--t0);
 }
 .rp-cmp-bar i.b {
-  background: color-mix(in srgb, var(--t1) 50%, transparent);
-}
-.rp-cmp-bar em {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-style: normal;
-  font-size: 11.5px;
-  color: var(--text);
-  white-space: nowrap;
+  background: var(--t1);
 }
 
-/* 兵种构成：队名 + 通栏条（老版 .mr-roles） */
-.rp .rp-roles {
+/* 兵种构成：队名 + 通栏条 */
+.rp-roles {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 44px 1fr;
   align-items: center;
   gap: 10px;
-  margin: 6px 0;
+  margin: 7px 0;
   font-size: 12px;
 }
-.rp .rp-roles .legend {
+.rp-roles .legend {
   margin: 0;
 }
 
-/* 全场之最：网格排列（老版 .mr-bests） */
+/* 全场之最：两列，标签 · 名字 · 数字 */
 .rp-bests {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 6px 18px;
-  font-size: 13px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  column-gap: 18px;
+  font-size: 12.5px;
+}
+.rp-bests > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-2);
+  min-width: 0;
+}
+.rp-best-k {
+  color: var(--faint);
+  width: 76px;
+  flex: none;
+}
+.rp-best-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rp-bests b {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  font: 12.5px var(--mono);
+  color: var(--text-hi);
+  font-weight: normal;
 }
 
-/* ---------- 玩家表 / 单位表：撑满卡片 ---------- */
+/* ---------- 玩家表 / 单位表 ---------- */
+/* 表格贴满框，不留内边距 */
+.card.flush {
+  padding: 0;
+}
+.card.flush > h2 {
+  margin: 0;
+}
 .rp-scroll {
   width: 100%;
   overflow-x: auto;
@@ -251,8 +298,6 @@
   width: 100%;
   min-width: 100%;
 }
-/* 列宽让表格自己算（老版就是这样），放不下就横向滚动；
-   只有玩家名那一列允许换行，免得称号把表撑到天边 */
 .rp .rp-ptable th:nth-child(2),
 .rp .rp-ptable td:nth-child(2) {
   text-align: left;
@@ -260,36 +305,26 @@
 .rp .rp-prow > td:nth-child(2) {
   white-space: normal;
   min-width: 150px;
+  font-family: inherit;
 }
-/* 玩家表 / 单位表的文字层次：
-   次要数字压到 --text-2，第一列和加粗过的关键值留在 --text。 */
 .rp .rp-wide tbody td {
-  color: var(--text-2);
+  color: var(--text);
 }
 .rp .rp-wide tbody td b {
-  color: var(--text);
-  font-weight: 700;
-}
-.rp .rp-wide thead th {
-  color: var(--dim);
-  font-size: 11.5px;
-  letter-spacing: 0.03em;
+  color: var(--text-hi);
+  font-weight: 500;
 }
 .rp .rp-sort {
   cursor: pointer;
   user-select: none;
-  transition: background 0.12s, color 0.12s;
 }
 .rp .rp-sort:hover {
-  background: var(--rp-hover);
-  color: var(--text);
+  color: var(--text-hi);
 }
 .rp .rp-sort.sorted {
-  color: var(--accent);
+  color: var(--sel);
 }
-/* 展开的明细里那张小表：不排序、字更小 */
 .rp .rp-mini {
-  font-size: 12px;
   margin-top: 6px;
 }
 .rp .rp-mini th {
@@ -300,45 +335,38 @@
 .rp .rp-dg {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
-/* 名字后面跟的称号标签（老版 .mr-titles，另起一行排） */
+.rp .rp-dg b {
+  font: 13.5px var(--mono);
+}
+/* 名字后面的称号另起一行 */
 .rp .rp-titles {
   display: block;
-  margin-top: 2px;
-}
-.rp .rp-me {
-  display: inline-block;
-  margin-left: 5px;
-  font-size: 10px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  margin-top: 3px;
 }
 
 /* 玩家行：可点开明细 */
 .rp .rp-prow {
   cursor: pointer;
-  transition: background 0.12s;
 }
 .rp .rp-prow:hover > td {
-  background: var(--rp-hover);
+  background: var(--row-hover);
 }
 .rp .rp-prow.me > td {
-  background: var(--accent-soft);
+  background: var(--me-bg);
 }
 .rp .rp-prow.open > td {
-  background: var(--rp-hit);
+  background: var(--sel-bg);
 }
 .rp .rp-prow.open > td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--sel);
 }
-/* 展开的明细行不要再跟着高亮 */
 .rp .rp-detail-row > td {
-  padding: 10px 6px 16px;
+  padding: 12px 14px 16px 40px;
   background: var(--bg-2);
   white-space: normal;
+  font-family: inherit;
 }
 .rp .rp-detail-row:hover > td {
   background: var(--bg-2);
@@ -346,7 +374,9 @@
 .rp .rp-detail .kv {
   max-width: 900px;
 }
-/* 百分位 / 零碎事实（老版 .mr-parts、.mr-extra） */
+.rp .rp-detail .kv > div {
+  background: var(--bg-2);
+}
 .rp .rp-parts,
 .rp .rp-extra {
   display: flex;
@@ -357,13 +387,18 @@
   margin: 6px 0;
 }
 .rp .rp-parts b {
-  color: var(--text);
+  color: var(--text-hi);
+  font-weight: 500;
 }
 .rp-users {
   white-space: normal;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+}
+.rp-team-tag {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
 }
 
-/* 使用率条（老版 .mr-usage） */
+/* 使用率条 */
 .rp .rp-usage {
   display: inline-flex;
   align-items: center;
@@ -373,9 +408,8 @@
 }
 .rp .rp-usage i {
   display: inline-block;
-  height: 8px;
-  background: var(--accent);
-  border-radius: 2px;
+  height: 6px;
+  background: var(--text-2);
   min-width: 2px;
 }
 
@@ -386,6 +420,9 @@
 .rp .rp-chart svg {
   display: block;
   width: 100%;
+}
+.rp .rp-chart svg.seekable {
+  cursor: pointer;
 }
 .rp-chart-legend {
   margin: 0;
@@ -404,42 +441,29 @@
   align-items: flex-end;
   gap: 1px;
   height: 100%;
-  border-radius: 2px;
-  transition: background 0.12s;
 }
 .rp .lossbars .lb:hover {
-  background: var(--rp-hover);
+  background: var(--row-hover);
 }
 .rp .lossbars .lb i {
   flex: 1;
   display: block;
-  border-radius: 1px 1px 0 0;
   min-height: 1px;
 }
-
-/* ---------- 窄窗口 ---------- */
-@media (max-width: 760px) {
-  .rp-title {
-    font-size: 16px;
-    width: 100%;
-    order: 3;
-  }
-  .rp-cmp {
-    grid-template-columns: 70px 1fr 70px;
-    gap: 6px;
-    font-size: 11.5px;
-  }
-  .rp-sum-vs {
-    display: none;
-  }
+.rp-video .bplayer {
+  border: none;
+  padding: 0;
 }
 
-/* 单位表里名字下面那行挂载（读到游戏数据才有） */
+/* 单位表里名字下面那行配装（读到游戏数据才有） */
 .rp .rp-loadout {
   font-size: 11px;
-  font-weight: 400;
   margin-top: 1px;
   max-width: 260px;
   white-space: normal;
   line-height: 1.35;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+}
+.rp .rp-wide td:first-child {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
 }

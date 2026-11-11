@@ -1,16 +1,21 @@
 import { useEffect } from 'react'
 import { useStore } from './store'
-import TopBar from './components/TopBar'
+import Sidebar from './components/Sidebar'
 import UpdateBanner from './components/UpdateBanner'
 import Toasts from './components/Toasts'
-import Home from './features/home/Home'
+import CurrentMatch from './features/current/CurrentMatch'
+import Archive from './features/archive/Archive'
+import Replays from './features/replay/Replays'
+import PlayerPanel from './features/players/PlayerPanel'
+import Decks from './features/decks/Decks'
+import Bans from './features/decks/Bans'
 import Settings from './features/settings/Settings'
 import UnitStats from './features/stats/UnitStats'
 import Calculator from './features/calc/Calculator'
 import ReportPage from './features/report/ReportPage'
 
 export default function App(): React.JSX.Element {
-  const { page, setPage, config, setConfig, setStatus, setSession, setQuery, patchCard } = useStore()
+  const { page, back, setPage, config, setConfig, setStatus, setSession, setQuery, patchCard } = useStore()
 
   useEffect(() => {
     void window.BA.getConfig().then(setConfig)
@@ -27,14 +32,14 @@ export default function App(): React.JSX.Element {
     }
   }, [setConfig, setStatus, setSession, setQuery, patchCard])
 
-  // 冒烟测试用：带 ?smoke=1 启动时，允许外部直接打开某一局的复盘（截图验收）
+  // 冒烟测试用：带 ?smoke=1 启动时，允许外部直接打开某一页（截图验收）
   useEffect(() => {
     if (!location.search.includes('smoke=1')) return
-    ;(window as unknown as { __openReport?: (fid: string) => void }).__openReport = (fid) =>
-      setPage({ name: 'report', fid })
+    const w = window as unknown as Record<string, unknown>
+    w.__openReport = (fid: string, tab?: string) => setPage({ name: 'report', fid, tab })
+    w.__goto = (name: string) => setPage({ name } as Parameters<typeof setPage>[0])
     // 没在打游戏也能把名单摆出来看排版（只在 smoke=1 下挂）
-    ;(window as unknown as { __fakeRoster?: (q: unknown) => void }).__fakeRoster = (q) =>
-      setQuery(q as Parameters<typeof setQuery>[0])
+    w.__fakeRoster = (q: unknown) => setQuery(q as Parameters<typeof setQuery>[0])
   }, [setPage, setQuery])
 
   // 配色跟着设置走
@@ -42,17 +47,24 @@ export default function App(): React.JSX.Element {
     document.documentElement.dataset.theme = String(config?.theme || 'dark')
   }, [config?.theme])
 
+  const openReport = (fid: string): void => setPage({ name: 'report', fid })
+
   return (
     <div className="app">
-      <TopBar />
-      <div className="main">
+      <Sidebar />
+      <main className="main">
         <UpdateBanner />
-        {page.name === 'home' && <Home onOpenReport={(fid) => setPage({ name: 'report', fid })} />}
-        {page.name === 'report' && <ReportPage fid={page.fid} onBack={() => setPage({ name: 'home' })} />}
+        {page.name === 'current' && <CurrentMatch />}
+        {page.name === 'archive' && <Archive onOpen={openReport} />}
+        {page.name === 'replays' && <Replays />}
+        {page.name === 'players' && <PlayerPanel />}
         {page.name === 'stats' && <UnitStats />}
         {page.name === 'calc' && <Calculator />}
+        {page.name === 'decks' && <Decks />}
+        {page.name === 'bans' && <Bans />}
         {page.name === 'settings' && <Settings />}
-      </div>
+        {page.name === 'report' && <ReportPage fid={page.fid} onBack={() => setPage(back)} />}
+      </main>
       <Toasts />
     </div>
   )

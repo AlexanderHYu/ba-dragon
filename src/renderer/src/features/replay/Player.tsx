@@ -6,7 +6,18 @@
 // 开战时间取 BATrace 的 StartTime，曲线只画在开战到结束那一段。
 // 算出来不合理（比如存盘时间不对）时退回按比例铺满整条进度条。
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  IconFolder,
+  IconMaximize,
+  IconMinimize,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconVolume,
+  IconVolumeOff,
+  IconX
+} from '@tabler/icons-react'
 import type { ReplayItem } from '@shared/ipc'
+import Ico from '../../components/Icon'
 import type { MatchReport } from '@shared/match'
 import './replay.css'
 
@@ -22,7 +33,26 @@ const clock = (s: number): string => {
 
 type Timeline = MatchReport['timeline']
 
-export default function Player({ item, onClose }: { item: ReplayItem; onClose: () => void }): React.JSX.Element {
+/** 给外面用的控制：复盘时间线点曲线时跳到对局的第几分钟 */
+export interface PlayerApi {
+  seekMinute: (min: number) => void
+}
+
+export default function Player({
+  item,
+  onClose,
+  apiRef,
+  onMinute,
+  compact
+}: {
+  item: ReplayItem
+  onClose: () => void
+  apiRef?: React.MutableRefObject<PlayerApi | null>
+  /** 播放位置换算成对局的第几分钟（从 0 开始，可带小数）；部署阶段是负数，没有曲线时是 null */
+  onMinute?: (min: number | null) => void
+  /** 嵌在别的卡片里：不显示自己的标题栏 */
+  compact?: boolean
+}): React.JSX.Element {
   const uid = useId().replace(/:/g, '')
   const video = useRef<HTMLVideoElement>(null)
   const bar = useRef<HTMLDivElement>(null)
@@ -151,6 +181,32 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
     }
   }, [tl, align])
 
+  // 对局第 m 分钟 ↔ 视频里的秒数（和进度条上的曲线用同一套对齐）
+  const n = tl?.minutes || 0
+  useEffect(() => {
+    if (!apiRef) return
+    apiRef.current = {
+      seekMinute: (m: number) => {
+        const v = video.current
+        if (!v || !(dur > 0) || n < 2) return
+        v.currentTime = Math.max(0, Math.min(dur, (align.a + (m / (n - 1)) * (align.b - align.a)) * dur))
+        if (v.paused) void v.play().catch(() => undefined)
+      }
+    }
+    return () => {
+      apiRef.current = null
+    }
+  }, [apiRef, align, dur, n])
+  useEffect(() => {
+    if (!onMinute) return
+    if (!(dur > 0) || n < 2) {
+      onMinute(null)
+      return
+    }
+    const f = (cur / dur - align.a) / Math.max(1e-6, align.b - align.a)
+    onMinute(f * (n - 1))
+  }, [onMinute, cur, dur, n, align])
+
   const ratioAt = (clientX: number): number => {
     const el = bar.current
     if (!el) return 0
@@ -176,17 +232,25 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
   const hoverVals = curve && hover ? curve.rows.map((row) => row[hover.i] ?? 0) : null
 
   return (
-    <div className={'bplayer' + (full ? ' full' : '')} ref={boxRef}>
-      <div className="bplayer-head">
-        <b>{item.map || '录像'}</b>
-        <span className="dim">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
-        <span className="grow" />
-        <button onClick={() => void window.BA.openReplayFolder(item.id)}>定位文件</button>
-        <button onClick={toggleFull} title="全屏（按 Esc 或再次点击退出）">
-          {full ? '⤢ 退出全屏' : '⛶ 全屏'}
-        </button>
-        <button onClick={onClose}>✕</button>
-      </div>
+    <div className={'bplayer' + (full ? ' full' : '') + (compact ? ' compact' : '')} ref={boxRef}>
+      {!compact && (
+        <div className="bplayer-head">
+          <b>{item.map || '录像'}</b>
+          <span className="dim mono">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+          <span className="grow" />
+          <button onClick={() => void window.BA.openReplayFolder(item.id)}>
+            <Ico i={IconFolder} />
+            定位文件
+          </button>
+          <button onClick={toggleFull} title="全屏（按 Esc 或再次点击退出）">
+            <Ico i={full ? IconMinimize : IconMaximize} />
+            {full ? '退出全屏' : '全屏'}
+          </button>
+          <button onClick={onClose} title="关闭播放器" aria-label="关闭播放器">
+            <Ico i={IconX} />
+          </button>
+        </div>
+      )}
 
       {broken ? (
         <div className="empty">无法打开录像，文件可能已删除或尚未生成完成。</div>
@@ -330,7 +394,7 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
             else v.pause()
           }}
         >
-          {playing ? '❚❚' : '▶'}
+          <Ico i={playing ? IconPlayerPause : IconPlayerPlay} />
         </button>
         <span className="bplayer-time">
           {clock(cur)} / {clock(dur)}
@@ -343,11 +407,14 @@ export default function Player({ item, onClose }: { item: ReplayItem; onClose: (
           ))}
         </span>
         <span className="grow" />
-        <button className="bplayer-full" onClick={toggleFull} title="全屏（Esc 退出）">
-          {full ? '⤢' : '⛶'}
+        <button className="bplayer-full" onClick={toggleFull} title={full ? '退出全屏' : '全屏（Esc 退出）'}>
+          <Ico i={full ? IconMinimize : IconMaximize} />
+          {full ? '退出全屏' : '全屏'}
         </button>
         <span className="bplayer-vol">
-          <button onClick={() => setVol(vol > 0 ? 0 : 1)}>{vol > 0 ? '🔊' : '🔇'}</button>
+          <button onClick={() => setVol(vol > 0 ? 0 : 1)} title={vol > 0 ? '静音' : '取消静音'}>
+            <Ico i={vol > 0 ? IconVolume : IconVolumeOff} />
+          </button>
           <input
             type="range"
             min={0}

@@ -13,12 +13,12 @@ const TIER_TEXT: Record<string, string> = {
   min: '泯'
 }
 
-/** tier -> 配色。龙是金色带光晕，区是红底白字，其余走灰/蓝两档 */
+/** tier -> 配色。龙实心金、强金描边、中/泯骨白、弱灰、区暗色斜纹（不用红色，红色是 B 队） */
 const TIER_CLASS: Record<string, string> = {
   dragon: 'dragon',
   solid: 'solid',
   average: 'min',
-  weak: 'min',
+  weak: 'weak',
   qu: 'qu',
   min: 'min'
 }

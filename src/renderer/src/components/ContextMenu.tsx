@@ -1,8 +1,11 @@
 // 右键菜单（老版 .ctx-menu 那个）：点别处、按 Esc、滚动都会关掉。
 import { useEffect, useRef } from 'react'
+import type { Icon as TablerIcon } from '@tabler/icons-react'
+import Ico from './Icon'
 
 export interface MenuItem {
   label: string
+  icon?: TablerIcon
   onClick: () => void
   danger?: boolean
 }
@@ -54,6 +57,7 @@ export default function ContextMenu({ menu, onClose }: { menu: MenuState | null;
             onClose()
           }}
         >
+          {it.icon && <Ico i={it.icon} />}
           {it.label}
         </button>
       ))}

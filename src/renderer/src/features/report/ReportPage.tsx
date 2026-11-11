@@ -1,19 +1,24 @@
-// 单局复盘：整页版（以前是右侧抽屉）。玩家、总览、单位、时间线。
-// 排版对齐 4.0.3 的 matchReport.js：总览是「要点 + 双方对比横条 + 兵种构成 + 全场之最」，
-// 玩家表是老版 MR_PCOLS 那一串列。数字都是主进程算好的（shared/match），这里只负责摆出来。
+// 单局复盘：整页。概况、玩家、单位、时间线四个标签，默认停在概况。
+// 概况顶上是两队对垒条，下面两列：左边本局要点、全场之最，右边双方对比、兵种构成。
+// 数字都是主进程算好的（shared/match），这里只负责摆出来。
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { IconCopy, IconExternalLink, IconPlayerPlay, IconRefresh, IconUserSearch } from '@tabler/icons-react'
+import type { ReplayItem } from '@shared/ipc'
 import type { MatchReport, ReportPlayer, ReportTeam } from '@shared/match'
 import Mark from '../../components/Mark'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import Flag from '../../components/Flag'
-import { scoreColor } from '../../components/scoreColor'
+import PageBar from '../../components/PageBar'
+import Ico from '../../components/Icon'
+import { goodBad, scoreColor } from '../../components/scoreColor'
 import { useStore } from '../../store'
+import Player, { type PlayerApi } from '../replay/Player'
 import './report.css'
 
-
+/** 兵种颜色：避开蓝、红、金（那三种分别是 A 队、B 队、龙） */
 const ROLE_COLOR: Record<string, string> = {
-  armor: '#6e9bd8', inf: '#63b06a', recon: '#c9a227', arty: '#d07b3f',
-  aa: '#b06ec4', heli: '#4bb3ad', jet: '#d1607a'
+  armor: 'var(--r-armor)', inf: 'var(--r-inf)', recon: 'var(--r-recon)', arty: 'var(--r-arty)',
+  aa: 'var(--r-aa)', heli: 'var(--r-heli)', jet: 'var(--r-jet)'
 }
 const ROLE_NAME: Record<string, string> = {
   armor: '装甲', inf: '步兵', recon: '侦察', arty: '炮兵', aa: '防空', heli: '直升机', jet: '固定翼'
@@ -68,11 +73,14 @@ const num = (n: number | null | undefined): string =>
 const sec = (s: number | null | undefined): string => {
   if (s == null) return '—'
   const m = Math.floor(s / 60)
-  return m + '′' + String(Math.round(s % 60)).padStart(2, '0') + '″'
+  return m + ':' + String(Math.round(s % 60)).padStart(2, '0')
 }
 const pct = (v: number | null | undefined): string => (v == null ? '—' : Math.round(v * 100) + '%')
 const teamName = (t: number): string => (t === 0 ? 'A 队' : 'B 队')
-/** 阵营：旗子 + 中文名（旗子比文字一眼就能认出来） */
+/** 正负数：正的绿，负的灰（不用红色，红色是 B 队） */
+const signCls = (v: number | null | undefined): string => (v == null || v === 0 ? '' : v > 0 ? 'pos' : 'neg')
+const signed = (v: number, f: (n: number) => string = num): string =>
+  (v > 0 ? '+' : v < 0 ? '−' : '') + f(Math.abs(v))
 /** 阵营：旗子 + 一个字。旗子是自己画的 SVG，Windows 上没有国旗 emoji 字形 */
 function Fac({ f }: { f: ReportTeam['faction'] }): React.JSX.Element | null {
   if (f !== 'RU' && f !== 'US') return null
@@ -83,20 +91,29 @@ function Fac({ f }: { f: ReportTeam['faction'] }): React.JSX.Element | null {
     </span>
   )
 }
+function Result({ won }: { won: boolean | null }): React.JSX.Element | null {
+  if (won == null) return null
+  return <span className={won ? 'res-win' : 'res-loss'}>{won ? '胜' : '负'}</span>
+}
 
-// 标签顺序照老版：玩家在最前，默认就打开玩家页
 const TABS = [
+  ['overview', '概况'],
   ['players', '玩家'],
-  ['overview', '总览'],
   ['units', '单位'],
   ['timeline', '时间线']
 ] as const
+type Tab = (typeof TABS)[number][0]
 
 export default function ReportPage({ fid, onBack }: { fid: string; onBack: () => void }): React.JSX.Element {
+  const { page, back, setPage } = useStore()
   const [report, setReport] = useState<MatchReport | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'overview' | 'players' | 'units' | 'timeline'>('players')
   const [attempt, setAttempt] = useState(0)
+  const [replay, setReplay] = useState<ReplayItem | null>(null)
+  // 当前标签记在页面状态里：从时间线跳去玩家页再「返回」时还停在原来的标签
+  const want = page.name === 'report' ? page.tab : undefined
+  const tab: Tab = TABS.some(([k]) => k === want) ? (want as Tab) : 'overview'
+  const setTab = (t: Tab): void => setPage({ name: 'report', fid, tab: t })
 
   useEffect(() => {
     let alive = true
@@ -112,35 +129,67 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
     }
   }, [fid, attempt])
 
+  // 这一局有没有录像：有就在时间线页嵌播放器
+  useEffect(() => {
+    let alive = true
+    void window.BA.listReplays().then((l) => {
+      if (alive) setReplay(l.find((r) => r.fid === fid) || null)
+    })
+    return () => {
+      alive = false
+    }
+  }, [fid])
+
+  const BACK: Record<string, string> = { replays: '录像', players: '玩家', current: '当前对局', archive: '档案' }
+
   return (
-    <div className="rp">
-      <div className="rp-head">
-        <button className="rp-back" onClick={onBack} title="返回上一页">
-          ← 返回
-        </button>
-        <h1 className="rp-title">
-          复盘 {report?.map || ''} <span className="dim">#{fid}</span>
-        </h1>
+    <>
+      <PageBar title={report?.map || '复盘'} onBack={onBack} backLabel={BACK[back.name] || '返回'}>
+        <span className="m">
+          对局 <b>#{fid}</b>
+        </span>
+        {report && (
+          <span className="m">
+            模式 <b>{report.rated ? '排位' : '自定义'}</b>
+          </span>
+        )}
+        {!!report?.durationSec && (
+          <span className="m">
+            时长 <b>{sec(report.durationSec)}</b>
+          </span>
+        )}
         <span className="grow" />
+        {replay && (
+          <button onClick={() => setTab('timeline')} title="在时间线页播放这一局的录像">
+            <Ico i={IconPlayerPlay} />
+            看录像
+          </button>
+        )}
         <button
           onClick={() => window.BA.openExternal('https://dash.batrace.top/match/' + fid)}
           title="在浏览器中打开本局的 BATrace 页面"
         >
-          BATrace ↗
+          <Ico i={IconExternalLink} />
+          BATrace
         </button>
-      </div>
+      </PageBar>
       {!report ? (
-        <div className="empty">
-          {error ? (
-            <>
-              {error}
-              <div style={{ marginTop: 12 }}>
-                <button onClick={() => setAttempt((n) => n + 1)}>重试</button>
-              </div>
-            </>
-          ) : (
-            <>计算中…（首次需下载对局数据）</>
-          )}
+        <div className="page">
+          <div className="empty">
+            {error ? (
+              <>
+                {error}
+                <div style={{ marginTop: 12 }}>
+                  <button onClick={() => setAttempt((n) => n + 1)}>
+                    <Ico i={IconRefresh} />
+                    重试
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>计算中…（首次需下载对局数据）</>
+            )}
+          </div>
         </div>
       ) : (
         <>
@@ -151,29 +200,28 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
               </button>
             ))}
             <span className="grow" />
-            <span className="dim rp-meta">
-              {report.durationSec ? sec(report.durationSec) : ''} ·{' '}
-              {report.startTime ? new Date(report.startTime).toLocaleString('zh-CN') : ''}
-            </span>
+            <span className="rp-meta">{report.startTime ? new Date(report.startTime).toLocaleString('zh-CN') : ''}</span>
           </div>
-          {tab === 'overview' && <Overview r={report} />}
-          {tab === 'players' && <Players r={report} />}
-          {tab === 'units' && <Units r={report} />}
-          {tab === 'timeline' && <Timeline r={report} />}
+          <div className="page rp">
+            {tab === 'overview' && <Overview r={report} />}
+            {tab === 'players' && <Players r={report} />}
+            {tab === 'units' && <Units r={report} />}
+            {tab === 'timeline' && <Timeline r={report} replay={replay} />}
+          </div>
         </>
       )}
-    </div>
+    </>
   )
 }
 
 function RoleBar({ roles, small }: { roles: Record<string, number>; small?: boolean }): React.JSX.Element {
   return (
-    <div className="rolebar" style={{ height: small ? 14 : 20 }}>
+    <div className="rolebar" style={{ height: small ? 12 : 16 }}>
       {Object.entries(roles)
         .filter(([k, v]) => ROLE_NAME[k] && v > 0)
         .map(([k, v]) => (
           <i key={k} style={{ width: v + '%', background: ROLE_COLOR[k] }} title={ROLE_NAME[k] + ' ' + v + '%'}>
-            {v >= 4 ? v + '%' : ''}
+            {v >= 6 ? v + '%' : ''}
           </i>
         ))}
     </div>
@@ -193,20 +241,17 @@ function RoleLegend(): React.JSX.Element {
   )
 }
 
-// ---------- 总览 ----------
-// 老版 .mr-cmp：[左数值] [中间一条双色横条，条上压着指标名] [右数值]，宽度按 a/(a+b) 分。
+// ---------- 概况 ----------
+// 一行：指标名 [左数值] [蓝红双色条] [右数值]，宽度按 a/(a+b) 分
 function CmpBar({ label, a, b }: { label: string; a: number | null; b: number | null }): React.JSX.Element {
   const tot = (a || 0) + (b || 0) || 1
   return (
-    <div className="rp-cmp">
+    <div className="rp-cmp" title={label + '：' + teamName(0) + ' ' + num(a) + ' / ' + teamName(1) + ' ' + num(b)}>
+      <span className="rp-cmp-l">{label}</span>
       <span className="rp-cmp-a">{num(a)}</span>
-      <div
-        className="rp-cmp-bar"
-        title={label + '：' + teamName(0) + ' ' + num(a) + ' / ' + teamName(1) + ' ' + num(b)}
-      >
+      <div className="rp-cmp-bar">
         <i className="a" style={{ width: ((a || 0) / tot) * 100 + '%' }} />
         <i className="b" style={{ width: ((b || 0) / tot) * 100 + '%' }} />
-        <em>{label}</em>
       </div>
       <span className="rp-cmp-b">{num(b)}</span>
     </div>
@@ -227,28 +272,69 @@ const CMP_ROWS: [string, keyof ReportTeam][] = [
   ['缴获敌方补给', 'supplyCaptured']
 ]
 
-// 老版对比表里没有的（预期胜率 / 平均 ELO / 阵营 / 掉线）放在总览顶上做一行摘要
-function TeamSummary({ T }: { T: ReportTeam }): React.JSX.Element {
+/** 一队的平均单局龙区分，没算出来的人不算 */
+function avgScore(r: MatchReport, t: number): number | null {
+  const s = r.players.filter((p) => p.team === t && p.score != null).map((p) => p.score as number)
+  return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null
+}
+
+// 两队对垒条：左 A 右 B，中间赛前预期胜率
+function FaceOff({ r }: { r: MatchReport }): React.JSX.Element {
+  const [A, B] = r.teams
+  const side = (T: ReportTeam): React.JSX.Element => {
+    const s = avgScore(r, T.team)
+    const kv: [string, React.ReactNode][] = [
+      ['平均龙区分', s == null ? '—' : s.toFixed(1)],
+      ['平均 ELO', T.avgElo ?? '—'],
+      ['ELO 变化', T.eloDelta == null ? '—' : <span className={signCls(T.eloDelta)}>{signed(T.eloDelta, String)}</span>],
+      ['摧毁', num(T.D)],
+      ['损失', num(T.L)]
+    ]
+    // B 队在右边，数字从右往左排，和 A 队对称
+    const items = T.team === 1 ? [...kv].reverse() : kv
+    return (
+      <div className={'rp-side t' + T.team}>
+        <div className="rp-side-h">
+          <b>{teamName(T.team)}</b>
+          <Fac f={T.faction} />
+          <Result won={T.won} />
+          {!!T.gone.length && <span className="rp-gone">掉线 {T.gone.join('、')}</span>}
+        </div>
+        <div className="rp-side-kv">
+          {items.map(([k, v]) => (
+            <span key={k}>
+              {k}
+              <b>{v}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
   return (
-    <div className={'rp-sum-team t' + T.team}>
-      <b className="rp-sum-name">
-        {teamName(T.team)}
-        <Fac f={T.faction} />
-        {T.won ? ' 🏆' : ''}
-      </b>
-      <span className="dim">
-        平均 ELO <b>{T.avgElo ?? '—'}</b>
-        {' · '}赛前预期 <b>{pct(T.expected)}</b>
-        {T.eloDelta != null && (
+    <div className="rp-faceoff">
+      {side(A)}
+      <div className="rp-vs">
+        <div className="p">赛前预期</div>
+        {A.expected != null && B.expected != null ? (
           <>
-            {' · '}ELO{' '}
-            <b className={T.eloDelta > 0 ? 'lit-ok' : T.eloDelta < 0 ? 'lit-bad' : ''}>
-              {(T.eloDelta > 0 ? '+' : '') + T.eloDelta}
-            </b>
+            <div className="w">
+              <span className="t0">{pct(A.expected)}</span>
+              <span className="faint"> : </span>
+              <span className="t1">{pct(B.expected)}</span>
+            </div>
+            <span className="wpbar">
+              <span className="track">
+                <i style={{ width: A.expected * 100 + '%' }} />
+                <i />
+              </span>
+            </span>
           </>
+        ) : (
+          <div className="w faint">—</div>
         )}
-      </span>
-      {!!T.gone.length && <span className="rp-sum-gone">掉线 {T.gone.join('、')}</span>}
+      </div>
+      {side(B)}
     </div>
   )
 }
@@ -261,90 +347,85 @@ function Overview({ r }: { r: MatchReport }): React.JSX.Element {
   const best = (key: keyof ReportPlayer, fmt: (v: number) => React.ReactNode): React.ReactNode => {
     const ps = r.players.filter((p) => !p.afk && p[key] != null)
     const p = [...ps].sort((x, y) => (Number(y[key]) || 0) - (Number(x[key]) || 0))[0]
-    if (!p) return '—'
+    if (!p) return <span className="faint">—</span>
     return (
       <>
-        <span className={'t' + p.team}>{p.name}</span> <b>{fmt(Number(p[key]))}</b>
+        <span className={'rp-best-name t' + p.team}>{p.name}</span>
+        <b>{fmt(Number(p[key]))}</b>
       </>
     )
   }
   const BESTS: [string, keyof ReportPlayer, (v: number) => React.ReactNode][] = [
-    ['净交换最高', 'net', (v) => num(v)],
-    ['K/D 最高', 'kd', (v) => v],
-    ['伤害最高', 'dmg', (v) => num(v)],
-    ['出兵最多', 'unitsDeployed', (v) => v + ' 个'],
-    ['单位存活率最高', 'survival', (v) => v + '%'],
-    ['每点花费击杀分最高', 'dPerCost', (v) => v],
-    ['补给消耗最多', 'supply', (v) => num(v)],
-    ['占点最多', 'obj', (v) => v]
+    ['净交换', 'net', (v) => signed(v)],
+    ['K/D', 'kd', (v) => v],
+    ['伤害', 'dmg', (v) => num(v)],
+    ['出兵', 'unitsDeployed', (v) => v + ' 个'],
+    ['存活率', 'survival', (v) => v + '%'],
+    ['击杀分/花费', 'dPerCost', (v) => v],
+    ['补给消耗', 'supply', (v) => num(v)],
+    ['占点', 'obj', (v) => v]
   ]
 
   return (
     <>
-      <div className="card rp-sum">
-        <TeamSummary T={A} />
-        <span className="rp-sum-vs">⟷</span>
-        <TeamSummary T={B} />
-      </div>
-
-      {!!r.insights.length && (
-        <div className="card">
-          <h2>
-            <span className="ico">💡</span>本局要点
-          </h2>
-          <ul className="rp-insights">
-            {r.insights.map((i, n) => (
-              <li key={n} className={i.kind === 'good' ? 'ins-good' : i.kind === 'bad' ? 'ins-bad' : ''}>
-                {i.text}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="card">
-        <h2>
-          双方对比
-          <span className="dim rp-sub">
-            （左 {teamName(0)}，右 {teamName(1)}；花费按官方出兵分折算）
-          </span>
-        </h2>
-        <div className="rp-cmp-list">
-          {CMP_ROWS.map(([label, k]) => (
-            <CmpBar key={label} label={label} a={Number(A[k]) || 0} b={Number(B[k]) || 0} />
-          ))}
-          <CmpBar label="单位存活率（%）" a={surv(A)} b={surv(B)} />
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>
-          兵种构成<span className="dim rp-sub">（按出兵花费）</span>
-        </h2>
-        <div className="rp-roles">
-          <span className="t0">{teamName(0)}</span>
-          <RoleBar roles={A.roles} />
-        </div>
-        <div className="rp-roles">
-          <span className="t1">{teamName(1)}</span>
-          <RoleBar roles={B.roles} />
-        </div>
-        <div className="rp-roles">
-          <span />
-          <RoleLegend />
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>
-          全场之最<span className="dim rp-sub">（不含掉线/挂机玩家）</span>
-        </h2>
-        <div className="rp-bests">
-          {BESTS.map(([label, k, fmt]) => (
-            <div key={label}>
-              {label}：{best(k, fmt)}
+      <FaceOff r={r} />
+      <div className="cols even">
+        <div>
+          {!!r.insights.length && (
+            <div className="card">
+              <h2>本局要点</h2>
+              <ul className="rp-insights">
+                {r.insights.map((i, n) => (
+                  <li key={n} className={i.kind === 'good' ? 'ins-good' : i.kind === 'bad' ? 'ins-bad' : ''}>
+                    {i.text}
+                  </li>
+                ))}
+              </ul>
             </div>
-          ))}
+          )}
+          <div className="card">
+            <h2>
+              全场之最<span className="sub">不含掉线 / 挂机</span>
+            </h2>
+            <div className="rp-bests">
+              {BESTS.map(([label, k, fmt]) => (
+                <div key={label}>
+                  <span className="rp-best-k">{label}</span>
+                  {best(k, fmt)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="card">
+            <h2>
+              双方对比<span className="sub">左 A 队，右 B 队；花费按官方出兵分折算</span>
+            </h2>
+            <div className="rp-cmp-list">
+              {CMP_ROWS.map(([label, k]) => (
+                <CmpBar key={label} label={label} a={Number(A[k]) || 0} b={Number(B[k]) || 0} />
+              ))}
+              <CmpBar label="单位存活率（%）" a={surv(A)} b={surv(B)} />
+            </div>
+          </div>
+          <div className="card">
+            <h2>
+              兵种构成<span className="sub">按出兵花费</span>
+            </h2>
+            <div className="rp-roles">
+              <span className="t0">{teamName(0)}</span>
+              <RoleBar roles={A.roles} />
+            </div>
+            <div className="rp-roles">
+              <span className="t1">{teamName(1)}</span>
+              <RoleBar roles={B.roles} />
+            </div>
+            <div className="rp-roles">
+              <span />
+              <RoleLegend />
+            </div>
+          </div>
         </div>
       </div>
     </>
@@ -373,7 +454,7 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
     (p) => (
       <span>
         <b>{p.name}</b>
-        {p.me && <span className="rp-me">我</span>}
+        {p.me && <span className="me-tag">你</span>}
         {!!p.titles.length && (
           <span className="rp-titles">
             {p.titles.map((t) => (
@@ -395,8 +476,8 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
       ) : (
         <>
           {Math.round(p.eloAfter)}{' '}
-          <span className={p.eloAfter >= p.eloBefore ? 'lit-ok' : 'lit-bad'}>
-            {(p.eloAfter >= p.eloBefore ? '+' : '') + Math.round((p.eloAfter - p.eloBefore) * 10) / 10}
+          <span className={signCls(p.eloAfter - p.eloBefore)}>
+            {signed(Math.round((p.eloAfter - p.eloBefore) * 10) / 10, String)}
           </span>
         </>
       ),
@@ -405,11 +486,11 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
   [
     'net',
     '净交换',
-    (p) => <span className={p.net >= 0 ? 'lit-ok' : 'lit-bad'}>{(p.net >= 0 ? '+' : '') + num(p.net)}</span>,
+    (p) => <span className={signCls(p.net)}>{signed(p.net)}</span>,
     '摧毁分 − 损失分'
   ],
   ['D', '摧毁 / 损失', (p) => num(p.D) + ' / ' + num(p.L)],
-  ['kd', 'K/D', (p) => p.kd ?? '—', '摧毁分 ÷ 损失分'],
+  ['kd', 'K/D', (p) => <span className={goodBad(p.kd, 1.5, 0.67)}>{p.kd ?? '—'}</span>, '摧毁分 ÷ 损失分'],
   ['kills', '击杀 / 阵亡', (p) => p.kills + ' / ' + p.deaths],
   ['dmg', '伤害 / 承伤', (p) => num(p.dmg) + ' / ' + num(p.dmgTaken)],
   ['spent', '出兵', (p) => p.unitsDeployed + ' 个 · ' + num(p.spent), '出动次数（飞机按架次计）· 花费'],
@@ -452,7 +533,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
           }
         >
           {label}
-          {sort.key === k ? (sort.dir === -1 ? ' ▾' : ' ▴') : ''}
+          {sort.key === k ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
         </th>
       ))}
     </tr>
@@ -471,15 +552,13 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
           sort.dir
         )
         return (
-          <div className="card" key={t}>
+          <div className="card flush" key={t}>
             <h2 className={'t' + t}>
               {teamName(t)}
               <Fac f={T.faction} />
-              {T.won == null ? null : (
-                <span className={T.won ? 'lit-ok' : 'lit-bad'} style={{ marginLeft: 6 }}>
-                  {T.won ? '胜' : '负'}
-                </span>
-              )}
+              <Result won={T.won} />
+              <span className="grow" />
+              {avgScore(r, t) != null && <span className="sub mono">平均龙区分 {avgScore(r, t)?.toFixed(1)}</span>}
             </h2>
             <div className="rp-scroll">
               <table className="t rp-wide rp-ptable">
@@ -498,15 +577,21 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
                             title: p.name,
                             items: [
                               {
-                                label: '🔍 调查羁绊',
+                                label: '调查羁绊',
+                                icon: IconUserSearch,
                                 onClick: () => {
                                   setOpenPlayer(p.id)
-                                  setPage({ name: 'home' })
+                                  setPage({ name: 'players' })
                                 }
                               },
-                              { label: '📋 复制 ID', onClick: () => void navigator.clipboard.writeText(p.id) },
                               {
-                                label: '🌐 在 BATrace 打开',
+                                label: '复制 ID',
+                                icon: IconCopy,
+                                onClick: () => void navigator.clipboard.writeText(p.id)
+                              },
+                              {
+                                label: '在 BATrace 打开',
+                                icon: IconExternalLink,
                                 onClick: () => window.BA.openExternal('https://dash.batrace.top/player/' + p.id)
                               }
                             ]
@@ -681,7 +766,7 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
       )
     ],
     ['roleName', '兵种', (u) => <span className="dim">{u.roleName}</span>],
-    ['team', '队伍', (u) => <span className={'t' + u.team}>{teamName(u.team)}</span>],
+    ['team', '队伍', (u) => <span className={'rp-team-tag t' + u.team}>{teamName(u.team)}</span>],
     [
       'usage',
       '使用率',
@@ -716,7 +801,7 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
       'deathRate',
       '死亡率',
       (u) => (
-        <span className={(u.deathRate ?? 0) >= 80 ? 'lit-bad' : (u.deathRate ?? 100) <= 30 ? 'lit-ok' : ''}>
+        <span className={(u.deathRate ?? 0) >= 80 ? 'v-dn' : (u.deathRate ?? 100) <= 30 ? 'v-up' : ''}>
           {u.deathRate == null ? '—' : u.deathRate + '%'}
         </span>
       ),
@@ -738,17 +823,19 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
   return (
     <div className="card">
       <div className="rp-subbar">
-        {(
-          [
-            ['all', '全部'],
-            ['0', 'A 队'],
-            ['1', 'B 队']
-          ] as const
-        ).map(([k, label]) => (
-          <button key={k} className={'rp-tab' + (team === k ? ' active' : '')} onClick={() => setTeam(k)}>
-            {label}
-          </button>
-        ))}
+        <span className="seg">
+          {(
+            [
+              ['all', '全部'],
+              ['0', 'A 队'],
+              ['1', 'B 队']
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} className={team === k ? 'active' : ''} onClick={() => setTeam(k)}>
+              {label}
+            </button>
+          ))}
+        </span>
         <span className="dim rp-note">
           出兵：出动次数，飞机按架次计，返航后再出动计两次。使用率：出动价值（出兵 × 单价）占本队的比例。死亡率：
           阵亡 ÷ 出兵。回收：飞机返航、卡车撤回、开局出售，官方全额退款，不计花费。单位击杀分：按各单位击杀数分摊该玩家总击杀分的估算值
@@ -777,7 +864,7 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
                   }
                 >
                   {label}
-                  {sort.key === k ? (sort.dir === -1 ? ' ▾' : ' ▴') : ''}
+                  {sort.key === k ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
                 </th>
               ))}
             </tr>
@@ -818,9 +905,13 @@ function useBoxWidth(fallback: number): [React.RefObject<HTMLDivElement | null>,
   return [ref, w]
 }
 
-function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
+function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }): React.JSX.Element {
   const { minutes, field, loss, events } = r.timeline
   const [boxRef, W] = useBoxWidth(900)
+  // 有录像时上面嵌播放器：点曲线跳到那一分钟，曲线上画一条竖线跟着视频走
+  const player = useRef<PlayerApi | null>(null)
+  const [atMin, setAtMin] = useState<number | null>(null)
+  const [showVideo, setShowVideo] = useState(true)
   // 三种看法：兵力本身、双方差、每分钟的净变化（谁在推谁）
   const [mode, setMode] = useState<'field' | 'diff' | 'slope'>('field')
   const H = 260
@@ -863,22 +954,54 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
     slope: '每分钟净变化（正值为兵力增加）'
   }
 
+  // 鼠标位置 → 第几分钟（viewBox 宽度就是容器宽度，按比例换算）
+  const minuteAt = (e: React.MouseEvent<SVGSVGElement>): number => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const px = ((e.clientX - rect.left) / Math.max(1, rect.width)) * W
+    const f = (px - pad.l) / Math.max(1, W - pad.l - pad.r)
+    return Math.min(last, Math.max(0, Math.round(f * last)))
+  }
+  const canSeek = !!replay && showVideo
+
   return (
+    <>
+      {replay && (
+        <div className="card rp-video">
+          <h2>
+            本局录像
+            <span className="sub">点下方曲线跳到对应的那一分钟</span>
+            <span className="grow" />
+            <button onClick={() => setShowVideo(!showVideo)}>{showVideo ? '收起' : '展开'}</button>
+          </h2>
+          {showVideo && (
+            <Player
+              key={replay.id}
+              item={replay}
+              apiRef={player}
+              onMinute={setAtMin}
+              onClose={() => setShowVideo(false)}
+              compact
+            />
+          )}
+        </div>
+      )}
     <div className="card">
       <h2>
         {TITLE[mode]}
         <span className="grow" />
-        {(
-          [
-            ['field', '兵力'],
-            ['diff', '兵力差'],
-            ['slope', '变化率']
-          ] as const
-        ).map(([k, label]) => (
-          <button key={k} className={'rp-tab' + (mode === k ? ' active' : '')} onClick={() => setMode(k)}>
-            {label}
-          </button>
-        ))}
+        <span className="seg">
+          {(
+            [
+              ['field', '兵力'],
+              ['diff', '兵力差'],
+              ['slope', '变化率']
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} className={mode === k ? 'active' : ''} onClick={() => setMode(k)}>
+              {label}
+            </button>
+          ))}
+        </span>
         <span className="legend rp-chart-legend">
           {mode === 'diff' ? (
             <>
@@ -906,7 +1029,13 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
         </span>
       </h2>
       <div className="rp-chart" ref={boxRef}>
-        <svg viewBox={'0 0 ' + W + ' ' + H} width="100%" height={H}>
+        <svg
+          viewBox={'0 0 ' + W + ' ' + H}
+          width="100%"
+          height={H}
+          className={canSeek ? 'seekable' : undefined}
+          onClick={canSeek ? (e) => player.current?.seekMinute(minuteAt(e)) : undefined}
+        >
           {gridVals.map((v, i) => (
             <g key={i}>
               <line x1={pad.l} y1={y(v)} x2={W - pad.r} y2={y(v)} stroke="var(--line)" strokeDasharray="3 4" />
@@ -967,11 +1096,14 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
             }
             return (
               <g key={i}>
-                <line x1={x(e.min)} y1={pad.t} x2={x(e.min)} y2={H - pad.b} stroke="var(--bad)" strokeDasharray="2 3" />
+                <line x1={x(e.min)} y1={pad.t} x2={x(e.min)} y2={H - pad.b} stroke="var(--warn)" strokeDasharray="2 3" />
                 <title>{'第 ' + (e.min + 1) + ' 分钟 ' + teamName(e.team) + ' ' + e.text}</title>
               </g>
             )
           })}
+          {canSeek && atMin != null && atMin >= 0 && atMin <= last && (
+            <line x1={x(atMin)} y1={pad.t} x2={x(atMin)} y2={H - pad.b} stroke="var(--sel)" strokeWidth="1.5" />
+          )}
           {ticks.map((i) => (
             <text key={i} x={x(i)} y={H - 7} textAnchor="middle" fontSize="10" fill="var(--dim)">
               {i + 1}′
@@ -979,7 +1111,7 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
           ))}
         </svg>
       </div>
-      <h2 style={{ marginTop: 16 }}>每分钟损失</h2>
+      <h3 style={{ marginTop: 16 }}>每分钟损失</h3>
       <div className="lossbars">
         {Array.from({ length: minutes }, (_, i) => (
           <div
@@ -993,5 +1125,6 @@ function Timeline({ r }: { r: MatchReport }): React.JSX.Element {
         ))}
       </div>
     </div>
+    </>
   )
 }
