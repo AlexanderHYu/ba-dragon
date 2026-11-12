@@ -50,6 +50,8 @@ export interface DragonModel {
   titles: Record<string, number>
   titleDist: Record<string, { n: number; top: number[] }>
   titleFreq: Record<string, number>
+  /** 实力 ELO 的参数（scripts/fit-effective-elo.ts）；没有时实力 ELO = ELO */
+  effElo?: import('./effElo').EffEloParams
 }
 
 export const MODEL = raw as unknown as DragonModel
