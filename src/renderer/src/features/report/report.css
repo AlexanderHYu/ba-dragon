@@ -461,3 +461,163 @@
 .rp .rp-wide td:first-child {
   font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
 }
+
+/* ---------- 关键时刻 ---------- */
+.mo-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.mo-filter button {
+  padding: 2px 9px;
+  font-size: 12px;
+  color: var(--text);
+}
+.mo-filter button.active {
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--sel-ink);
+}
+.mo-filter button.none {
+  color: var(--faint);
+  border-style: dashed;
+}
+.mo-filter button em {
+  font: 10.5px var(--mono);
+  font-style: normal;
+  color: var(--gold-txt);
+  margin-left: 2px;
+}
+.mo-filter button.active em {
+  color: var(--sel-ink);
+}
+.mo-team {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 3px solid;
+}
+.mo-team.t0 {
+  border-color: var(--t0);
+}
+.mo-team.t1 {
+  border-color: var(--t1);
+}
+.mo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mo-list li {
+  display: grid;
+  grid-template-columns: 96px 86px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line-2);
+}
+.mo-list li:last-child {
+  border-bottom: none;
+}
+.mo-list li.pick {
+  cursor: pointer;
+}
+.mo-list li.pick:hover {
+  background: var(--row-hover);
+}
+.mo-list li.minor {
+  opacity: 0.7;
+}
+.mo-time {
+  color: var(--text-hi);
+  font-size: 12px;
+}
+.mo-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.mk-hl .mo-kind {
+  color: var(--gold-txt);
+}
+.mk-bl .mo-kind {
+  color: var(--dim);
+}
+.mk-wp .mo-kind {
+  color: var(--warn);
+}
+.mk-rc .mo-kind {
+  color: var(--r-recon);
+}
+.mo-text {
+  position: relative;
+  padding-left: 10px;
+  line-height: 1.6;
+}
+.mo-text small {
+  display: block;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.mo-edge {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+}
+.mo-edge.t0 {
+  background: var(--t0);
+}
+.mo-edge.t1 {
+  background: var(--t1);
+}
+.mo-empty {
+  color: var(--faint);
+  padding: 10px 4px;
+}
+.mo-note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.6;
+}
+
+/* 时间线图上的关键时刻标记 */
+.tl-mo line {
+  stroke-width: 3;
+}
+.tl-mo line.drop {
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  opacity: 0.6;
+}
+.tl-mo.highlight line,
+.tl-mo.highlight rect {
+  stroke: var(--gold);
+  fill: var(--gold);
+}
+.tl-mo.blunder line,
+.tl-mo.blunder rect {
+  stroke: var(--dim);
+  fill: var(--bg);
+}
+.tl-mo.blunder rect {
+  stroke-dasharray: 2 2;
+}
+.tl-mo.recon line,
+.tl-mo.recon rect {
+  stroke: var(--r-recon);
+  fill: var(--r-recon);
+}
+.tl-mo.minor rect {
+  width: 5px;
+  height: 5px;
+}
+.tl-mo.minor line.drop {
+  display: none;
+}

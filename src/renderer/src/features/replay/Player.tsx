@@ -18,7 +18,7 @@ import {
 } from '@tabler/icons-react'
 import type { ReplayItem } from '@shared/ipc'
 import Ico from '../../components/Icon'
-import type { MatchReport } from '@shared/match'
+import { clock as matchClock, topMoments, type MatchReport, type Moment } from '@shared/match'
 import './replay.css'
 
 const RATES = [0.5, 1, 2, 4]
@@ -33,23 +33,29 @@ const clock = (s: number): string => {
 
 type Timeline = MatchReport['timeline']
 
-/** 给外面用的控制：复盘时间线点曲线时跳到对局的第几分钟 */
+/** 给外面用的控制：复盘时间线点曲线、点关键时刻时跳到对局的第几秒 */
 export interface PlayerApi {
-  seekMinute: (min: number) => void
+  /** 跳到开战后第 t 秒（顺便开始播放） */
+  seekSec: (t: number) => void
+  /** 视频时长和对局数据都到了，能跳了 */
+  ready: () => boolean
 }
 
 export default function Player({
   item,
   onClose,
   apiRef,
-  onMinute,
+  onMatchSec,
+  moments,
   compact
 }: {
   item: ReplayItem
   onClose: () => void
   apiRef?: React.MutableRefObject<PlayerApi | null>
-  /** 播放位置换算成对局的第几分钟（从 0 开始，可带小数）；部署阶段是负数，没有曲线时是 null */
-  onMinute?: (min: number | null) => void
+  /** 播放位置换算成开战后第几秒；部署阶段是负数，没有对局数据时是 null */
+  onMatchSec?: (t: number | null) => void
+  /** 进度条上要标的关键时刻；不给就用这一局的全场重点 */
+  moments?: Moment[]
   /** 嵌在别的卡片里：不显示自己的标题栏 */
   compact?: boolean
 }): React.JSX.Element {
@@ -64,6 +70,7 @@ export default function Player({
   const [vol, setVol] = useState(1)
   const [rate, setRate] = useState(1)
   const [tl, setTl] = useState<Timeline | null>(null)
+  const [allMoments, setAllMoments] = useState<Moment[] | null>(null)
   const [hover, setHover] = useState<{ pct: number; i: number } | null>(null)
   // 这一局的开战时间（毫秒）和时长（秒），用来把曲线对到视频上
   const [span, setSpan] = useState<{ startMs: number; durSec: number } | null>(null)
@@ -82,12 +89,14 @@ export default function Player({
   useEffect(() => {
     let alive = true
     setTl(null)
+    setAllMoments(null)
     setSpan(null)
     if (item.fid) {
       void window.BA.getMatchReport(item.fid).then(
         (r) => {
           if (alive && r && !('error' in r)) {
             setTl(r.timeline)
+            setAllMoments(r.moments || [])
             setSpan(r.startTime && r.durationSec ? { startMs: r.startTime, durSec: r.durationSec } : null)
           }
         },
@@ -181,31 +190,42 @@ export default function Player({
     }
   }, [tl, align])
 
-  // 对局第 m 分钟 ↔ 视频里的秒数（和进度条上的曲线用同一套对齐）
-  const n = tl?.minutes || 0
+  // 开战后第 t 秒 ↔ 进度条上的位置（0~1），和曲线用同一套对齐：对局占 [a, b] 这一段
+  const matchDur = span?.durSec || Math.max(60, ((tl?.minutes || 1) - 1) * 60)
+  const ratioOfSec = (t: number): number => align.a + (t / matchDur) * (align.b - align.a)
+  const shownMoments = useMemo(() => moments ?? (allMoments ? topMoments(allMoments) : []), [moments, allMoments])
   useEffect(() => {
     if (!apiRef) return
     apiRef.current = {
-      seekMinute: (m: number) => {
+      seekSec: (t: number) => {
         const v = video.current
-        if (!v || !(dur > 0) || n < 2) return
-        v.currentTime = Math.max(0, Math.min(dur, (align.a + (m / (n - 1)) * (align.b - align.a)) * dur))
+        if (!v || !(dur > 0)) return
+        v.currentTime = Math.max(0, Math.min(dur, ratioOfSec(t) * dur))
         if (v.paused) void v.play().catch(() => undefined)
-      }
+      },
+      ready: () => dur > 0 && !!tl
     }
     return () => {
       apiRef.current = null
     }
-  }, [apiRef, align, dur, n])
+    // ratioOfSec 只依赖 align、matchDur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiRef, align, dur, matchDur, tl])
   useEffect(() => {
-    if (!onMinute) return
-    if (!(dur > 0) || n < 2) {
-      onMinute(null)
+    if (!onMatchSec) return
+    if (!(dur > 0) || !tl) {
+      onMatchSec(null)
       return
     }
-    const f = (cur / dur - align.a) / Math.max(1e-6, align.b - align.a)
-    onMinute(f * (n - 1))
-  }, [onMinute, cur, dur, n, align])
+    onMatchSec(((cur / dur - align.a) / Math.max(1e-6, align.b - align.a)) * matchDur)
+  }, [onMatchSec, cur, dur, tl, align, matchDur])
+
+  /** 鼠标停在进度条的这个位置（%）时，附近 20 秒内的关键时刻 */
+  const momentsAt = (pct: number): Moment[] => {
+    if (!tl) return []
+    const t = ((pct / 100 - align.a) / Math.max(1e-6, align.b - align.a)) * matchDur
+    return shownMoments.filter((m) => t >= m.t0 - 20 && t <= m.t1 + 20).slice(0, 3)
+  }
 
   const ratioAt = (clientX: number): number => {
     const el = bar.current
@@ -363,6 +383,13 @@ export default function Player({
           </svg>
         )}
         <i className="bplayer-played" style={{ width: played + '%' }} />
+        {/* 关键时刻：进度条上方一排小标记，颜色和复盘页一致（高光金、犯罪虚线灰、大量阵亡队伍色、侦察青） */}
+        {!!tl &&
+          shownMoments.map((m, k) => {
+            const l = ratioOfSec(m.t0) * 100
+            const w = Math.max(0.5, (ratioOfSec(m.t1) - ratioOfSec(m.t0)) * 100)
+            return <i key={'m' + k} className={'bp-mo ' + m.kind + ' t' + m.team} style={{ left: l + '%', width: w + '%' }} />
+          })}
         <i className="bplayer-head-mark" style={{ left: played + '%' }} />
         {hover && hoverVals && (
           <div className="bplayer-tip" style={{ left: hover.pct + '%' }}>
@@ -380,6 +407,11 @@ export default function Player({
                   {ev.text}
                 </span>
               ))}
+            {momentsAt(hover.pct).map((m, k) => (
+              <span key={'m' + k} className={'mo ' + m.kind}>
+                {matchClock(m.t0)} {m.text}
+              </span>
+            ))}
           </div>
         )}
       </div>

@@ -13,3 +13,101 @@
   color: var(--text-hi);
   font-weight: 500;
 }
+
+/* 两队对比：中间大号赛前胜率 */
+.odds {
+  display: grid;
+  grid-template-columns: 1fr 220px 1fr;
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.odds-side {
+  padding: 12px 18px;
+  min-width: 0;
+}
+.odds-side.t0 {
+  background: var(--t0-tint);
+  border-top: 3px solid var(--t0);
+}
+.odds-side.t1 {
+  background: var(--t1-tint);
+  border-top: 3px solid var(--t1);
+  text-align: right;
+}
+.odds-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.odds-side.t0 .odds-name {
+  color: var(--t0);
+}
+.odds-side.t1 .odds-name {
+  color: var(--t1);
+}
+.odds-kv {
+  display: flex;
+  gap: 24px;
+  margin-top: 8px;
+  font: 11px var(--mono);
+  color: var(--faint);
+}
+.odds-side.t1 .odds-kv {
+  justify-content: flex-end;
+}
+.odds-kv b {
+  display: block;
+  font-size: 18px;
+  font-weight: normal;
+  color: var(--text-hi);
+  margin-top: 2px;
+}
+.odds-kv b i {
+  font-style: normal;
+}
+.odds-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-top: 3px solid var(--line-hi);
+  padding: 8px;
+}
+.odds-mid .p {
+  font: 10px var(--mono);
+  letter-spacing: 2px;
+  color: var(--faint);
+}
+.odds-mid .w {
+  font-size: 26px;
+  margin: 2px 0 6px;
+}
+.odds-mid .track {
+  width: 170px;
+  height: 6px;
+  display: flex;
+}
+.odds-mid .track i:first-child {
+  background: var(--t0);
+}
+.odds-mid .track i:last-child {
+  background: var(--t1);
+  flex: 1;
+}
+.odds-mid .note {
+  font-size: 10.5px;
+  color: var(--faint);
+  margin-top: 5px;
+}
+@media (max-width: 1000px) {
+  .odds {
+    grid-template-columns: 1fr;
+  }
+  .odds-side.t1,
+  .odds-side.t1 .odds-kv {
+    text-align: left;
+    justify-content: flex-start;
+  }
+}

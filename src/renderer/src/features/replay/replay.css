@@ -379,3 +379,47 @@ button.rec-set-btn.open {
   border: 1px solid var(--line-hi);
   color: var(--text-2);
 }
+
+/* ---------- 进度条上的关键时刻 ---------- */
+.bp-mo {
+  position: absolute;
+  top: -7px;
+  height: 4px;
+  display: block;
+  pointer-events: none;
+  min-width: 4px;
+}
+.bp-mo.highlight {
+  background: var(--gold);
+}
+.bp-mo.blunder {
+  border: 1px dashed var(--dim);
+  height: 5px;
+}
+.bp-mo.wipe.t0 {
+  background: var(--t0);
+}
+.bp-mo.wipe.t1 {
+  background: var(--t1);
+}
+.bp-mo.recon {
+  background: var(--r-recon);
+}
+.bplayer-tip {
+  flex-wrap: wrap;
+  max-width: 520px;
+  white-space: normal;
+}
+.bplayer-tip .mo {
+  flex-basis: 100%;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+}
+.bplayer-tip .mo.highlight {
+  color: var(--gold-txt);
+}
+.bplayer-tip .mo.blunder {
+  color: var(--text-2);
+}
+.bplayer-tip .mo.recon {
+  color: var(--r-recon);
+}

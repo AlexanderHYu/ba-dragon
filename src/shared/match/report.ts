@@ -29,6 +29,7 @@ import {
   type UnitEntry,
   type UnitMap
 } from '../dragon'
+import { findMoments, type Moment, type MomentOpts, type Sortie } from './moments'
 
 const median = (a: number[]): number | null => {
   if (!a.length) return null
@@ -187,6 +188,8 @@ export interface MatchReport {
     events: TimelineEvent[]
   }
   insights: Insight[]
+  /** 关键时刻：高光、犯罪、大量阵亡、侦察（全部；本局要点只挑最重要的几条，见 topMoments） */
+  moments: Moment[]
 }
 
 interface UnitAgg {
@@ -232,6 +235,8 @@ export interface ReportOpts {
   game?: GamePrices
   /** 上面那张表是哪来的，只影响复盘里的措辞 */
   gameSource?: 'local' | 'bundled'
+  /** 关键时刻的门槛（不给用默认值） */
+  moments?: Partial<MomentOpts>
 }
 
 /** 游戏价目表：单位 id → [名字, 基础价]；配装 id → [加价, 改名, 名字后缀, 显示名] */
@@ -318,6 +323,8 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     loss: new Array<number>(minutes).fill(0),
     deathsN: new Array<number>(minutes).fill(0)
   }))
+  // 每个单位每次出场，给关键时刻用（时间都换成相对开战的秒数）
+  const sorties: Sortie[] = []
   const minuteOf = (t: unknown): number =>
     Math.max(0, Math.min(minutes - 1, Math.floor((num(t) - start) / 60)))
 
@@ -394,6 +401,23 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
         if (life != null) lives.push(life)
         timeline[team].loss[minuteOf(u.DeathTime)] += lossCost
         timeline[team].deathsN[minuteOf(u.DeathTime)]++
+      }
+      if (u.SpawnTime) {
+        sorties.push({
+          pid: id,
+          name: p.Name || id,
+          team,
+          unitId: u.Id,
+          unitName: gl ? gl.name : e[2],
+          role: e[0],
+          cost,
+          lossCost,
+          spawn: num(u.SpawnTime) - start,
+          death: dead ? num(u.DeathTime) - start : null,
+          kills: num(u.KilledCount),
+          dmg: num(u.TotalDamageDealt),
+          refunded
+        })
       }
       // 按单位型号聚合；开了配装分组就连配装一起分（同一个单位的不同挂载分开统计）
       const optKey = opts.groupByLoadout === false ? '' : optionsKey(u.OptionIds)
@@ -560,7 +584,8 @@ export function buildMatchReport(mi: MatchInfo, opts: ReportOpts): MatchReport {
     units,
     priced,
     timeline: { minutes, spawn: timeline.map((t) => t.spawn), loss: timeline.map((t) => t.loss), field, events },
-    insights: []
+    insights: [],
+    moments: findMoments(sorties, dur, opts.moments)
   }
   report.insights = insights(report)
   return report

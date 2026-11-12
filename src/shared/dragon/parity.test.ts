@@ -90,7 +90,7 @@ describe.runIf(ready)('和 4.0.x 老版对拍', () => {
       // 配装分组、配装真名、花费口径都是新版才有的：对拍时关掉分组，抹掉新增字段
       const a = buildMatchReport(mi, { fid, review, groupByLoadout: false })
       const b = oldReport.buildMatchReport(mi, { fid, review: oldScore.analyzeMatch(mi, fid) })
-      const NEW_FIELDS = new Set(['options', 'loadout', 'priced', 'titles'])
+      const NEW_FIELDS = new Set(['options', 'loadout', 'priced', 'titles', 'moments'])
       // 本局要点的措辞在新版改写过，只比条数和好/坏/中性
       const strip = (v: unknown): unknown =>
         JSON.parse(

@@ -65,17 +65,6 @@ export default function CurrentMatch(): React.JSX.Element {
             对局 <b>#{cur.fid}</b>
           </span>
         )}
-        {wp != null && (
-          <span className="wpbar" title="按两队平均 ELO 估算，和复盘页的「赛前预期」同一个算法">
-            <span className="t0">{Math.round(wp * 100)}</span>
-            <span className="track">
-              <i style={{ width: wp * 100 + '%' }} />
-              <i />
-            </span>
-            <span className="t1">{100 - Math.round(wp * 100)}</span>
-            <span className="faint">赛前胜率</span>
-          </span>
-        )}
         <span className="grow" />
         {query.pass && (
           <span className="m">
@@ -121,6 +110,8 @@ export default function CurrentMatch(): React.JSX.Element {
           </div>
         )}
 
+        {wp != null && <Odds A={A} B={B} wp={wp} />}
+
         {!cards.length ? (
           <div className="empty">
             {!status?.logFound
@@ -158,6 +149,65 @@ export default function CurrentMatch(): React.JSX.Element {
       </div>
       <ContextMenu menu={menu} onClose={() => setMenu(null)} />
     </>
+  )
+}
+
+/**
+ * 两队对比：中间大号的赛前胜率（按两队平均 ELO，和复盘页「赛前预期」同一算法），
+ * 两边是平均 ELO、平均龙区分和龙/强/区的人数。龙区分还没换算进胜率——那要先用历史对局回测校准。
+ */
+function Odds({ A, B, wp }: { A: PlayerCard[]; B: PlayerCard[]; wp: number }): React.JSX.Element {
+  const side = (list: PlayerCard[], t: number): React.JSX.Element => {
+    const elos = list.map((c) => c.info?.elo ?? c.staleElo ?? null).filter((v): v is number => v != null)
+    const scores = list.map((c) => c.dragon?.value).filter((v): v is number => v != null)
+    const avg = (a: number[]): number | null => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null)
+    const tiers = { dragon: 0, solid: 0, qu: 0 } as Record<string, number>
+    for (const c of list) if (c.dragon && c.dragon.tier in tiers) tiers[c.dragon.tier]++
+    const e = avg(elos)
+    const sc = avg(scores)
+    return (
+      <div className={'odds-side t' + t}>
+        <div className="odds-name">{t === 0 ? 'A 队' : 'B 队'}</div>
+        <div className="odds-kv">
+          <span>
+            平均 ELO<b>{e == null ? '—' : Math.round(e)}</b>
+          </span>
+          <span>
+            平均龙区分<b>{sc == null ? '—' : sc.toFixed(1)}</b>
+          </span>
+          <span>
+            龙 / 强 / 区
+            <b>
+              <i className="sc-dragon">{tiers.dragon}</i>
+              <i className="faint"> / </i>
+              <i className="sc-solid">{tiers.solid}</i>
+              <i className="faint"> / </i>
+              <i className="sc-qu">{tiers.qu}</i>
+            </b>
+          </span>
+        </div>
+      </div>
+    )
+  }
+  const a = Math.round(wp * 100)
+  return (
+    <div className="odds">
+      {side(A, 0)}
+      <div className="odds-mid" title="按两队平均 ELO 估算，和复盘页的「赛前预期」同一算法">
+        <div className="p">赛前胜率</div>
+        <div className="w mono">
+          <span className="t0">{a}%</span>
+          <span className="faint"> : </span>
+          <span className="t1">{100 - a}%</span>
+        </div>
+        <span className="track">
+          <i style={{ width: a + '%' }} />
+          <i />
+        </span>
+        <div className="note">按平均 ELO</div>
+      </div>
+      {side(B, 1)}
+    </div>
   )
 }
 

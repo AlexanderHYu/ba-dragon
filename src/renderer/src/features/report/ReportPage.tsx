@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { IconCopy, IconExternalLink, IconPlayerPlay, IconRefresh, IconUserSearch } from '@tabler/icons-react'
 import type { ReplayItem } from '@shared/ipc'
-import type { MatchReport, ReportPlayer, ReportTeam } from '@shared/match'
+import { clock, type MatchReport, type Moment, type ReportPlayer, type ReportTeam } from '@shared/match'
 import Mark from '../../components/Mark'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import Flag from '../../components/Flag'
@@ -14,6 +14,7 @@ import { goodBad, scoreColor } from '../../components/scoreColor'
 import { useStore } from '../../store'
 import { TITLE_NAME } from '../../components/titleNames'
 import Player, { type PlayerApi } from '../replay/Player'
+import { KIND, MomentFilter, MomentList, momentsFor } from './Moments'
 import './report.css'
 
 /** 兵种颜色：避开蓝、红、金（那三种分别是 A 队、B 队、龙） */
@@ -103,6 +104,9 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
   const [report, setReport] = useState<MatchReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  // 关键时刻的筛选（null = 全场重点）和「点了一条，跳到时间线的第几秒」，概况和时间线共用
+  const [focus, setFocus] = useState<string | null>(null)
+  const [seek, setSeek] = useState<number | null>(null)
   const [replay, setReplay] = useState<ReplayItem | null>(null)
   // 当前标签记在页面状态里：从时间线跳去玩家页再「返回」时还停在原来的标签
   const want = page.name === 'report' ? page.tab : undefined
@@ -197,10 +201,22 @@ export default function ReportPage({ fid, onBack }: { fid: string; onBack: () =>
             <span className="rp-meta">{report.startTime ? new Date(report.startTime).toLocaleString('zh-CN') : ''}</span>
           </div>
           <div className="page rp">
-            {tab === 'overview' && <Overview r={report} />}
+            {tab === 'overview' && (
+              <Overview
+                r={report}
+                focus={focus}
+                onFocus={setFocus}
+                onPick={(m) => {
+                  setSeek(m.t0)
+                  setTab('timeline')
+                }}
+              />
+            )}
             {tab === 'players' && <Players r={report} />}
             {tab === 'units' && <Units r={report} />}
-            {tab === 'timeline' && <Timeline r={report} replay={replay} />}
+            {tab === 'timeline' && (
+              <Timeline r={report} replay={replay} focus={focus} onFocus={setFocus} seek={seek} onSeekDone={() => setSeek(null)} />
+            )}
           </div>
         </>
       )}
@@ -333,7 +349,18 @@ function FaceOff({ r }: { r: MatchReport }): React.JSX.Element {
   )
 }
 
-function Overview({ r }: { r: MatchReport }): React.JSX.Element {
+function Overview({
+  r,
+  focus,
+  onFocus,
+  onPick
+}: {
+  r: MatchReport
+  focus: string | null
+  onFocus: (pid: string | null) => void
+  onPick: (m: Moment) => void
+}): React.JSX.Element {
+  const focusName = focus ? r.players.find((p) => p.id === focus)?.name : null
   const [A, B] = r.teams
   const surv = (T: ReportTeam): number | null =>
     T.unitsDeployed ? Math.round(((T.unitsDeployed - T.unitsDead) / T.unitsDeployed) * 100) : null
@@ -363,6 +390,24 @@ function Overview({ r }: { r: MatchReport }): React.JSX.Element {
   return (
     <>
       <FaceOff r={r} />
+      <div className="card mo-card">
+        <h2>
+          关键时刻
+          <span className="sub">
+            {focusName ? focusName + ' 的高光、犯罪和侦察' : '全场最值得看的几条'}；点一条跳到时间线
+          </span>
+        </h2>
+        <MomentFilter r={r} focus={focus} onFocus={onFocus} />
+        <MomentList
+          list={momentsFor(r, focus)}
+          onPick={onPick}
+          empty={focusName ? focusName + ' 这一局没有特别突出的时刻。' : '这一局没有特别突出的时刻。'}
+        />
+        <div className="mo-note">
+          出兵、阵亡时间是精确的；击杀没有时间，只能推断到这个单位的存活时间段里，所以只标存活不超过 2 分钟的单位。
+          「同时段」「之后」只说明时间重叠或前后相邻，不代表一定是他打掉的。
+        </div>
+      </div>
       <div className="cols even">
         <div>
           {!!r.insights.length && (
@@ -899,13 +944,47 @@ function useBoxWidth(fallback: number): [React.RefObject<HTMLDivElement | null>,
   return [ref, w]
 }
 
-function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }): React.JSX.Element {
+function Timeline({
+  r,
+  replay,
+  focus,
+  onFocus,
+  seek,
+  onSeekDone
+}: {
+  r: MatchReport
+  replay: ReplayItem | null
+  focus: string | null
+  onFocus: (pid: string | null) => void
+  seek: number | null
+  onSeekDone: () => void
+}): React.JSX.Element {
+  const shown = momentsFor(r, focus)
   const { minutes, field, loss, events } = r.timeline
   const [boxRef, W] = useBoxWidth(900)
   // 有录像时上面嵌播放器：点曲线跳到那一分钟，曲线上画一条竖线跟着视频走
   const player = useRef<PlayerApi | null>(null)
-  const [atMin, setAtMin] = useState<number | null>(null)
+  const [atSec, setAtSec] = useState<number | null>(null)
+  const atMin = atSec == null ? null : atSec / 60
   const [showVideo, setShowVideo] = useState(true)
+  // 从概况点了一条关键时刻过来：等播放器准备好再跳（最多等 8 秒）
+  useEffect(() => {
+    if (seek == null) return
+    if (!replay) return onSeekDone()
+    let n = 0
+    const t = setInterval(() => {
+      n++
+      if (player.current?.ready()) {
+        player.current.seekSec(Math.max(0, seek - 5))
+        onSeekDone()
+        clearInterval(t)
+      } else if (n > 40) {
+        onSeekDone()
+        clearInterval(t)
+      }
+    }, 200)
+    return () => clearInterval(t)
+  }, [seek, replay, onSeekDone])
   // 三种看法：兵力本身、双方差、每分钟的净变化（谁在推谁）
   const [mode, setMode] = useState<'field' | 'diff' | 'slope'>('field')
   const H = 260
@@ -972,7 +1051,8 @@ function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }):
               key={replay.id}
               item={replay}
               apiRef={player}
-              onMinute={setAtMin}
+              onMatchSec={setAtSec}
+              moments={shown}
               onClose={() => setShowVideo(false)}
               compact
             />
@@ -1028,7 +1108,7 @@ function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }):
           width="100%"
           height={H}
           className={canSeek ? 'seekable' : undefined}
-          onClick={canSeek ? (e) => player.current?.seekMinute(minuteAt(e)) : undefined}
+          onClick={canSeek ? (e) => player.current?.seekSec(minuteAt(e) * 60) : undefined}
         >
           {gridVals.map((v, i) => (
             <g key={i}>
@@ -1076,6 +1156,8 @@ function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }):
             const color = e.team === 1 ? 'var(--t1)' : 'var(--t0)'
             // 「一分钟内损失 XXXX」指的是整个第 N 分钟，所以标成一条带，
             // 左右两条虚线就是这一分钟的开始和结束；掉线是一个时刻，还是一条线。
+            // 「一分钟内损失最多」现在由关键时刻里的「大量阵亡」画（窗口更准、带兵种），这里不重复画
+            if (e.type === 'spike' && r.moments.some((m) => m.kind === 'wipe')) return null
             if (e.type === 'spike') {
               const x1 = x(e.min)
               const x2 = x(Math.min(minutes - 1, e.min + 1))
@@ -1095,6 +1177,33 @@ function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }):
               </g>
             )
           })}
+          {shown.map((m, i) => {
+            const xs = (t: number): number => x(Math.min(last, Math.max(0, t / 60)))
+            const x1 = xs(m.t0)
+            const x2 = Math.max(x1 + 2, xs(m.t1))
+            const tip = clock(m.t0) + ' ' + KIND[m.kind].label + '：' + m.text + (m.detail ? '（' + m.detail + '）' : '')
+            if (m.kind === 'wipe') {
+              const c = m.team === 1 ? 'var(--t1)' : 'var(--t0)'
+              return (
+                <g key={'m' + i}>
+                  <rect x={x1} y={pad.t} width={x2 - x1} height={H - pad.t - pad.b} fill={c} opacity="0.14" />
+                  <line x1={x1} y1={pad.t} x2={x1} y2={H - pad.b} stroke={c} strokeDasharray="2 3" />
+                  <line x1={x2} y1={pad.t} x2={x2} y2={H - pad.b} stroke={c} strokeDasharray="2 3" />
+                  <title>{tip}</title>
+                </g>
+              )
+            }
+            // 其余三种：图表顶上一条短横（时间段）+ 一个小方块，悬停看说明
+            const cls = 'tl-mo ' + m.kind + (m.minor ? ' minor' : '')
+            return (
+              <g key={'m' + i} className={cls}>
+                <line x1={x1} y1={pad.t + 3} x2={x2} y2={pad.t + 3} />
+                <rect x={x1 - 4} y={pad.t - 1} width="8" height="8" />
+                <line className="drop" x1={x1} y1={pad.t + 7} x2={x1} y2={H - pad.b} />
+                <title>{tip}</title>
+              </g>
+            )
+          })}
           {canSeek && atMin != null && atMin >= 0 && atMin <= last && (
             <line x1={x(atMin)} y1={pad.t} x2={x(atMin)} y2={H - pad.b} stroke="var(--sel)" strokeWidth="1.5" />
           )}
@@ -1105,6 +1214,12 @@ function Timeline({ r, replay }: { r: MatchReport; replay: ReplayItem | null }):
           ))}
         </svg>
       </div>
+      <MomentFilter r={r} focus={focus} onFocus={onFocus} />
+      <MomentList
+        list={shown}
+        onPick={canSeek ? (m) => player.current?.seekSec(Math.max(0, m.t0 - 5)) : undefined}
+        empty="没有关键时刻。"
+      />
       <h3 style={{ marginTop: 16 }}>每分钟损失</h3>
       <div className="lossbars">
         {Array.from({ length: minutes }, (_, i) => (
