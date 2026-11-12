@@ -68,7 +68,7 @@ function ingest(s: ImportDeps, fid: string, mi: MatchInfo, localIds: string[], t
  * 2 → 3：胜负项不计分，百分位表和卡尔曼参数重新拟合（v1.0.9）
  * 3 → 4：胜负项权重改为 0.5（v1.0.10）
  */
-export const SCORE_VERSION = '4'
+export const SCORE_VERSION = '5'
 export function rescoreStored(s: ImportDeps, localIds: string[]): number {
   if (s.db.meta('scoreVersion') === SCORE_VERSION) return 0
   const rows = s.db.all<{ fid: string; raw: string }>('SELECT fid, raw FROM match WHERE raw IS NOT NULL')

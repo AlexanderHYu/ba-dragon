@@ -1,5 +1,5 @@
 // 交换加权的缩放系数 + 效果检查。
-// 用老仓库 backtest-data/ 里采集的对局（m-<id>.json），算出 TRADE_NORM，
+// 用 scripts/collect-dragon-data.mjs 采集的对局（BA_DATA_DIR，老数据在老仓库 backtest-data/）（m-<id>.json），算出 TRADE_NORM，
 // 再对比加权前后各兵种玩家的单局分，确认「普通人不动、只在兵种之间挪分」。
 //   npx vite-node -c vitest.config.ts scripts/fit-trade.ts
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -9,8 +9,8 @@ import { ROLE_KEYS, type RoleKey } from '../src/shared/dragon/model'
 import { rolesFromUnits } from '../src/shared/dragon/roles'
 import { TRADE_NORM, analyzeMatch, isRated, tradeMult } from '../src/shared/dragon/score'
 
-const DIR = process.env.BA_DATA_DIR || 'H:/github/brokenarrow-log-maggot/backtest-data'
-if (!existsSync(DIR)) throw new Error('没有 backtest-data：' + DIR)
+const DIR = process.env.BA_DATA_DIR || 'H:/github/ba-dragon-data/2026-11-11'
+if (!existsSync(DIR)) throw new Error('没有数据目录：' + DIR)
 const matches = readdirSync(DIR)
   .filter((f) => f.startsWith('m-') && f.endsWith('.json'))
   .map((f) => ({

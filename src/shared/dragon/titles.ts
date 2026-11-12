@@ -102,8 +102,14 @@ function rarityOf(s: Spec, v: number, th: number): number {
   }
   // 没有分布时：按超出阈值的倍数粗估
   const ratio = s.dir > 0 ? (th > 0 ? v / th : 3) : v > 0 ? th / v : 3
-  return s.target / Math.max(ratio, 1) / PLAYERS_PER_MATCH
+  return (s.target * TARGET_SCALE) / Math.max(ratio, 1) / PLAYERS_PER_MATCH
 }
+
+/**
+ * 所有称号的目标出现率统一乘这个数。2026-11 用户反馈称号偏少，从 1 提到 1.3，
+ * 下面各项 target 的相对大小不变。改了要重跑 scripts/fit-titles.ts --write。
+ */
+export const TARGET_SCALE = 1.3
 
 // key = 比较的指标，dir = 1 越大越突出 / -1 越小越突出，filter = 前提条件，
 // target = 希望出现在多少比例的对局里（校准阈值用），min = 阈值下限（再少就不值一提）
@@ -379,7 +385,7 @@ export function calibrateTitles(
       return b ? s.key(b) : null
     })
     const have = vals.filter((v): v is number => v != null).sort((a, b) => s.dir * (b - a))
-    const k = Math.max(0, Math.round(s.target * mis.length) - 1)
+    const k = Math.max(0, Math.round(s.target * TARGET_SCALE * mis.length) - 1)
     let v = have.length ? have[Math.min(k, have.length - 1)] : null
     if (v == null) continue
     if (s.min != null && s.dir > 0) v = Math.max(v, s.min)

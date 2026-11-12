@@ -1,6 +1,8 @@
 // 龙区分去掉胜负项之后，重新拟合百分位表和卡尔曼参数。
-// 做法照 4.0.x 的 scripts/fit-dragon-model.js 第 5、6 节，数据也是同一批（老仓库 backtest-data/，9/2 之后的对局），
-// 只是分数用的是现在的算法（含兵种交换加权），胜负项权重取 W_OUT（默认 0）。
+// 做法照 4.0.x 的 scripts/fit-dragon-model.js 第 5、6 节，分数用的是现在的算法（含兵种交换加权），胜负项权重取 W_OUT。
+// 数据：scripts/collect-dragon-data.mjs 采集的目录（BA_DATA_DIR），只用 CUTOFF（北京时间）之后的对局。
+// 2026-11 起默认用 1.2.1 平衡更新（10-20）之后的数据；要复现老模型：
+//   BA_DATA_DIR=H:/github/brokenarrow-log-maggot/backtest-data CUTOFF=2026-09-02 W_OUT=0.5
 //   npx vite-node -c vitest.config.ts scripts/fit-outcome.ts           只看，不写
 //   npx vite-node -c vitest.config.ts scripts/fit-outcome.ts --write   写回 src/shared/dragon/model.json
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
@@ -19,10 +21,10 @@ import {
   type TradeMult
 } from '../src/shared/dragon/score'
 
-const DIR = process.env.BA_DATA_DIR || 'H:/github/brokenarrow-log-maggot/backtest-data'
+const DIR = process.env.BA_DATA_DIR || 'H:/github/ba-dragon-data/2026-11-11'
 if (!existsSync(DIR)) throw new Error('没有 backtest-data：' + DIR)
-const W_OUT = Number(process.env.W_OUT ?? 0)
-const CUTOFF = Date.parse((process.env.CUTOFF || '2026-09-02') + 'T00:00:00+08:00') / 1000
+const W_OUT = Number(process.env.W_OUT ?? MODEL.weights.out)
+const CUTOFF = Date.parse((process.env.CUTOFF || '2026-10-21') + 'T00:00:00+08:00') / 1000
 const files = readdirSync(DIR)
 const J = (f: string): any => JSON.parse(readFileSync(join(DIR, f), 'utf8'))
 const after = (t: unknown): boolean => (Number(t) || 0) >= CUTOFF
@@ -121,9 +123,7 @@ for (const [id, a] of apById) {
   if (!roles) continue
   const trade = new Map([[id, tradeMult({ Id: id }, roles)]])
   const rows: Row[] = []
-  for (const off of [0, 20]) {
-    const f = 'pm-' + id + '-o' + off + '.json'
-    if (!files.includes(f)) continue
+  for (const f of files.filter((f) => f.startsWith('pm-' + id + '-o'))) {
     for (const x of (J(f).matches || []) as MatchEntry[]) {
       if (!after(x.data?.EndTime)) continue
       const ft = matchFeatures(x, id, { trade })
@@ -254,6 +254,19 @@ if (process.argv.includes('--write')) {
   model.matchPct = matchPct
   model.playerPct = playerPct
   model.kalman = kalman
+  model.fittedAt = new Date().toISOString().slice(0, 10)
+  model.sample = {
+    ...model.sample,
+    playerSample: 'random',
+    dataDir: DIR.split(/[\/]/).pop(),
+    cutoff: new Date(CUTOFF * 1000).toISOString(),
+    pmMatches: pmById.size,
+    players: apById.size,
+    rawMatches: mById.size,
+    matchRows: matchRows.length,
+    careerRows: careerRows.length,
+    backtestPlayers: bt.length
+  }
   writeFileSync(file, JSON.stringify(model))
   console.log('已写回 model.json')
 }
