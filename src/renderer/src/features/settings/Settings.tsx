@@ -169,7 +169,7 @@ export default function Settings(): React.JSX.Element {
             checked={!!config.autoQueryCurrentMatch}
             onChange={(v) => void patch({ autoQueryCurrentMatch: v })}
             label="进入对局时自动查询全部玩家"
-            hint="分两轮：先查档案，再算龙区分"
+            hint="分两轮：先查档案，再算龙蛆分"
           />
           <Switch
             checked={!!config.banCheckOnStart}
@@ -273,7 +273,7 @@ export default function Settings(): React.JSX.Element {
       <div className="card about">
         <h2>关于</h2>
         <p>
-          <b>龙区分类器</b> v{status?.version || ''} · 只读取游戏日志（GameLogs）和 BATrace 的公开接口，
+          <b>龙蛆分类器</b> v{status?.version || ''} · 只读取游戏日志（GameLogs）和 BATrace 的公开接口，
           <b>不读写游戏内存、不注入进程、不修改游戏文件，不影响反作弊。</b>
           <button
             style={{ marginLeft: 8 }}
@@ -326,7 +326,7 @@ export default function Settings(): React.JSX.Element {
           </a>
           {' · '}
           <a href="#" onClick={() => window.BA.openExternal('https://github.com/AlexanderHYu/ba-dragon/blob/main/docs/algorithm.md')}>
-            龙区分算法说明
+            龙蛆分算法说明
           </a>
         </p>
       </div>

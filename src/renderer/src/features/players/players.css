@@ -22,12 +22,16 @@
   margin-bottom: 14px;
 }
 
-/* 左档案卡 + 右边几块 */
+/* 左档案卡 + 右边几块，最近 N 场排位在下面横跨两栏。
+   竖向间距交给 .card 自己的 margin-bottom，所以 row-gap 为 0 */
 .pdetail {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  gap: 14px;
+  column-gap: 14px;
   align-items: start;
+}
+.pd-rows {
+  grid-column: 1 / -1;
 }
 @media (max-width: 1050px) {
   .pdetail {

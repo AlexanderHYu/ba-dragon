@@ -73,7 +73,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#12151b',
-    title: '龙区分类器',
+    title: '龙蛆分类器',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -304,7 +304,11 @@ function startServices(): Services {
         .check()
         .then((r) => {
           if (r.newly.length) {
-            send('toast', { kind: 'warn', text: '你遇到过的玩家已被封禁：' + r.newly.map((x) => x.name).join('、') })
+            const names = r.newly.map((x) => x.name)
+            send('toast', {
+              kind: 'warn',
+              text: '你遇到过的玩家已被封禁：' + names.slice(0, 6).join('、') + (names.length > 6 ? ' 等 ' + names.length + ' 人' : '')
+            })
           }
         })
         .catch(() => undefined)

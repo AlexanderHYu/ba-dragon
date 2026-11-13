@@ -14,6 +14,7 @@ import {
 } from '@tabler/icons-react'
 import { useStore, type NavPage } from '../store'
 import Ico from './Icon'
+import logo from '../logo.png'
 
 type Item = [NavPage, string, TablerIcon]
 const GROUPS: [string, Item[]][] = [
@@ -87,8 +88,11 @@ export default function Sidebar(): React.JSX.Element {
   return (
     <aside className="side">
       <div className="brand">
-        <div className="t">龙区分类器</div>
-        <div className="v">BA-DRAGON v{status?.version || '…'}</div>
+        <img src={logo} alt="" />
+        <div>
+          <div className="t">龙蛆分类器</div>
+          <div className="v">BA-DRAGON v{status?.version || '…'}</div>
+        </div>
       </div>
       <nav className="nav">
         {GROUPS.map(([g, items]) => (

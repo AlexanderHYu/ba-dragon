@@ -1,7 +1,7 @@
-# 龙区分类器（ba-dragon）
+# 龙蛆分类器（ba-dragon）
 
 基于断箭（Broken Arrow）官方 GameLogs 日志和 [BATrace](https://dash.batrace.top/) 公开数据的本地对局复盘工具，
-用来判断对局中每位玩家的水平（龙/区）。只读取日志和公开接口，不读写游戏内存，不注入进程，不影响反作弊。
+用来判断对局中每位玩家的水平（龙/蛆）。只读取日志和公开接口，不读写游戏内存，不注入进程，不影响反作弊。
 
 > 本仓库是基于 Electron + TypeScript + React 的重写版，版本号从 1.0.0 开始。
 > 旧版 4.0.x 在 [brokenarrow-log-maggot](https://github.com/AlexanderHYu/brokenarrow-log-maggot)。
@@ -10,9 +10,9 @@
 
 ## 功能
 
-- **当前对局**：读取游戏日志，进入对局后自动查询名单里每个玩家的 ELO、胜率、K/D、常用单位和龙区分。
-- **玩家查询**：按名字或 ID 搜索，查看龙区分、兵种构成、地图表现、最近对局和相遇记录。
-- **单局复盘**：给每个玩家标记龙/区/泯并发称号，查看双方对比、玩家明细、单位数据和兵力曲线。
+- **当前对局**：读取游戏日志，进入对局后自动查询名单里每个玩家的 ELO、胜率、K/D、常用单位和龙蛆分。
+- **玩家查询**：按名字或 ID 搜索，查看龙蛆分、兵种构成、地图表现、最近对局和相遇记录。
+- **单局复盘**：给每个玩家标记龙/蛆/泯并发称号，查看双方对比、玩家明细、单位数据和兵力曲线。
 - **对局档案**：保存打过的对局，可以打开复盘或播放录像。
 - **录像**：可选功能，自动录制每局并保存为 MP4，进度条上显示兵力曲线。
 - **单位效能**：按本地对局统计各单位和配装的死亡率、伤害、花费效率。
@@ -67,7 +67,7 @@ npm run dist       # 打包 Windows 安装版和免安装版
 
 ```
 src/
-  shared/   纯逻辑，不依赖 Electron：龙区分、称号、复盘、计算器、日志解析、IPC 类型
+  shared/   纯逻辑，不依赖 Electron：龙蛆分、称号、复盘、计算器、日志解析、IPC 类型
   main/     主进程：日志、BATrace、本地库、录像、游戏数据
   preload/  向界面暴露接口
   renderer/ React 界面，按功能分目录
@@ -77,10 +77,10 @@ src/
 
 ## 说明
 
-龙区分和称号的算法见 [docs/algorithm.md](docs/algorithm.md)，配装计算器的公式见 [docs/game-db.md](docs/game-db.md)。
+龙蛆分和称号的算法见 [docs/algorithm.md](docs/algorithm.md)，配装计算器的公式见 [docs/game-db.md](docs/game-db.md)。
 
 本项目最初 fork 自 Zola 的 [断箭蛆工具](https://github.com/Zawinzala/brokenarrow-log-maggot)（MIT）。
-本仓库为重写版本：龙区分、称号、单局复盘、自动更新为本项目编写；
+本仓库为重写版本：龙蛆分、称号、单局复盘、自动更新为本项目编写；
 沿用自原项目的部分（录像、玩家追踪、卡组、日志解析规则）保留其版权声明，见 [LICENSE](LICENSE)。
 
 玩家数据由 [BATrace](https://dash.batrace.top/) 提供（运营方已同意本工具使用其 API）。

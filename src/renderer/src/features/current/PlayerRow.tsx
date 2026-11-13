@@ -13,7 +13,7 @@ const winCls = (v: number | null | undefined): string => goodBad(v, 60, 40)
 export function PlayerRowHead(): React.JSX.Element {
   return (
     <div className="prow head">
-      <div>龙区分</div>
+      <div>龙蛆分</div>
       <div>玩家</div>
       <div className="num">ELO</div>
       <div className="num" title="最近 20 场排位的总体 K/D（Σ摧毁分 ÷ Σ损失分）">
@@ -22,7 +22,7 @@ export function PlayerRowHead(): React.JSX.Element {
       <div className="num" title="最近 20 场排位的胜率">
         胜率
       </div>
-      <div className="num" title="计算龙区分所用的场数">
+      <div className="num" title="计算龙蛆分所用的场数">
         样本
       </div>
       <div>常用单位</div>

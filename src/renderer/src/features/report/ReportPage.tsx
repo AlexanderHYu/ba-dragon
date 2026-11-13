@@ -268,13 +268,11 @@ function CmpBar({ label, a, b }: { label: string; a: number | null; b: number | 
   )
 }
 
+// 一队的损失分就是另一队的摧毁分，阵亡、承受伤害同理是击杀、造成伤害，两边对比只放一个
 const CMP_ROWS: [string, keyof ReportTeam][] = [
   ['摧毁分', 'D'],
-  ['损失分', 'L'],
   ['击杀（单位数）', 'kills'],
-  ['阵亡（单位数）', 'deaths'],
   ['造成伤害', 'dmg'],
-  ['承受伤害', 'dmgTaken'],
   ['出兵花费', 'spent'],
   ['出兵数量', 'unitsDeployed'],
   ['补给消耗', 'supply'],
@@ -294,11 +292,10 @@ function FaceOff({ r }: { r: MatchReport }): React.JSX.Element {
   const side = (T: ReportTeam): React.JSX.Element => {
     const s = avgScore(r, T.team)
     const kv: [string, React.ReactNode][] = [
-      ['平均龙区分', s == null ? '—' : s.toFixed(1)],
+      ['平均龙蛆分', s == null ? '—' : s.toFixed(1)],
       ['平均 ELO', T.avgElo ?? '—'],
       ['ELO 变化', T.eloDelta == null ? '—' : <span className={signCls(T.eloDelta)}>{signed(T.eloDelta, String)}</span>],
-      ['摧毁', num(T.D)],
-      ['损失', num(T.L)]
+      ['摧毁', num(T.D)]
     ]
     // B 队在右边，数字从右往左排，和 A 队对称
     const items = T.team === 1 ? [...kv].reverse() : kv
@@ -475,7 +472,7 @@ function Overview({
 const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, string?][] = [
   [
     'score',
-    '龙区',
+    '龙蛆',
     (p) =>
       p.mark ? (
         <span className="rp-dg">
@@ -597,7 +594,7 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
               <Fac f={T.faction} />
               <Result won={T.won} />
               <span className="grow" />
-              {avgScore(r, t) != null && <span className="sub mono">平均龙区分 {avgScore(r, t)?.toFixed(1)}</span>}
+              {avgScore(r, t) != null && <span className="sub mono">平均龙蛆分 {avgScore(r, t)?.toFixed(1)}</span>}
             </h2>
             <div className="rp-scroll">
               <table className="t rp-wide rp-ptable">

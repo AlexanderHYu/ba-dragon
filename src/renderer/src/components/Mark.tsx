@@ -9,7 +9,7 @@ const TIER_TEXT: Record<string, string> = {
   solid: '强',
   average: '中',
   weak: '弱',
-  qu: '区',
+  qu: '蛆',
   min: '泯'
 }
 
@@ -32,7 +32,7 @@ export default function Mark({ tier, big }: { tier?: string | null; big?: boolea
   if (!text) return null
   const cls = 'dg-mark ' + (TIER_CLASS[tier as string] || 'min') + (big ? ' big' : '')
   return (
-    <span className={cls} title={'龙区分档：' + text}>
+    <span className={cls} title={'龙蛆分档：' + text}>
       {text}
     </span>
   )

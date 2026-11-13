@@ -326,7 +326,7 @@ function Summary({ list }: { list: ArchiveItem[] }): React.JSX.Element | null {
       <div>
         <span>近 {scored.length} 局平均单局分</span>
         <b>{avg == null ? '—' : avg.toFixed(1)}</b>
-        <small>每局的龙区分取平均</small>
+        <small>每局的龙蛆分取平均</small>
       </div>
       <div>
         <span>当前 ELO</span>
