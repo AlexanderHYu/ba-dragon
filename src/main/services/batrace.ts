@@ -257,7 +257,11 @@ export class BatraceClient {
     )
   }
 
-  leaderboardBan(limit = 500, offset = 0): Promise<{ players?: { stbid: string; name: string }[] }> {
+  /** 封禁榜，按 rating 从高到低排。字段是 leaderboard / id（不是 players / stbid），total 是名单总人数 */
+  leaderboardBan(
+    limit = 1000,
+    offset = 0
+  ): Promise<{ leaderboard?: { id: number | string; name: string }[]; total?: number }> {
     return this.get(`/api/leaderboard/ban?limit=${limit}&offset=${offset}`, `ban:${limit}:${offset}`, 3600 * 1000)
   }
 

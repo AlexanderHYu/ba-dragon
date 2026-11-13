@@ -14,6 +14,10 @@ export interface BanResult {
   met: { pid: string; name: string; at: number | null }[]
 }
 
+const PAGE = 1000
+/** 防止接口的 total 出错时一直翻下去 */
+const MAX_PAGES = 20
+
 export class BanService {
   private last: BanResult | null = null
 
@@ -27,13 +31,19 @@ export class BanService {
   }
 
   async check(): Promise<BanResult> {
-    const res = await this.client.leaderboardBan(500, 0)
-    const list = res?.players || []
+    // 名单按 rating 排序，只拿第一页就只有高分段的人，所以按 total 翻完（每页 1000，现在约 5 页）
+    const list: { id: number | string; name: string }[] = []
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const res = await this.client.leaderboardBan(PAGE, page * PAGE)
+      const rows = res?.leaderboard || []
+      list.push(...rows)
+      if (rows.length < PAGE || list.length >= (res?.total ?? 0)) break
+    }
     const at = Date.now()
     const newly: { pid: string; name: string }[] = []
     this.db.tx(() => {
       for (const p of list) {
-        const pid = String(p.stbid)
+        const pid = String(p.id)
         const known = this.db.get<{ banned: number }>('SELECT banned FROM player WHERE pid = ?', [pid])
         if (!known) continue // 没见过的人不入库，本地库只记我遇到过的
         if (!known.banned) newly.push({ pid, name: p.name })

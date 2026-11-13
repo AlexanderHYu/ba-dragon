@@ -1,5 +1,5 @@
 // 玩家详情：左边档案卡（龙区分、可能范围、在同分段里的位置、分项、档案数字），
-// 右边和你的羁绊、兵种构成、原因、常用单位、地图表现、最近 20 场。
+// 右边和你的羁绊、兵种构成、原因、常用单位、地图表现；最近 20 场放在下面，横跨两栏。
 // 30 分钟内查过的直接读本地库，不会再发请求；要强制重查点「重新查询」。
 import { useEffect, useState } from 'react'
 import { IconAlertTriangle, IconCopy, IconExternalLink, IconRefresh } from '@tabler/icons-react'
@@ -27,8 +27,8 @@ const TIER_LABEL: Record<string, string> = {
   dragon: '真龙',
   solid: '有龙样',
   average: '泯然众人',
-  weak: '有点区',
-  qu: '纯区'
+  weak: '有点蛆',
+  qu: '纯蛆'
 }
 
 /** 分项，固定这个顺序（胜负预期不计分时没有值，不显示） */
@@ -107,7 +107,7 @@ export default function PlayerDetail({
 
             {/* 同分段位置刻度：五段分档 + 可能范围 + 指针 */}
             <div className="pd-scale-cap">同分段、同兵种构成的玩家里的位置</div>
-            <div className="pd-scale" title={'龙区分 ' + d.value.toFixed(1) + '，可能范围 ' + d.range[0].toFixed(1) + '~' + d.range[1].toFixed(1)}>
+            <div className="pd-scale" title={'龙蛆分 ' + d.value.toFixed(1) + '，可能范围 ' + d.range[0].toFixed(1) + '~' + d.range[1].toFixed(1)}>
               {BANDS.map((b) => (
                 <i
                   key={b.tier}
@@ -147,7 +147,7 @@ export default function PlayerDetail({
             </div>
           </>
         ) : (
-          <div className="empty">{card.dragonState === 'loading' ? '计算中…' : '无排位对局，无法计算龙区分'}</div>
+          <div className="empty">{card.dragonState === 'loading' ? '计算中…' : '无排位对局，无法计算龙蛆分'}</div>
         )}
 
         {info ? (
@@ -286,7 +286,7 @@ export default function PlayerDetail({
         )}
 
         {info && (!!info.favUnits.length || !!info.mapStats.length) && (
-          <div className="cols even">
+          <div className="cols even stretch">
             {!!info.favUnits.length && (
               <div className="card flush">
                 <h2>
@@ -347,68 +347,69 @@ export default function PlayerDetail({
             )}
           </div>
         )}
-
-        {d && !!d.rows.length && (
-          <div className="card flush">
-            <h2>
-              最近 {d.rows.length} 场排位<span className="sub">龙区分就是用这些局算的</span>
-            </h2>
-            <table className="t dg-rows">
-              <thead>
-                <tr>
-                  <th>单场</th>
-                  <th>结果</th>
-                  <th>地图</th>
-                  <th>时长</th>
-                  <th>预期胜率</th>
-                  <th>K/D</th>
-                  <th>摧毁</th>
-                  <th>ELO</th>
-                  <th />
-                  <th>对局</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.rows.map((r: DragonRow) => (
-                  <tr key={r.fid}>
-                    <td>
-                      <span className="pd-score">
-                        <Mark tier={r.mark} />
-                        <span style={{ color: scoreColor(r.score, r.mark) }}>{r.score.toFixed(1)}</span>
-                      </span>
-                    </td>
-                    <td>
-                      {r.won == null ? (
-                        <span className="faint">—</span>
-                      ) : (
-                        <span className={r.won ? 'res-win' : 'res-loss'}>{r.won ? '胜' : '负'}</span>
-                      )}
-                    </td>
-                    <td className="pd-text">{r.map || '—'}</td>
-                    <td className="dim">{Math.round(r.minutes)} 分</td>
-                    <td className="dim">{Math.round(r.expected * 100)}%</td>
-                    <td className={kdCls(r.kd)}>{r.kd.toFixed(2)}</td>
-                    <td>{r.contrib != null ? r.contrib.toFixed(2) + '×' : '—'}</td>
-                    <td className={r.eloDelta == null || r.eloDelta === 0 ? '' : r.eloDelta > 0 ? 'pos' : 'neg'}>
-                      {r.eloDelta != null ? (r.eloDelta > 0 ? '+' : r.eloDelta < 0 ? '−' : '') + Math.abs(r.eloDelta).toFixed(1) : '—'}
-                    </td>
-                    <td className="dim dg-flags">
-                      {[r.conscript ? '壮丁' : '', r.minutes < 10 ? '短局' : ''].filter(Boolean).join(' ')}
-                    </td>
-                    <td
-                      className="faint dg-fid"
-                      title="在 BATrace 中打开本局"
-                      onClick={() => window.BA.openExternal('https://dash.batrace.top/match/' + r.fid)}
-                    >
-                      {r.fid}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
+
+      {/* ---------- 下：最近 N 场排位，横跨两栏（表格列多，放在右栏里会把右边拉得比档案卡长很多） ---------- */}
+      {d && !!d.rows.length && (
+        <div className="card flush pd-rows">
+          <h2>
+            最近 {d.rows.length} 场排位<span className="sub">龙蛆分就是用这些局算的</span>
+          </h2>
+          <table className="t dg-rows">
+            <thead>
+              <tr>
+                <th>单场</th>
+                <th>结果</th>
+                <th>地图</th>
+                <th>时长</th>
+                <th>预期胜率</th>
+                <th>K/D</th>
+                <th>摧毁</th>
+                <th>ELO</th>
+                <th />
+                <th>对局</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.rows.map((r: DragonRow) => (
+                <tr key={r.fid}>
+                  <td>
+                    <span className="pd-score">
+                      <Mark tier={r.mark} />
+                      <span style={{ color: scoreColor(r.score, r.mark) }}>{r.score.toFixed(1)}</span>
+                    </span>
+                  </td>
+                  <td>
+                    {r.won == null ? (
+                      <span className="faint">—</span>
+                    ) : (
+                      <span className={r.won ? 'res-win' : 'res-loss'}>{r.won ? '胜' : '负'}</span>
+                    )}
+                  </td>
+                  <td className="pd-text">{r.map || '—'}</td>
+                  <td className="dim">{Math.round(r.minutes)} 分</td>
+                  <td className="dim">{Math.round(r.expected * 100)}%</td>
+                  <td className={kdCls(r.kd)}>{r.kd.toFixed(2)}</td>
+                  <td>{r.contrib != null ? r.contrib.toFixed(2) + '×' : '—'}</td>
+                  <td className={r.eloDelta == null || r.eloDelta === 0 ? '' : r.eloDelta > 0 ? 'pos' : 'neg'}>
+                    {r.eloDelta != null ? (r.eloDelta > 0 ? '+' : r.eloDelta < 0 ? '−' : '') + Math.abs(r.eloDelta).toFixed(1) : '—'}
+                  </td>
+                  <td className="dim dg-flags">
+                    {[r.conscript ? '壮丁' : '', r.minutes < 10 ? '短局' : ''].filter(Boolean).join(' ')}
+                  </td>
+                  <td
+                    className="faint dg-fid"
+                    title="在 BATrace 中打开本局"
+                    onClick={() => window.BA.openExternal('https://dash.batrace.top/match/' + r.fid)}
+                  >
+                    {r.fid}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

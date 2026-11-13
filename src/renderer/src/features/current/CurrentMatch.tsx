@@ -173,10 +173,10 @@ function Odds({ A, B, wp }: { A: PlayerCard[]; B: PlayerCard[]; wp: number }): R
             平均 ELO<b>{e == null ? '—' : Math.round(e)}</b>
           </span>
           <span>
-            平均龙区分<b>{sc == null ? '—' : sc.toFixed(1)}</b>
+            平均龙蛆分<b>{sc == null ? '—' : sc.toFixed(1)}</b>
           </span>
           <span>
-            龙 / 强 / 区
+            龙 / 强 / 蛆
             <b>
               <i className="sc-dragon">{tiers.dragon}</i>
               <i className="faint"> / </i>
