@@ -19,6 +19,7 @@ import { FfmpegRecorder, probeEncoders, probeOutputs, type FinishedResult, type 
 import {
   encodeReplayKey,
   localReplayClean,
+  localReplayTrim,
   localReplayDelete,
   localReplayList,
   localReplayPath,
@@ -231,9 +232,12 @@ export class ReplayService {
       )
       this.emit.changed()
       this.notify('本局录像已保存到本地')
-      // 顺手清理过期录像
+      // 顺手清理旧录像：超过天数的、超过数量的都删（两条同时生效）
       const days = Number(this.config.get('replayKeepDays')) || 0
       if (days > 0) localReplayClean(dir, days)
+      const keep = Math.floor(Number(this.config.get('replayKeepCount')) || 0)
+      const trimmed = keep > 0 ? localReplayTrim(dir, keep) : 0
+      if (trimmed) this.log('清理: 只保留最新 ' + keep + ' 个录像，删掉 ' + trimmed + ' 个')
     } catch (e) {
       this.log('save fail: ' + String((e as Error)?.message || e))
     }
