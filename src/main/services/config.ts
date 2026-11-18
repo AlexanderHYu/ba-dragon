@@ -41,6 +41,8 @@ export const DEFAULTS: Settings = {
   replaySaveDir: '',
   /** 自动删除多少天前的录像（0 = 不删） */
   replayKeepDays: 0,
+  /** 最多保留多少个录像，每局录完后删掉更早的（0 = 不限）。和 replayKeepDays 同时生效 */
+  replayKeepCount: 0,
   /** 窗口大小（关的时候记一下） */
   windowBounds: { width: 1280, height: 860 }
 }

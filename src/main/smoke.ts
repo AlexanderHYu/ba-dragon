@@ -20,7 +20,8 @@ async function recordTest(Svc: typeof import('./services/replays').ReplayService
         replayAudio: process.env.BA_SMOKE_REC_AUDIO || 'off',
         replaySaveDir: dir,
         replayDisplayId: process.env.BA_SMOKE_REC_DISPLAY || '',
-        replayKeepDays: 0
+        replayKeepDays: 0,
+        replayKeepCount: 0
       })[k]
   }
   const logs: string[] = []

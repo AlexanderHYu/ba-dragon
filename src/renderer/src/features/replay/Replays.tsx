@@ -39,6 +39,16 @@ const KEEP_DAYS: [number, string][] = [
   [90, '保留 90 天']
 ]
 
+const KEEP_COUNT: [number, string][] = [
+  [0, '不限数量'],
+  [5, '最多 5 局'],
+  [10, '最多 10 局'],
+  [20, '最多 20 局'],
+  [30, '最多 30 局'],
+  [50, '最多 50 局'],
+  [100, '最多 100 局']
+]
+
 const size = (n: number): string => (n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.round(n / 1e6) + ' MB')
 
 /** 预计 45 分钟（2700 秒）的文件大小：VBR 以码率为目标按上限估；声音 AAC 128kbps ≈ 43MB */
@@ -403,7 +413,7 @@ function RecSettings({
         </div>
 
         <div className="rec-field">
-          <div className="rec-label">自动清理旧录像</div>
+          <div className="rec-label">按天数清理</div>
           <select
             value={Number(config.replayKeepDays) || 0}
             onChange={(e) => void patch({ replayKeepDays: Number(e.target.value) })}
@@ -414,6 +424,21 @@ function RecSettings({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="rec-field">
+          <div className="rec-label">按数量清理</div>
+          <select
+            value={Number(config.replayKeepCount) || 0}
+            onChange={(e) => void patch({ replayKeepCount: Number(e.target.value) })}
+          >
+            {KEEP_COUNT.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <div className="rec-hint dim">每局录完后检查，只留最新的这么多个，更早的删掉。和按天数清理同时生效。</div>
         </div>
 
         <div className="rec-field">

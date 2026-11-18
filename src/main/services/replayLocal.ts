@@ -177,6 +177,40 @@ export function localReplayClean(dir: string, days: number): number {
   return removed
 }
 
+/**
+ * 只保留最新的 keep 个录像，更早的删掉（按文件修改时间，即存盘时间）。keep <= 0 不删。
+ * 正在播放的文件 Windows 不让删，会跳过，下次再删。
+ */
+export function localReplayTrim(dir: string, keep: number): number {
+  let removed = 0
+  if (!(keep > 0)) return removed
+  try {
+    if (!existsSync(dir)) return removed
+    const files: { full: string; t: number }[] = []
+    for (const f of readdirSync(dir)) {
+      if (!isReplayFile(f)) continue
+      const full = join(dir, f)
+      try {
+        files.push({ full, t: statSync(full).mtimeMs })
+      } catch {
+        /* 刚被删掉 */
+      }
+    }
+    files.sort((a, b) => b.t - a.t)
+    for (const { full } of files.slice(keep)) {
+      try {
+        unlinkSync(full)
+        removed++
+      } catch {
+        /* 删不掉就跳过 */
+      }
+    }
+  } catch {
+    /* 目录读不了：什么都不删 */
+  }
+  return removed
+}
+
 /** 本地录像的绝对路径（文件名经过白名单校验，防止路径穿越） */
 export function localReplayPath(dir: string, key: string): string | null {
   const name = safeName(key)
