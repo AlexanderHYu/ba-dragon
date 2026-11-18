@@ -35,6 +35,8 @@ describe('localReplayTrim', () => {
     expect(localReplayTrim(dir, 0)).toBe(0)
     expect(localReplayTrim(dir, 5)).toBe(0)
     expect(readdirSync(dir).length).toBe(4)
+  })
+})
 
 describe('replayQualityOf', () => {
   it('0 是原生分辨率，不能被当成没设置', () => {
