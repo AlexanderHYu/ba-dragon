@@ -15,7 +15,8 @@ import {
 import { Readable } from 'node:stream'
 import { join, resolve } from 'node:path'
 import { Notification, app, protocol, screen } from 'electron'
-import { FfmpegRecorder, probeEncoders, probeOutputs, warmupHdrGpu, type FinishedResult, type RecorderStatus } from './recorder'
+import { FfmpegRecorder, ffmpegPath, probeEncoders, probeOutputs, warmupHdrGpu, type FinishedResult, type RecorderStatus } from './recorder'
+import { SdrConverter } from './sdrConvert'
 import {
   encodeReplayKey,
   localReplayClean,
@@ -53,6 +54,8 @@ export class ReplayService {
   private logs: string[] = []
   /** 最近一次失败原因（界面上显示到下次开录为止） */
   private lastError: string | null = null
+  /** HDR 录像录完后在后台转成 SDR（见 sdrConvert.ts） */
+  private sdr: SdrConverter
 
   constructor(
     private config: Config,
@@ -74,6 +77,11 @@ export class ReplayService {
       },
       onLog: (msg) => this.log(msg),
       onFinished: (r) => this.save(r)
+    })
+    this.sdr = new SdrConverter({
+      ffmpeg: ffmpegPath,
+      log: (m) => this.log(m),
+      onDone: () => this.emit.changed()
     })
     // 显示器增减/改分辨率后重新探测；启动几秒后预热，第一局开录不用等
     setTimeout(() => {
@@ -129,6 +137,7 @@ export class ReplayService {
     if (!this.config.get('replayEnabled')) return
     if (this.recorder.status().active) return
     this.lastError = null // 清掉上一次的报错
+    this.sdr.pause() // 后台在转 SDR 的话先停下，不跟游戏抢资源
     this.log('对局开始，准备录制 fid=' + (fid || '?') + ' map=' + (map || '?'))
     this.emit.status(this.recorder.status())
     void this.recorder
@@ -185,6 +194,15 @@ export class ReplayService {
 
   /** 合成完成：按对局信息命名后移进录像目录 */
   private save(r: FinishedResult): void {
+    try {
+      this.saveInner(r)
+    } finally {
+      // 这一局收尾了（成功失败都算），继续转之前排队的 SDR
+      this.sdr.resume()
+    }
+  }
+
+  private saveInner(r: FinishedResult): void {
     if (!r?.ok) {
       const err = ('error' in r && r.error) || '无录制数据'
       this.lastError = err
@@ -246,6 +264,17 @@ export class ReplayService {
       const keep = Math.floor(Number(this.config.get('replayKeepCount')) || 0)
       const trimmed = keep > 0 ? localReplayTrim(dir, keep) : 0
       if (trimmed) this.log('清理: 只保留最新 ' + keep + ' 个录像，删掉 ' + trimmed + ' 个')
+      // HDR10 录像排队转成 SDR（替换原文件），任何播放器都能正常显示
+      if (r.hdr10 && this.config.get('replayHdrToSdr') !== false && existsSync(dest)) {
+        this.log('转 SDR: 已排队，录完这局后在后台转换')
+        this.sdr.enqueue({
+          file: dest,
+          height: replayQualityOf(this.config.get('replayQuality')),
+          bitrateMbps: Number(this.config.get('replayBitrateMbps')) || 8,
+          encoder: r.encoder || 'libx264',
+          vendorId: r.vendorId || ''
+        })
+      }
     } catch (e) {
       this.log('save fail: ' + String((e as Error)?.message || e))
     }
