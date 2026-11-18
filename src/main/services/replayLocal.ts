@@ -267,3 +267,9 @@ export function enrichReplayMaps(
     }
   })
 }
+
+/** 设置里的分辨率档位：0 = 原生；没设过或不是数字时按 1080p */
+export function replayQualityOf(v: unknown): number {
+  const n = Number(v)
+  return v !== '' && v != null && Number.isFinite(n) && n >= 0 ? n : 1080
+}

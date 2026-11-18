@@ -15,7 +15,7 @@ import {
 import { Readable } from 'node:stream'
 import { join, resolve } from 'node:path'
 import { Notification, app, protocol, screen } from 'electron'
-import { FfmpegRecorder, probeEncoders, probeOutputs, type FinishedResult, type RecorderStatus } from './recorder'
+import { FfmpegRecorder, probeEncoders, probeOutputs, warmupHdrGpu, type FinishedResult, type RecorderStatus } from './recorder'
 import {
   encodeReplayKey,
   localReplayClean,
@@ -23,7 +23,8 @@ import {
   localReplayDelete,
   localReplayList,
   localReplayPath,
-  type LocalReplay
+  type LocalReplay,
+  replayQualityOf
 } from './replayLocal'
 import type { Config } from './config'
 import type { Db } from './db'
@@ -78,6 +79,12 @@ export class ReplayService {
     setTimeout(() => {
       void probeOutputs().catch(() => undefined)
       void probeEncoders().catch(() => undefined)
+      // HDR 屏：顺便实测一次全显卡录制能不能用（只在开了自动录制时测，要真的采几帧画面）
+      if (this.config.get('replayEnabled')) {
+        void warmupHdrGpu(String(this.config.get('replayDisplayId') || ''))
+          .then((m) => m && this.log(m))
+          .catch(() => undefined)
+      }
     }, 5000)
   }
 
@@ -129,7 +136,8 @@ export class ReplayService {
         fid,
         map,
         displayId: String(this.config.get('replayDisplayId') || ''),
-        quality: Number(this.config.get('replayQuality')) || 1080,
+        // 0 = 原生分辨率，不能用 || 兜底（以前写成 `|| 1080`，选了原生实际按 1080p 录、一直走 CPU 缩放）
+        quality: replayQualityOf(this.config.get('replayQuality')),
         fps: Number(this.config.get('replayFps')) || 30,
         bitrateMbps: Number(this.config.get('replayBitrateMbps')) || 8,
         exposure: Number(this.config.get('replayExposure')) || 0,

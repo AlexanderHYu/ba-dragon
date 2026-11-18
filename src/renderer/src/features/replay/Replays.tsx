@@ -25,7 +25,7 @@ const PAGE_SIZE = 12
 
 /** 分辨率档位：0 = 原生（不缩放，编码器和采集同卡时帧全程留在显存），对齐 4.0.3 的写法 */
 const QUALITIES: [number, string][] = [
-  [0, '原生分辨率（GPU 编码，CPU 占用低）'],
+  [0, '原生分辨率（推荐，几乎不占 CPU）'],
   [1440, '1440p'],
   [1080, '1080p'],
   [720, '720p']
@@ -331,6 +331,10 @@ function RecSettings({
               </option>
             ))}
           </select>
+          <div className="rec-hint dim">
+            选原生分辨率时画面全程留在显卡上，几乎不影响游戏；选其他分辨率要用 CPU 缩放，2K、4K 屏上会掉帧。
+            文件大小只看码率，和分辨率无关。HDR 屏会自动用显卡录成 HDR10，始终是原生分辨率。
+          </div>
         </div>
 
         <div className="rec-field">
@@ -392,7 +396,7 @@ function RecSettings({
             value={exposure}
             onChange={(e) => void patch({ replayExposure: Number(e.target.value) })}
           />
-          <div className="rec-hint dim">录像偏暗向右调，偏亮向左调；每 +1 EV 亮度翻倍。HDR 显示器通常需要调高。</div>
+          <div className="rec-hint dim">录像偏暗向右调，偏亮向左调；每 +1 EV 亮度翻倍。HDR 屏用显卡录成 HDR10 时不需要也不生效。</div>
         </div>
 
         <div className="rec-field">

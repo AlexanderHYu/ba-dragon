@@ -30,7 +30,7 @@ export const DEFAULTS: Settings = {
   /** 录哪块屏幕（Electron 的 display.id） */
   replayDisplayId: '',
   /** 分辨率：0 = 原生 / 720 / 1080 / 1440 */
-  replayQuality: 1080,
+  replayQuality: 0,
   replayFps: 30,
   replayBitrateMbps: 8,
   /** 曝光补偿（EV）：录像偏暗/偏亮时调 */
