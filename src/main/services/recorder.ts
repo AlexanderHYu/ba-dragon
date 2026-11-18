@@ -119,6 +119,7 @@ export async function probeOutputs(force?: boolean): Promise<DxgiOutput[]> {
 
 export function invalidateOutputs(): void {
   outputsCache = null
+  hdrGpuCache.clear()
 }
 
 function electronDisplays(): Display[] {
@@ -225,6 +226,90 @@ function encoderArgs(enc: EncoderName, bitrateMbps: number, fps: number): string
   }
 }
 
+// ---------------- HDR 全显卡链路 ----------------
+// HDR 屏优先用这条：ddagrab 直接给 10 位 HDR10（PQ / BT.2020）的显存帧，同一块显卡的 HEVC 编码器直接吃，
+// 画面全程不离开显卡，录成 HDR10 视频，SDR 屏上播放时由播放器做色调映射。
+// 实测 4K HDR：这条 ffmpeg 约 4% CPU；下面那条 FP16 读回内存 + libplacebo 的旧链路约 59%，
+// 外加每秒约 2GB 的显存→内存拷贝（系统内核再占一个核），还会打断游戏的渲染，导致掉帧。
+// 只录原生分辨率（显卡上的缩放在 N 卡上建不出纹理），曝光补偿不生效（没有着色器那一步）。
+// 各家能不能用以启动预热时的实测为准；实测不过、或录制时一帧都没出，退回旧链路。
+export type HdrGpuEncoder = 'hevc_nvenc' | 'hevc_amf' | 'hevc_qsv'
+const HDR_GPU_BY_VENDOR: Record<string, HdrGpuEncoder> = {
+  '10de': 'hevc_nvenc',
+  '1002': 'hevc_amf',
+  '8086': 'hevc_qsv'
+}
+const HDR_GPU_LABEL: Record<HdrGpuEncoder, string> = {
+  hevc_nvenc: 'NVENC HEVC',
+  hevc_amf: 'AMF HEVC',
+  hevc_qsv: 'QuickSync HEVC'
+}
+
+function hdrGpuGrab(output: number, fps: number): string {
+  return 'ddagrab=output_idx=' + output + ':output_fmt=x2bgr10:framerate=' + fps
+}
+
+/** 采集帧 → 编码器能吃的帧。N 卡、A 卡直接吃 D3D11 的 x2bgr10；Intel 要映射成 QSV 帧并转成 P010（都在显卡上） */
+function hdrGpuToEncoder(enc: HdrGpuEncoder): string {
+  return enc === 'hevc_qsv' ? 'hwmap=derive_device=qsv,format=qsv,vpp_qsv=format=p010' : ''
+}
+
+function hdrGpuEncoderArgs(enc: HdrGpuEncoder, bitrateMbps: number, fps: number): string[] {
+  const b = bitrateMbps + 'M'
+  const max = Math.round(bitrateMbps * 1.5) + 'M'
+  const buf = Math.round(bitrateMbps * 2) + 'M'
+  const g = String(fps * 2)
+  switch (enc) {
+    case 'hevc_nvenc':
+      return ['-c:v', 'hevc_nvenc', '-preset', 'p5', '-tune', 'hq', '-rc', 'vbr', '-profile:v', 'main10', '-b:v', b, '-maxrate', max, '-bufsize', buf, '-g', g]
+    case 'hevc_amf':
+      return ['-c:v', 'hevc_amf', '-usage', 'transcoding', '-quality', 'balanced', '-rc', 'vbr_peak', '-b:v', b, '-maxrate', max, '-bufsize', buf, '-g', g]
+    case 'hevc_qsv':
+      return ['-c:v', 'hevc_qsv', '-preset', 'medium', '-profile:v', 'main10', '-b:v', b, '-maxrate', max, '-bufsize', buf, '-g', g]
+  }
+}
+
+/**
+ * 采集帧自带 sRGB/BT.709 标记，编码器会优先用帧上的标记（命令行的 -color_* 会被盖掉），
+ * N 卡把 RGB 转 YUV 时也按这个矩阵转，所以先在帧上改成 HDR10（和 SDR 直出链路的 setparams 同理）
+ */
+const HDR10_FRAME_TAG = 'setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=tv'
+
+/** HDR10 的色彩标记；hvc1 是 Chromium（软件自带的播放器）认的 HEVC 封装标记 */
+const HDR10_TAGS = ['-color_primaries', 'bt2020', '-color_trc', 'smpte2084', '-colorspace', 'bt2020nc', '-color_range', 'tv', '-tag:v', 'hvc1']
+
+/** 每秒一张的预览图：读回一帧、缩到 320 宽后在 CPU 上做 HDR→SDR（一秒一次，开销可以忽略） */
+const HDR10_PREVIEW =
+  'hwdownload,format=x2bgr10le,scale=320:-2,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=gbr,' +
+  'zscale=t=linear:npl=203,format=gbrpf32le,tonemap=hable:desat=0,zscale=p=bt709:t=bt709:m=bt709:r=pc,format=yuvj420p'
+
+const hdrGpuCache = new Map<string, HdrGpuEncoder | null>()
+
+/**
+ * 实测这块屏能不能走 HDR 全显卡链路：用真实管线录 10 帧丢掉。按显卡品牌只试对应的那家编码器。
+ * 结果按「显卡:输出」缓存，显示器变化（invalidateOutputs）时清掉。
+ */
+export async function probeHdrGpu(
+  out: DxgiOutput,
+  force?: boolean
+): Promise<{ encoder: HdrGpuEncoder | null; error?: string; cached?: boolean }> {
+  const enc = HDR_GPU_BY_VENDOR[out.vendorId]
+  if (!enc) return { encoder: null, error: '不认识的显卡厂商 ' + (out.vendorId || '?') }
+  const key = out.adapter + ':' + out.output
+  if (!force && hdrGpuCache.has(key)) return { encoder: hdrGpuCache.get(key) ?? null, cached: true }
+  const toEnc = hdrGpuToEncoder(enc)
+  const r = await runFfmpeg(
+    ['-v', 'error', '-init_hw_device', 'd3d11va=dx:' + out.adapter, '-filter_hw_device', 'dx',
+     '-filter_complex', hdrGpuGrab(out.output, 30) + (toEnc ? ',' + toEnc : ''),
+     '-frames:v', '10', ...hdrGpuEncoderArgs(enc, 8, 30), '-f', 'null', '-'],
+    20000
+  )
+  const ok = r.code === 0
+  hdrGpuCache.set(key, ok ? enc : null)
+  if (ok) return { encoder: enc }
+  return { encoder: null, error: r.stderr.trim().split(/\r?\n/).slice(-2).join(' | ') || 'exit ' + r.code }
+}
+
 // ---------------- HDR → SDR ----------------
 // Windows 开 HDR 后桌面按 scRGB 合成（1.0 = 80 尼特，SDR 白 = 「SDR 内容亮度」/80）。
 // 8 位采集会把 80 尼特以上全部截成纯白 —— 这就是旧版录像「回回过曝」的原因。
@@ -280,7 +365,10 @@ interface Target {
   display: Display | null
   out: DxgiOutput
   color: DisplayColorInfo | null
+  /** 能不能走 libplacebo 的 HDR→SDR 旧链路（系统开了 HDR，且屏在默认显卡上） */
   hdr: boolean
+  /** 系统对这块屏开了 HDR（HDR 全显卡链路不受「默认显卡」的限制） */
+  systemHdr: boolean
   /** SDR 白相对 80 尼特的倍数 */
   sdrWhite: number
 }
@@ -298,10 +386,23 @@ async function resolveTarget(displayId: string | number, log?: (m: string) => vo
   const out = matchOutput(display, outputs)
   if (!out) throw new Error('没有找到可采集的显示器输出（DXGI）')
   // HDR 链路里 ddagrab 不能绑定指定显卡（滤镜全局设备要留给 libplacebo 自建 Vulkan），只能录默认显卡（adapter 0）上的屏
-  const hdr = !!(color && color.hdr) && out.adapter === 0
-  if (color && color.hdr && !hdr && log) log('HDR 屏不在默认显卡上，退回 8 位采集（高亮部分会过曝）')
+  const systemHdr = !!(color && color.hdr)
+  const hdr = systemHdr && out.adapter === 0
+  // 「HDR 屏不在默认显卡上」要等知道全显卡链路能不能用之后再说，放在录制开始时记
+  void log
   const sdrWhite = hdr && color ? Math.max(1, (color.sdrWhiteNits || 80) / 80) : 1
-  return { display, out, color, hdr, sdrWhite }
+  return { display, out, color, hdr, systemHdr, sdrWhite }
+}
+
+/** 启动预热：要录的屏开着 HDR 的话，提前实测一次 HDR 全显卡链路，第一局开录不用等。返回要记进日志的一句话 */
+export async function warmupHdrGpu(displayId: string | number): Promise<string | null> {
+  const t = await resolveTarget(displayId)
+  if (!t.systemHdr) return null
+  const p = await probeHdrGpu(t.out)
+  if (p.cached) return null
+  return p.encoder
+    ? 'HDR 全显卡录制可用：' + HDR_GPU_LABEL[p.encoder] + '（' + t.out.gpu + '）'
+    : 'HDR 全显卡录制不可用，将用旧方式录制：' + (p.error || '')
 }
 
 // ---------------- 录制效果预览 ----------------
@@ -396,6 +497,8 @@ export interface FilterOptions {
   size: TargetSize
   gpuDirect: boolean
   hdr: boolean
+  /** HDR 全显卡链路用的编码器（有值时忽略 size/gpuDirect/hdr/ev） */
+  hdrGpu?: HdrGpuEncoder | null
   ev: number
   /** 本段时间戳的零点（系统时间，毫秒） */
   t0: number
@@ -426,9 +529,15 @@ function firstFrameTap(firstFile: string): string {
   )
 }
 
-export function buildFilter({ output, fps, size, gpuDirect, hdr, ev, t0, firstFile }: FilterOptions): string {
+export function buildFilter({ output, fps, size, gpuDirect, hdr, hdrGpu, ev, t0, firstFile }: FilterOptions): string {
   const pts = wallclockPts(t0)
   const tap = firstFrameTap(firstFile)
+  if (hdrGpu) {
+    return (
+      hdrGpuGrab(output, fps) + ',' + pts + ',split=2[a][p0];[p0]fps=1,' + HDR10_PREVIEW + '[pv];[a]' +
+      HDR10_FRAME_TAG + (hdrGpuToEncoder(hdrGpu) ? ',' + hdrGpuToEncoder(hdrGpu) : '') + tap
+    )
+  }
   if (hdr) {
     return (
       'ddagrab=output_idx=' +
@@ -493,6 +602,8 @@ interface Plan {
   encoder: EncoderName
   gpuDirect: boolean
   hdr: boolean
+  /** HDR 全显卡链路（有值时按它录；size/encoder/gpuDirect/hdr 留着，退回旧链路时用） */
+  hdrGpu: HdrGpuEncoder | null
   ev: number
 }
 
@@ -600,7 +711,15 @@ class Session {
       this.log('编码器探测完成前对局已结束，本局不录制')
       return
     }
-    const { display, out, color, hdr, sdrWhite } = target
+    const { display, out, color, hdr, systemHdr, sdrWhite } = target
+    let hdrGpu: HdrGpuEncoder | null = null
+    if (systemHdr) {
+      const p = await probeHdrGpu(out)
+      hdrGpu = p.encoder
+      if (!hdrGpu) this.log('HDR 全显卡录制不可用，改用旧方式（CPU 占用较高）：' + (p.error || ''))
+      if (this.stopping || this.aborted) return
+    }
+    if (systemHdr && !hdrGpu && !hdr) this.log('HDR 屏不在默认显卡上，退回 8 位采集（高亮部分会过曝）')
     const size = targetSize(this.opts.quality, out.width, out.height)
     const ev = normExposure(this.opts.exposure)
     // 优先用与采集同一块显卡的硬件编码器；否则按探测顺序取第一个可用的
@@ -609,15 +728,18 @@ class Session {
     if (hdr) writeFileSync(join(this.dir, TONEMAP_FILE), tonemapShader(sdrWhite / exposureGain(ev)))
     // QSV 需要额外的设备映射、曝光补偿要在 CPU 上做，这两种情况统一走读回内存的路径
     const gpuDirect = !hdr && !!sameGpu && size.native && encoder !== 'h264_qsv' && ev === 0
-    this.hdr = hdr
-    this.plan = { output: out, size, encoder, gpuDirect, hdr, ev }
-    this.label =
-      ((display && display.label) || 'Display ' + out.output) + ' · ' + size.width + 'x' + size.height + ' · ' + ENCODER_LABEL[encoder] +
-      (hdr ? ' · HDR→SDR' : '') + (ev ? ' · ' + (ev > 0 ? '+' : '') + ev + 'EV' : '') + (gpuDirect ? ' (GPU)' : '')
+    this.hdr = hdr || !!hdrGpu
+    this.plan = { output: out, size, encoder, gpuDirect, hdr, hdrGpu, ev }
+    const screenLabel = (display && display.label) || 'Display ' + out.output
+    this.label = hdrGpu
+      ? screenLabel + ' · ' + out.width + 'x' + out.height + ' · ' + HDR_GPU_LABEL[hdrGpu] + ' · HDR10 (GPU)'
+      : screenLabel + ' · ' + size.width + 'x' + size.height + ' · ' + ENCODER_LABEL[encoder] +
+        (hdr ? ' · HDR→SDR' : '') + (ev ? ' · ' + (ev > 0 ? '+' : '') + ev + 'EV' : '') + (gpuDirect ? ' (GPU)' : '')
     this.log(
       'plan: adapter=' + out.adapter + ' output=' + out.output + ' (' + out.width + 'x' + out.height + ', ' + out.gpu + ')' +
-        ' -> ' + size.width + 'x' + size.height + ' ' + encoder +
-        (hdr ? ' hdrTonemap' : gpuDirect ? ' gpuDirect' : ' cpuScale') + ' ev=' + ev +
+        (hdrGpu
+          ? ' -> ' + out.width + 'x' + out.height + ' ' + hdrGpu + ' hdr10Gpu' + (ev ? '（曝光补偿在这条链路上不生效）' : '')
+          : ' -> ' + size.width + 'x' + size.height + ' ' + encoder + (hdr ? ' hdrTonemap' : gpuDirect ? ' gpuDirect' : ' cpuScale') + ' ev=' + ev) +
         ' | ' + ((display && display.label) || '?') + ' ' + ((display && display.colorSpace) || '') +
         (color ? ' | 系统: hdr=' + color.hdr + ' acm=' + color.acm + ' sdrWhite=' + color.sdrWhiteNits + 'nit' : '')
     )
@@ -626,7 +748,7 @@ class Session {
   }
 
   private spawnSegment(): void {
-    const { output, size, encoder, gpuDirect, hdr, ev } = this.plan
+    const { output, size, encoder, gpuDirect, hdr, hdrGpu, ev } = this.plan
     const fps = this.opts.fps
     const n = this.segments.length + 1
     const seg: Segment = {
@@ -638,12 +760,14 @@ class Session {
     this.segments.push(seg)
     const args = [
       '-hide_banner', '-loglevel', 'warning', '-nostats', '-progress', 'pipe:1', '-stats_period', '0.5',
-      ...(hdr ? [] : ['-init_hw_device', 'd3d11va=dx:' + output.adapter, '-filter_hw_device', 'dx']),
+      ...(hdr && !hdrGpu ? [] : ['-init_hw_device', 'd3d11va=dx:' + output.adapter, '-filter_hw_device', 'dx']),
       '-filter_complex',
-      buildFilter({ output: output.output, fps, size, gpuDirect, hdr, ev, t0: seg.t0, firstFile: seg.firstFile }),
+      buildFilter({ output: output.output, fps, size, gpuDirect, hdr, hdrGpu, ev, t0: seg.t0, firstFile: seg.firstFile }),
       // 编码时间基用 1/90000：默认的 1/帧率 会把卡顿后快速补上的帧取整到同一刻，挤掉或推迟，时间轴随之变形（实测开头差 0.16 秒）
-      '-map', '[v]', '-enc_time_base', '1/90000', ...encoderArgs(encoder, this.opts.bitrateMbps, fps),
-      '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv',
+      '-map', '[v]', '-enc_time_base', '1/90000',
+      ...(hdrGpu
+        ? [...hdrGpuEncoderArgs(hdrGpu, this.opts.bitrateMbps, fps), ...HDR10_TAGS]
+        : [...encoderArgs(encoder, this.opts.bitrateMbps, fps), '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv']),
       '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4', '-y', seg.file,
       '-map', '[pv]', '-f', 'image2', '-update', '1', '-atomic_writing', '1', '-q:v', '6', '-y', this.previewFile
     ]
@@ -678,8 +802,19 @@ class Session {
         if (this.procExit) this.procExit()
         return
       }
+      // HDR 全显卡链路第一段一帧都没出：退回旧链路立即重来（只在第一段退：后面的段换了编码器就没法和前面的拼起来）
+      if (this.plan.hdrGpu && !seg.seconds && this.segments.length === 1) {
+        this.log('HDR 全显卡录制启动失败，改用旧方式（CPU 占用较高）')
+        hdrGpuCache.set(this.plan.output.adapter + ':' + this.plan.output.output, null)
+        this.plan = { ...this.plan, hdrGpu: null }
+        this.hdr = this.plan.hdr
+        this.label = this.label.replace(/ · [A-Za-z]+ HEVC · HDR10 \(GPU\)$/, '')
+        this.segments.pop()
+        this.spawnSegment()
+        return
+      }
       // HDR 链路一帧都没出就退出（多半是没有 Vulkan）：退回 8 位采集立即重来，不计入重试次数
-      if (this.plan.hdr && !seg.seconds) {
+      if (this.plan.hdr && !this.plan.hdrGpu && !seg.seconds) {
         this.log('HDR 色调映射链路启动失败，退回 8 位采集（高亮部分会过曝）')
         this.plan = { ...this.plan, hdr: false }
         this.hdr = false
@@ -868,7 +1003,7 @@ class Session {
       } else {
         args.push('-map', '0:v:0')
       }
-      args.push('-c:v', 'copy', '-movflags', '+faststart', '-y', out)
+      args.push('-c:v', 'copy', ...(this.plan?.hdrGpu ? ['-tag:v', 'hvc1'] : []), '-movflags', '+faststart', '-y', out)
       const r = await runFfmpeg(args, 10 * 60 * 1000)
       if (r.code !== 0) {
         const what = use.length ? use.map((x) => x.name).join('+') : '纯画面'
