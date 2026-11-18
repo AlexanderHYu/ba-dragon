@@ -446,6 +446,19 @@ function RecSettings({
         </div>
 
         <div className="rec-field">
+          <div className="rec-label">HDR 录像</div>
+          <Switch
+            checked={config.replayHdrToSdr !== false}
+            onChange={(v) => void patch({ replayHdrToSdr: v })}
+            label="录完后转成 SDR"
+          />
+          <div className="rec-hint dim">
+            HDR 屏录的是 HDR10，在普通屏幕、别人的电脑或上传到视频网站时容易偏亮。开启后每局录完在后台转成普通视频并替换原文件，
+            任何播放器都能正常显示；开新的一局时会先停下，不影响游戏。只在 HDR 屏上看可以关掉，保留 HDR 原片。
+          </div>
+        </div>
+
+        <div className="rec-field">
           <div className="rec-label">编码器</div>
           <div className="row">
             <button

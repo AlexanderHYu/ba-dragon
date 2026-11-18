@@ -9,6 +9,7 @@ import { spawn, execFile } from 'node:child_process'
 import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable, Writable } from 'node:stream'
 import { screen } from 'electron'
+import { parseVuiColor } from './videoColor'
 import type { Display } from 'electron'
 import { colorInfoFor } from './displayColor'
 import type { DisplayColorInfo } from './displayColor'
@@ -65,6 +66,15 @@ function runFfmpeg(args: string[], timeoutMs = 20000): Promise<FfmpegResult> {
       }
     )
   })
+}
+
+// ---------------- 色彩标记：封装层对齐码流 ----------------
+// 硬件编码器把 RGB 转 YUV 时用什么矩阵由它自己定（实测 NVENC 一律 BT.601、有限范围），码流（VUI）里如实写了，
+// 但 MP4 封装层沿用的是我们给帧贴的标记（BT.709 / BT.2020），两边打架：Chromium 认码流，ffmpeg、B 站转码认封装层，就会解错颜色。
+// 合成（只改封装、不重新编码）时读出码流里的值，照着写封装层。各家编码器实际用了什么都以码流为准，不用逐家猜。
+async function bitstreamColorArgs(file: string): Promise<string[]> {
+  const r = await runFfmpeg(['-i', file, '-c', 'copy', '-bsf:v', 'trace_headers', '-frames:v', '1', '-f', 'null', '-'], 20000)
+  return parseVuiColor(r.stderr)
 }
 
 // ---------------- 显示器探测：DXGI 显卡/输出编号 ↔ 物理分辨率 ----------------
@@ -305,6 +315,9 @@ export async function probeHdrGpu(
     20000
   )
   const ok = r.code === 0
+  // 超时（被杀、没有任何报错）多半是屏幕一直没变化：ddagrab 要等画面有更新才拿得到第一帧，
+  // 开着软件人走开、显示器睡眠或锁屏都会这样。这不算不支持，不缓存，开局时再测（游戏画面一直在变）
+  if (!ok && r.code === -1 && !r.stderr.trim()) return { encoder: null, error: '屏幕没有变化，没测成，开局时再测' }
   hdrGpuCache.set(key, ok ? enc : null)
   if (ok) return { encoder: enc }
   return { encoder: null, error: r.stderr.trim().split(/\r?\n/).slice(-2).join(' | ') || 'exit ' + r.code }
@@ -400,9 +413,11 @@ export async function warmupHdrGpu(displayId: string | number): Promise<string |
   if (!t.systemHdr) return null
   const p = await probeHdrGpu(t.out)
   if (p.cached) return null
-  return p.encoder
-    ? 'HDR 全显卡录制可用：' + HDR_GPU_LABEL[p.encoder] + '（' + t.out.gpu + '）'
-    : 'HDR 全显卡录制不可用，将用旧方式录制：' + (p.error || '')
+  if (p.encoder) return 'HDR 全显卡录制可用：' + HDR_GPU_LABEL[p.encoder] + '（' + t.out.gpu + '）'
+  // 没缓存说明是超时没测成（见 probeHdrGpu），开局时会再测
+  return hdrGpuCache.has(t.out.adapter + ':' + t.out.output)
+    ? 'HDR 全显卡录制不可用，将用旧方式录制：' + (p.error || '')
+    : 'HDR 全显卡录制预热：' + (p.error || '')
 }
 
 // ---------------- 录制效果预览 ----------------
@@ -627,7 +642,16 @@ export type MuxResult =
   | { ok: false; error: string }
 
 /** 录制结束回调拿到的东西：合成结果 + 对局信息 + 临时目录（外层保存后自行清理） */
-export type FinishedResult = MuxResult & { fid: string; map: string; dir: string }
+export type FinishedResult = MuxResult & { fid: string; map: string; dir: string } & Partial<PlanInfo>
+
+/** 录制方案摘要：外层转 SDR 时要用 */
+export interface PlanInfo {
+  /** 这一局录成了 HDR10（HDR 全显卡链路） */
+  hdr10: boolean
+  /** 这块显卡上可用的 H.264 编码器（转 SDR 用） */
+  encoder: EncoderName | null
+  vendorId: string
+}
 
 export interface RecorderStatus {
   active: boolean
@@ -696,6 +720,11 @@ class Session {
 
   log(m: string): void {
     this.rec._log(m)
+  }
+
+  planInfo(): PlanInfo {
+    const p = this.plan as Plan | undefined
+    return p ? { hdr10: !!p.hdrGpu, encoder: p.encoder, vendorId: p.output.vendorId } : { hdr10: false, encoder: null, vendorId: '' }
   }
 
   async begin(): Promise<void> {
@@ -977,6 +1006,9 @@ class Session {
           capturePts.toFixed(3) + 's；' + tr.name + '起点 ' + tr.wall + '）'
       )
     }
+    // 封装层的色彩标记照着码流写（见 bitstreamColorArgs）
+    const colorArgs = await bitstreamColorArgs(segs[0].file)
+    if (colorArgs.length) this.log('合成: 色彩标记按码流写 ' + colorArgs.filter((_, i) => i % 2).join(' / '))
     type Track = (typeof tracks)[number]
     const attempt = async (use: Track[]): Promise<boolean> => {
       const args = ['-v', 'error', ...vIn]
@@ -1003,7 +1035,7 @@ class Session {
       } else {
         args.push('-map', '0:v:0')
       }
-      args.push('-c:v', 'copy', ...(this.plan?.hdrGpu ? ['-tag:v', 'hvc1'] : []), '-movflags', '+faststart', '-y', out)
+      args.push('-c:v', 'copy', ...colorArgs, ...(this.plan?.hdrGpu ? ['-tag:v', 'hvc1'] : []), '-movflags', '+faststart', '-y', out)
       const r = await runFfmpeg(args, 10 * 60 * 1000)
       if (r.code !== 0) {
         const what = use.length ? use.map((x) => x.name).join('+') : '纯画面'
@@ -1133,7 +1165,7 @@ export class FfmpegRecorder {
     this.session = null
     this.stopPreview()
     this.emitStatus()
-    const base = (): { fid: string; map: string; dir: string } => ({ fid: s.fid, map: s.map, dir: s.dir })
+    const base = (): { fid: string; map: string; dir: string } & PlanInfo => ({ fid: s.fid, map: s.map, dir: s.dir, ...s.planInfo() })
     s.finish()
       .then((r) => {
         if (this.onFinished) this.onFinished({ ...r, ...base() })
