@@ -56,3 +56,6 @@ jobs:
             dist/*.blockmap
             dist/latest.yml
           fail_on_unmatched_files: false
+          # 版本号带「-」的（如 v2.0.2-beta.1）是测试版：标成 prerelease，不会成为 Latest，
+          # 普通用户的自动更新和「有新版本」提示都只看 Latest，不会收到测试版
+          prerelease: ${{ contains(github.ref_name, '-') }}
