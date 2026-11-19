@@ -41,17 +41,11 @@ async function recordTest(Svc: typeof import('./services/replays').ReplayService
   logs.push((Date.now() % 100000) + ' >> stop')
   svc.stopForMatch('smoketest', '冒烟')
   // 合成要一会儿
-  // 以 . 开头的是录制或转 SDR 时的临时文件，不算
+  // 以 . 开头的是录制中的临时文件，不算
   const done = (): string[] => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.mp4') && !f.startsWith('.')) : [])
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 500))
     if (done().length) break
-  }
-  // HDR 屏录的会排队转 SDR：等它转完（成功或失败都会写日志），最多 2 分钟
-  if (logs.some((l) => l.includes('转 SDR: 已排队'))) {
-    for (let i = 0; i < 240 && !logs.some((l) => /转 SDR: (完成|都失败)/.test(l)); i++) {
-      await new Promise((r) => setTimeout(r, 500))
-    }
   }
   const files = done()
   const size = files.length ? statSync(join(dir, files[0])).size : 0

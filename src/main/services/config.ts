@@ -43,8 +43,8 @@ export const DEFAULTS: Settings = {
   replayKeepDays: 0,
   /** 最多保留多少个录像，每局录完后删掉更早的（0 = 不限）。和 replayKeepDays 同时生效 */
   replayKeepCount: 0,
-  /** HDR 屏录的 HDR10 录像，录完后在后台转成 SDR 并替换原文件（任何播放器都能正常显示） */
-  replayHdrToSdr: true,
+  /** 采集方式：auto = HDR 屏或（Windows 11 上）需要缩放时用 Windows 图形捕获，其余用桌面复制；wgc / dxgi = 强制 */
+  replayCaptureMethod: 'auto',
   /** 窗口大小（关的时候记一下） */
   windowBounds: { width: 1280, height: 860 }
 }
