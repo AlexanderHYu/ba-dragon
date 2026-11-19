@@ -74,6 +74,8 @@ export interface ReportUnit {
   destrPerCost: number | null
   killsPer1k: number | null
   users: string[]
+  /** 每个阵亡单位的存活秒数（合并多种配装时重新算中位数用；老缓存里可能没有） */
+  lives?: number[]
 }
 
 export interface ReportPlayer {
@@ -618,8 +620,83 @@ function finishUnit(a: UnitAgg): ReportUnit {
     destr: Math.round(a.destr),
     destrPerCost: spent ? r2(a.destr / spent) : null,
     killsPer1k: spent ? r1((a.kills / spent) * 1000) : null,
-    users: [...a.users]
+    users: [...a.users],
+    lives: a.lives.map((x) => Math.round(x))
   }
+}
+
+/** 同一队同一单位的几种配装：total 是合计，variants 是各配装（只有一种配装时 variants 只有它自己） */
+export interface UnitGroup {
+  key: string
+  total: ReportUnit
+  variants: ReportUnit[]
+}
+
+/**
+ * 按「队伍 + 单位」把多种配装归成一组。数量直接相加，比值（死亡率、单价、每花费击杀分等）用合计后的数重新算；
+ * 阵亡存活中位数用全部存活时间重新算，老缓存没有存活时间时按阵亡数加权平均各配装的中位数（近似）。
+ */
+export function groupLoadouts(units: ReportUnit[]): UnitGroup[] {
+  const map = new Map<string, ReportUnit[]>()
+  for (const u of units) {
+    const k = u.team + ':' + u.id
+    const arr = map.get(k)
+    if (arr) arr.push(u)
+    else map.set(k, [u])
+  }
+  const out: UnitGroup[] = []
+  for (const [key, variants] of map) {
+    if (variants.length === 1) {
+      out.push({ key, total: variants[0], variants })
+      continue
+    }
+    const sum = (f: (u: ReportUnit) => number): number => variants.reduce((s, u) => s + (f(u) || 0), 0)
+    const deployed = sum((u) => u.deployed)
+    const dead = sum((u) => u.dead)
+    const spent = sum((u) => u.spent)
+    const value = sum((u) => u.value)
+    const dmg = sum((u) => u.dmg)
+    const kills = sum((u) => u.kills)
+    const destr = sum((u) => u.destr)
+    let lifeMedian: number | null
+    if (variants.every((u) => Array.isArray(u.lives))) {
+      const all = variants.flatMap((u) => u.lives as number[])
+      lifeMedian = all.length ? Math.round(median(all) as number) : null
+    } else {
+      const w = variants.filter((u) => u.lifeMedian != null && u.dead > 0)
+      const wd = w.reduce((s, u) => s + u.dead, 0)
+      lifeMedian = wd ? Math.round(w.reduce((s, u) => s + (u.lifeMedian as number) * u.dead, 0) / wd) : null
+    }
+    const first = variants[0]
+    out.push({
+      key,
+      variants,
+      total: {
+        ...first,
+        options: '',
+        loadout: variants.length + ' 种配装',
+        cost: deployed ? Math.round(value / deployed) : first.cost,
+        value,
+        count: sum((u) => u.count),
+        deployed,
+        refunded: sum((u) => u.refunded),
+        dead,
+        spent,
+        lost: sum((u) => u.lost),
+        deathRate: deployed ? Math.round((dead / deployed) * 100) : null,
+        lifeMedian,
+        dmg,
+        kills,
+        dmgPerCost: spent ? r2(dmg / spent) : null,
+        destr,
+        destrPerCost: spent ? r2(destr / spent) : null,
+        killsPer1k: spent ? r1((kills / spent) * 1000) : null,
+        users: [...new Set(variants.flatMap((u) => u.users))],
+        lives: variants.every((u) => Array.isArray(u.lives)) ? variants.flatMap((u) => u.lives as number[]) : undefined
+      }
+    })
+  }
+  return out
 }
 
 // 本局要点：挑几条明显的事实，给复盘一个开头
