@@ -10,12 +10,14 @@ import {
   renameSync,
   rmSync,
   statSync,
-  unlinkSync
+  unlinkSync,
+  readFileSync
 } from 'node:fs'
+import { execFile } from 'node:child_process'
 import { Readable } from 'node:stream'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { Notification, app, protocol, screen } from 'electron'
-import { FfmpegRecorder, probeEncoders, probeOutputs, probeWgcMonitors, type CaptureMethod, type FinishedResult, type RecorderStatus } from './recorder'
+import { FfmpegRecorder, ffmpegPath, probeEncoders, probeOutputs, probeWgcMonitors, type CaptureMethod, type FinishedResult, type RecorderStatus } from './recorder'
 import {
   encodeReplayKey,
   localReplayClean,
@@ -24,7 +26,10 @@ import {
   localReplayList,
   localReplayPath,
   type LocalReplay,
-  replayQualityOf
+  replayQualityOf,
+  matchLoggedStart,
+  videoStartFromProbe,
+  videoStartsFromLog
 } from './replayLocal'
 import type { Config } from './config'
 import type { Db } from './db'
@@ -112,6 +117,49 @@ export class ReplayService {
       /* 日志写不进去不该影响录像本身 */
     }
   }
+  /** 录像第 0 帧的系统时间缓存（键 = 文件名|修改时间） */
+  private startCache = new Map<string, number | null>()
+
+  /**
+   * 录像第 0 帧对应的系统时间（毫秒），播放器用它把对局时间轴对齐到视频上。
+   * 先读合成时写进 MP4 的值；老录像没有，就从录制日志里找回（见 videoStartsFromLog）；都没有返回 null，播放器退回按保存时间估算
+   */
+  async videoStart(id: string): Promise<number | null> {
+    const file = localReplayPath(this.dir(), id)
+    if (!file) return null
+    let mtime = 0
+    try {
+      mtime = statSync(file).mtimeMs
+    } catch {
+      return null
+    }
+    const key = id + '|' + mtime
+    if (this.startCache.has(key)) return this.startCache.get(key) ?? null
+    let start: number | null = null
+    const bin = ffmpegPath()
+    if (bin) {
+      start = await new Promise<number | null>((done) =>
+        execFile(bin, ['-hide_banner', '-i', file], { windowsHide: true, timeout: 15000 }, (_e, _o, err) =>
+          done(videoStartFromProbe(String(err || '')))
+        )
+      )
+    }
+    if (start == null) {
+      const text = ['replay.log.1', 'replay.log']
+        .map((n) => {
+          try {
+            return readFileSync(join(app.getPath('userData'), n), 'utf8')
+          } catch {
+            return ''
+          }
+        })
+        .join(LF)
+      start = matchLoggedStart(videoStartsFromLog(text), basename(file), mtime)
+    }
+    this.startCache.set(key, start)
+    return start
+  }
+
   recentLogs(): string[] {
     return this.logs.slice(-120)
   }

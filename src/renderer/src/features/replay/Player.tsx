@@ -1,10 +1,11 @@
 // 录像内置播放器：<video> 走 replay:// 协议（支持 Range，拖进度条不会整文件加载），
 // 控制条自己画，因为要在进度条背景上铺一张这一局的兵力曲线。
 //
-// 对齐方式：录像从部署阶段就开始录（比 BATrace 记的开战时间早 1.5～2 分钟），
-// 结尾还录了约 1 分钟结算画面。所以曲线按真实时间铺：开录时间 = 存盘时间 − 视频时长，
-// 开战时间取 BATrace 的 StartTime，曲线只画在开战到结束那一段。
-// 算出来不合理（比如存盘时间不对）时退回按比例铺满整条进度条。
+// 对齐方式：录像从部署阶段就开始录（BATrace 的 StartTime 是部署结束、正式开战的时刻，实测比加载完成晚约 1.5 分钟），
+// 结尾还录了约 1 分钟结算画面。所以曲线按真实时间铺：开战时间取 BATrace 的 StartTime，
+// 开录时间取合成时记下的视频第 0 帧系统时间（replay:videoStart，老录像从录制日志找回），曲线只画在开战到结束那一段。
+// 拿不到时退回「存盘时间 − 视频时长」估算（会偏晚，偏差约等于合成用时，长录像可达半分钟以上）；
+// 算出来不合理时退回按比例铺满整条进度条。
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   IconFolder,
@@ -110,6 +111,20 @@ export default function Player({
     }
   }, [item.fid])
 
+  // 视频第 0 帧的系统时间（准确的开录时间）
+  const [videoStart, setVideoStart] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    setVideoStart(null)
+    void window.BA.replayVideoStart(item.id).then(
+      (t) => alive && setVideoStart(t),
+      () => undefined
+    )
+    return () => {
+      alive = false
+    }
+  }, [item.id])
+
   useEffect(() => {
     if (video.current) video.current.volume = vol
   }, [vol])
@@ -147,12 +162,13 @@ export default function Player({
   // 正数说明 A 队在上风，这条比两条绝对曲线更容易一眼看出局势翻转。
   // 对局在视频里占的那一段（0~1）。录像存盘时间就是 createdAt
   const align = useMemo(() => {
-    if (!span || !(dur > 0) || !item.createdAt) return { a: 0, b: 1, abs: false }
-    const offset = (span.startMs - (item.createdAt - dur * 1000)) / 1000
+    if (!span || !(dur > 0) || (!videoStart && !item.createdAt)) return { a: 0, b: 1, abs: false }
+    const start = videoStart || item.createdAt - dur * 1000
+    const offset = (span.startMs - start) / 1000
     // 合理范围：开战在开录后 0~10 分钟，且对局打完时视频还没结束（留 30 秒余量）
     if (offset < 0 || offset > 600 || offset + span.durSec > dur + 30) return { a: 0, b: 1, abs: false }
     return { a: offset / dur, b: Math.min(1, (offset + span.durSec) / dur), abs: true }
-  }, [span, dur, item.createdAt])
+  }, [span, dur, item.createdAt, videoStart])
 
   const curve = useMemo(() => {
     const n = tl?.minutes || 0

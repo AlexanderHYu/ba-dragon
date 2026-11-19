@@ -11,6 +11,7 @@ import type { Readable, Writable } from 'node:stream'
 import { screen } from 'electron'
 import { release as osRelease } from 'node:os'
 import { parseVuiColor } from './videoColor'
+import { VIDEO_START_TAG } from './replayLocal'
 import type { Display } from 'electron'
 import { colorInfoFor } from './displayColor'
 import type { DisplayColorInfo } from './displayColor'
@@ -933,17 +934,16 @@ class Session {
     const audioOk = sysOk || micOk
     // 成品时间轴零点 = 第一段第一帧的采集时刻（T0 + 它在滤镜里的时间戳）：合成时 ffmpeg 会把视频平移到第一帧从 0 开始，
     // 播放器也按这个时间轴播放（分段文件里第一帧落在 B 帧延迟处，那个偏移在合成时就被去掉了，不能再减一次）
-    let zeroWall = 0
+    // 视频第 0 帧对应的系统时间（毫秒）：对齐声音要用，也写进 MP4 注释给播放器对齐对局时间轴用
     let capturePts = 0
-    if (audioOk) {
-      try {
-        const m = readFileSync(join(this.dir, segs[0].firstFile), 'utf8').match(/pts_time:(-?[\d.]+)/)
-        capturePts = m ? Number(m[1]) : 0
-      } catch {
-        /* 没取到第一帧时间戳：按 0 处理 */
-      }
-      zeroWall = segs[0].t0 + capturePts * 1000
+    try {
+      const m = readFileSync(join(this.dir, segs[0].firstFile), 'utf8').match(/pts_time:(-?[\d.]+)/)
+      capturePts = m ? Number(m[1]) : 0
+    } catch {
+      /* 没取到第一帧时间戳：按 0 处理 */
     }
+    const zeroWall = Math.round(segs[0].t0 + capturePts * 1000)
+    this.log('合成: 视频第 0 帧 ' + zeroWall)
     // 声音比画面晚开始 → 往后推；早开始 → 裁掉多出的开头
     // 以第一段对齐；中途续录的分段之间有 1~2 秒空档，之后的声音会相应偏早
     const offsetOf = (startWall: number): number => (startWall && zeroWall ? (startWall - zeroWall) / 1000 : 0)
@@ -986,7 +986,7 @@ class Session {
       } else {
         args.push('-map', '0:v:0')
       }
-      args.push('-c:v', 'copy', ...colorArgs, '-movflags', '+faststart', '-y', out)
+      args.push('-c:v', 'copy', ...colorArgs, '-metadata', 'comment=' + VIDEO_START_TAG + zeroWall, '-movflags', '+faststart', '-y', out)
       const r = await runFfmpeg(args, 10 * 60 * 1000)
       if (r.code !== 0) {
         const what = use.length ? use.map((x) => x.name).join('+') : '纯画面'

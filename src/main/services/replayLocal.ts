@@ -273,3 +273,75 @@ export function replayQualityOf(v: unknown): number {
   const n = Number(v)
   return v !== '' && v != null && Number.isFinite(n) && n >= 0 ? n : 1080
 }
+
+// ---------------- 视频开录时间（对齐对局时间轴用） ----------------
+// 以前用「文件保存时间 − 视频时长」推算开录时间，但录完还要合成（47 分钟的 4K 录像要半分钟以上），
+// 保存时间比录制结束晚，推出来的开录时间偏晚，曲线和关键时刻就整体往前偏（实测一局差 36.7 秒）。
+// 现在合成时把视频第 0 帧的系统时间写进 MP4 的 comment；老录像从录制日志里找回。
+
+/** 写进 MP4 comment 的前缀，后面跟毫秒时间戳 */
+export const VIDEO_START_TAG = 'ba_video_start='
+
+/** 从 ffmpeg -i 的输出里读出写进去的开录时间 */
+export function videoStartFromProbe(stderr: string): number | null {
+  const m = String(stderr || '').match(new RegExp(VIDEO_START_TAG + '(\\d{12,})'))
+  return m ? Number(m[1]) : null
+}
+
+export interface LoggedStart {
+  /** 保存时的文件名 */
+  name: string
+  fid: string
+  /** 视频第 0 帧的系统时间（毫秒） */
+  start: number
+  /** 保存那一行的时间（毫秒，本地时间） */
+  savedAt: number
+}
+
+/**
+ * 从录制日志里找出每个录像的开录时间：「合成:」行里有 T0 和第一帧的采集偏移（或直接写了第 0 帧），
+ * 后面紧跟的「save: 已保存 <文件名>」就是这个录像。
+ */
+export function videoStartsFromLog(text: string): LoggedStart[] {
+  const out: LoggedStart[] = []
+  let pending: number | null = null
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const zero = line.match(/合成: 视频第 0 帧 (\d{12,})/)
+    if (zero) {
+      pending = Number(zero[1])
+      continue
+    }
+    const t0 = line.match(/T0 (\d{12,})，第一帧采集于 T0\+(-?[\d.]+)s/)
+    if (t0) {
+      pending = Math.round(Number(t0[1]) + Number(t0[2]) * 1000)
+      continue
+    }
+    const save = line.match(/^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d) save: 已保存 (\S+?\.(?:mp4|webm))/)
+    if (save && pending != null) {
+      const name = save[3]
+      out.push({ name, fid: name.split('_')[0], start: pending, savedAt: new Date(save[1] + 'T' + save[2]).getTime() })
+      pending = null
+    } else if (/对局开始，准备录制/.test(line)) {
+      pending = null // 新的一局开始了，上一局的合成信息作废
+    }
+  }
+  return out
+}
+
+/**
+ * 给一个录像文件找日志里的开录时间：文件名一样就是它；
+ * 名字后来被补全过（补了地图、队伍），就按局号相同、保存时间和文件修改时间差 3 分钟以内来认
+ */
+export function matchLoggedStart(list: LoggedStart[], name: string, mtimeMs: number): number | null {
+  const exact = list.filter((x) => x.name === name)
+  if (exact.length) return exact[exact.length - 1].start
+  const fid = name.split('_')[0]
+  let best: LoggedStart | null = null
+  for (const x of list) {
+    if (x.fid !== fid) continue
+    const d = Math.abs(x.savedAt - mtimeMs)
+    if (d < 180000 && (!best || d < Math.abs(best.savedAt - mtimeMs))) best = x
+  }
+  return best ? best.start : null
+}
+
