@@ -38,6 +38,7 @@ const api = {
   getReplayStatus: () => invoke('replay:status'),
   listReplays: () => invoke('replay:list'),
   deleteReplay: (key: string) => invoke('replay:delete', key),
+  replayVideoStart: (key: string) => invoke('replay:videoStart', key),
   cleanReplays: (days: number) => invoke('replay:clean', days),
   listDisplays: () => invoke('replay:displays'),
   listEncoders: () => invoke('replay:encoders'),

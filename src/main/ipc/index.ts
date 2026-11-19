@@ -211,6 +211,7 @@ export function registerIpc(s: Services): void {
     }))
   )
   on('replay:delete', (key) => s.replays.remove(String(key)))
+  on('replay:videoStart', (key) => s.replays.videoStart(String(key)))
   on('replay:clean', (days) => s.replays.clean(Number(days) || 0))
   on('replay:displays', () => s.replays.displays())
   on('replay:encoders', () => s.replays.encoders())

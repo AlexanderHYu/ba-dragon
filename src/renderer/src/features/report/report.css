@@ -621,3 +621,33 @@
 .tl-mo.minor line.drop {
   display: none;
 }
+
+/* 单位页：同一单位多种配装折叠成一组，点开看各配装 */
+.rp-group {
+  cursor: pointer;
+}
+.rp-group:hover td {
+  background: var(--row-hover);
+}
+.rp-group td:first-child > svg,
+.rp-chev-sp {
+  display: inline-block;
+  width: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--dim);
+}
+.rp-group.open td {
+  border-bottom-color: transparent;
+}
+.rp-variant td {
+  background: var(--bg-2);
+}
+.rp-variant td:first-child {
+  padding-left: 40px;
+}
+/* 第二行（配装名 / 几种配装）跟单位名对齐，不从箭头的位置开始 */
+.rp-chev-sp ~ .rp-loadout,
+.rp-group td:first-child > svg ~ .rp-loadout {
+  padding-left: 20px;
+}

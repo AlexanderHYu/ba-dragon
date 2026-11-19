@@ -2,9 +2,9 @@
 // 概况顶上是两队对垒条，下面两列：左边本局要点、全场之最，右边双方对比、兵种构成。
 // 数字都是主进程算好的（shared/match），这里只负责摆出来。
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { IconCopy, IconExternalLink, IconPlayerPlay, IconRefresh, IconUserSearch } from '@tabler/icons-react'
+import { IconChevronDown, IconChevronRight, IconCopy, IconExternalLink, IconPlayerPlay, IconRefresh, IconUserSearch } from '@tabler/icons-react'
 import type { ReplayItem } from '@shared/ipc'
-import { clock, type MatchReport, type Moment, type ReportPlayer, type ReportTeam } from '@shared/match'
+import { clock, groupLoadouts, type MatchReport, type Moment, type ReportPlayer, type ReportTeam, type ReportUnit } from '@shared/match'
 import Mark from '../../components/Mark'
 import ContextMenu, { type MenuState } from '../../components/ContextMenu'
 import Flag from '../../components/Flag'
@@ -535,6 +535,39 @@ const PCOLS: [keyof ReportPlayer, string, (p: ReportPlayer) => React.ReactNode, 
   ['supply', '补给', (p) => num(p.supply)]
 ]
 
+type SortState = { key: string; dir: 1 | -1 }
+
+/** 可点击排序的表头：点同一列切换升降序，换列时文字列默认升序、数字列默认降序 */
+function SortHead({
+  cols,
+  sort,
+  setSort,
+  textKeys = ['name', 'roleName', 'users']
+}: {
+  cols: [string, string, string?][]
+  sort: SortState
+  setSort: (f: (s: SortState) => SortState) => void
+  textKeys?: string[]
+}): React.JSX.Element {
+  return (
+    <tr>
+      {cols.map(([k, label, tip]) => (
+        <th
+          key={k}
+          title={tip}
+          className={'rp-sort' + (sort.key === k ? ' sorted' : '')}
+          onClick={() =>
+            setSort((st) => (st.key === k ? { key: k, dir: (-st.dir) as 1 | -1 } : { key: k, dir: textKeys.includes(k) ? 1 : -1 }))
+          }
+        >
+          {label}
+          {sort.key === k ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
+        </th>
+      ))}
+    </tr>
+  )
+}
+
 function sortList<T>(list: T[], key: string, dir: 1 | -1): T[] {
   return [...list].sort((a, b) => {
     const x = (a as Record<string, unknown>)[key]
@@ -658,7 +691,23 @@ function Players({ r }: { r: MatchReport }): React.JSX.Element {
   )
 }
 
+/** 玩家单位明细的列：[字段, 表头, 说明] */
+const PU_COLS: [string, string, string?][] = [
+  ['name', '单位'],
+  ['roleName', '兵种'],
+  ['deployed', '出兵', '出动次数，飞机按架次计；括号内为其中返航/回收的次数'],
+  ['dead', '阵亡'],
+  ['deathRate', '死亡率', '阵亡 ÷ 出兵'],
+  ['lifeMedian', '阵亡存活·中位', '已阵亡单位从出兵到阵亡的时间中位数（不含存活到结束和返航回收的单位）'],
+  ['dmg', '伤害'],
+  ['kills', '击杀'],
+  ['destr', '击杀分（估）', '按各单位击杀数分摊该玩家总击杀分的估算值'],
+  ['spent', '花费']
+]
+
 function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
+  const [sort, setSort] = useState<SortState>({ key: 'spent', dir: -1 })
+  const units = sortList(p.units, sort.key, sort.dir)
   // 老版 mrPlayerDetail 的那一串零碎事实
   const extra = [
     p.supplyByAllies ? '队友使用其补给 ' + num(p.supplyByAllies) : '',
@@ -737,21 +786,10 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
       <div className="rp-scroll">
         <table className="t rp-wide rp-mini">
           <thead>
-            <tr>
-              <th>单位</th>
-              <th>兵种</th>
-              <th title="出动次数，飞机按架次计；括号内为其中返航/回收的次数">出兵</th>
-              <th>阵亡</th>
-              <th>死亡率</th>
-              <th title="已阵亡单位从出兵到阵亡的时间中位数（不含存活到结束和返航回收的单位）">阵亡存活·中位</th>
-              <th>伤害</th>
-              <th>击杀</th>
-              <th title="按各单位击杀数分摊该玩家总击杀分的估算值">击杀分（估）</th>
-              <th>花费</th>
-            </tr>
+            <SortHead cols={PU_COLS} sort={sort} setSort={setSort} />
           </thead>
           <tbody>
-            {p.units.map((u) => (
+            {units.map((u) => (
               <tr key={u.id + '|' + u.options}>
                 <td>{u.name}</td>
                 <td className="dim">{u.roleName}</td>
@@ -778,19 +816,34 @@ function PlayerDetail({ p }: { p: ReportPlayer }): React.JSX.Element {
 // ---------- 单位 ----------
 function Units({ r }: { r: MatchReport }): React.JSX.Element {
   const [team, setTeam] = useState<'all' | '0' | '1'>('all')
-  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'spent', dir: -1 })
+  const [sort, setSort] = useState<SortState>({ key: 'spent', dir: -1 })
+  /** 展开了哪些多配装的单位（key = 队伍:单位） */
+  const [open, setOpen] = useState<Set<string>>(new Set())
   const teamValue = [0, 1].map(
     (t) => r.units.filter((u) => u.team === t).reduce((s, u) => s + (u.value || 0), 0) || 1
   )
-  const list = sortList(
-    r.units
-      .filter((u) => team === 'all' || String(u.team) === team)
-      .map((u) => ({ ...u, usage: Math.round(((u.value || 0) / teamValue[u.team]) * 1000) / 10 })),
+  type Row = ReportUnit & { usage: number }
+  const withUsage = (u: ReportUnit): Row => ({ ...u, usage: Math.round(((u.value || 0) / teamValue[u.team]) * 1000) / 10 })
+  // 同一单位有多种配装时归成一组：折叠时显示合计，展开后显示各配装（组按合计排序，组内按同一列排序）
+  const groups = sortList(
+    groupLoadouts(r.units.filter((u) => team === 'all' || String(u.team) === team)).map((g) => ({
+      key: g.key,
+      total: withUsage(g.total),
+      variants: sortList(g.variants.map(withUsage), sort.key, sort.dir),
+      ...withUsage(g.total)
+    })),
     sort.key,
     sort.dir
   )
+  const toggle = (k: string): void =>
+    setOpen((s) => {
+      const n = new Set(s)
+      if (n.has(k)) n.delete(k)
+      else n.add(k)
+      return n
+    })
 
-  const cols: [string, string, (u: (typeof list)[0]) => React.ReactNode, string?][] = [
+  const cols: [string, string, (u: Row) => React.ReactNode, string?][] = [
     [
       'name',
       '单位',
@@ -885,34 +938,37 @@ function Units({ r }: { r: MatchReport }): React.JSX.Element {
       <div className="rp-scroll">
         <table className="t rp-wide">
           <thead>
-            <tr>
-              {cols.map(([k, label, , tip]) => (
-                <th
-                  key={k}
-                  title={tip}
-                  className={'rp-sort' + (sort.key === k ? ' sorted' : '')}
-                  onClick={() =>
-                    setSort((s) =>
-                      s.key === k
-                        ? { key: s.key, dir: (-s.dir) as 1 | -1 }
-                        : { key: k, dir: ['name', 'roleName', 'users'].includes(k) ? 1 : -1 }
-                    )
-                  }
-                >
-                  {label}
-                  {sort.key === k ? (sort.dir === -1 ? ' ↓' : ' ↑') : ''}
-                </th>
-              ))}
-            </tr>
+            <SortHead cols={cols.map(([k, label, , tip]) => [k, label, tip])} sort={sort} setSort={setSort} />
           </thead>
           <tbody>
-            {list.map((u) => (
-              <tr key={u.team + ':' + u.id + '|' + u.options}>
-                {cols.map(([k, , render]) => (
-                  <td key={k}>{render(u)}</td>
-                ))}
-              </tr>
-            ))}
+            {groups.map((g) => {
+              const multi = g.variants.length > 1
+              const isOpen = multi && open.has(g.key)
+              return (
+                <Fragment key={g.key}>
+                  <tr
+                    className={multi ? 'rp-group' + (isOpen ? ' open' : '') : undefined}
+                    onClick={multi ? () => toggle(g.key) : undefined}
+                    title={multi ? (isOpen ? '单击收起' : '单击展开各配装') : undefined}
+                  >
+                    {cols.map(([k, , render], i) => (
+                      <td key={k}>
+                        {i === 0 && (multi ? <Ico i={isOpen ? IconChevronDown : IconChevronRight} /> : <span className="rp-chev-sp" />)}
+                        {render(g.total)}
+                      </td>
+                    ))}
+                  </tr>
+                  {isOpen &&
+                    g.variants.map((u) => (
+                      <tr key={g.key + '|' + u.options} className="rp-variant">
+                        {cols.map(([k, , render]) => (
+                          <td key={k}>{render(u)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>

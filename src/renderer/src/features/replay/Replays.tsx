@@ -39,6 +39,13 @@ const KEEP_DAYS: [number, string][] = [
   [90, '保留 90 天']
 ]
 
+/** 采集方式（见 recorder.ts 的 CaptureMethod） */
+const CAPTURE_METHODS: [string, string][] = [
+  ['auto', '自动（推荐）'],
+  ['wgc', 'Windows 图形捕获'],
+  ['dxgi', '桌面复制']
+]
+
 const KEEP_COUNT: [number, string][] = [
   [0, '不限数量'],
   [5, '最多 5 局'],
@@ -332,8 +339,8 @@ function RecSettings({
             ))}
           </select>
           <div className="rec-hint dim">
-            选原生分辨率时画面全程留在显卡上，几乎不影响游戏；选其他分辨率要用 CPU 缩放，2K、4K 屏上会掉帧。
-            文件大小只看码率，和分辨率无关。HDR 屏会自动用显卡录成 HDR10，始终是原生分辨率。
+            选原生分辨率时画面全程留在显卡上，几乎不影响游戏。选其他分辨率时，Windows 11 和 HDR 屏会在显卡上缩放，
+            其他情况要用 CPU 缩放，2K、4K 屏上可能掉帧。文件大小只看码率，和分辨率无关。
           </div>
         </div>
 
@@ -396,7 +403,7 @@ function RecSettings({
             value={exposure}
             onChange={(e) => void patch({ replayExposure: Number(e.target.value) })}
           />
-          <div className="rec-hint dim">录像偏暗向右调，偏亮向左调；每 +1 EV 亮度翻倍。HDR 屏用显卡录成 HDR10 时不需要也不生效。</div>
+          <div className="rec-hint dim">录像偏暗向右调，偏亮向左调；每 +1 EV 亮度翻倍。用 Windows 图形捕获时不生效（亮度跟随 Windows 的「SDR 内容亮度」）。</div>
         </div>
 
         <div className="rec-field">
@@ -446,15 +453,20 @@ function RecSettings({
         </div>
 
         <div className="rec-field">
-          <div className="rec-label">HDR 录像</div>
-          <Switch
-            checked={config.replayHdrToSdr !== false}
-            onChange={(v) => void patch({ replayHdrToSdr: v })}
-            label="录完后转成 SDR"
-          />
+          <div className="rec-label">录制方式</div>
+          <select
+            value={String(config.replayCaptureMethod || 'auto')}
+            onChange={(e) => void patch({ replayCaptureMethod: e.target.value })}
+          >
+            {CAPTURE_METHODS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
           <div className="rec-hint dim">
-            HDR 屏录的是 HDR10，在普通屏幕、别人的电脑或上传到视频网站时容易偏亮。开启后每局录完在后台转成普通视频并替换原文件，
-            任何播放器都能正常显示；开新的一局时会先停下，不影响游戏。只在 HDR 屏上看可以关掉，保留 HDR 原片。
+            自动：开着 HDR 时用 Windows 图形捕获，由 Windows 实时把画面转成普通视频；没开 HDR 时用桌面复制。两种都在显卡上完成，几乎不影响游戏。
+            录像颜色不对或录不上时可以手动换一种试试；录制日志的 plan: 一行会写明实际用的是哪种。Windows 10 上用图形捕获时屏幕边缘可能出现黄框。
           </div>
         </div>
 

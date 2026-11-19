@@ -225,6 +225,8 @@ export interface IpcMap {
   ]
   'replay:list': [void, ReplayItem[]]
   'replay:delete': [string, { ok: boolean; message: string }]
+  /** 录像第 0 帧的系统时间（毫秒），拿不到为 null */
+  'replay:videoStart': [string, number | null]
   'replay:clean': [number, number]
   'replay:displays': [void, DisplayChoice[]]
   'replay:encoders': [void, string[]]
